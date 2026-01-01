@@ -407,3 +407,4 @@ En Google Sheets con configuración regional en español:
 ---
 
 **Última actualización:** Enero 2025
+  

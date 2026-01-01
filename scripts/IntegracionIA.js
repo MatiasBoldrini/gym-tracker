@@ -7,119 +7,59 @@
 function copiarRutinaComoPrompt() {
     const ui = SpreadsheetApp.getUi();
     const ss = SpreadsheetApp.getActiveSpreadsheet();
-    const hojaActual = ss.getActiveSheet();
-    const nombreHoja = hojaActual.getName();
 
-    // Obtener lista de ejercicios disponibles
+    // 1) Rutina: siempre desde "Semana 1"
+    const hojaSemana1 = ss.getSheetByName("Semana 1");
+    if (!hojaSemana1) {
+        ui.alert("❌ Error", 'No se encontró la hoja "Semana 1".', ui.ButtonSet.OK);
+        return;
+    }
+
+    const dias = detectarDias(hojaSemana1);
+    const datosSemana = hojaSemana1.getDataRange().getValues();
+
+    // 2) Ejercicios: "Ejercicios" col A (solo nombres)
     const hojaEjercicios =
         obtenerHojaPorNombreFlexible_(ss, "Ejercicios") ||
         obtenerHojaPorNombreFlexible_(ss, "Ejercicio");
-    let ejerciciosDisponibles = [];
-
+    let listaEjercicios = [];
     if (hojaEjercicios) {
-        const datosEjercicios = hojaEjercicios.getRange("A:B").getValues();
-        ejerciciosDisponibles = datosEjercicios
-            .filter((fila, index) => index > 0 && fila[0] && fila[0].toString().trim() !== "")
-            .map((fila) => ({
-                nombre: fila[0].toString().trim(),
-                grupo: fila[1] ? fila[1].toString().trim() : ""
-            }));
+        const colA = hojaEjercicios.getRange("A:A").getValues();
+        listaEjercicios = colA
+            .map((r) => (r[0] ?? "").toString().trim())
+            .filter((v, idx) => idx > 0 && v !== "");
     }
 
-    // Obtener rutina actual
-    let rutina = [];
-    let hojaRutina = hojaActual;
-
-    // Si no estamos en una hoja de Semana, usar Semana 1
-    if (!nombreHoja.startsWith("Semana")) {
-        hojaRutina = ss.getSheetByName("Semana 1");
-        if (!hojaRutina) {
-            ui.alert("❌ Error", "No se encontró ninguna hoja de semana.", ui.ButtonSet.OK);
-            return;
-        }
-    }
-
-    // Detectar días y extraer ejercicios (detectarDias está en BorrarDatosDia.gs)
-    const dias = detectarDias(hojaRutina);
-    const datosHoja = hojaRutina.getDataRange().getValues();
+    // Prompt mínimo (sin notas, sin agrupamientos)
+    let prompt = "";
+    prompt += "RUTINA\n";
+    prompt += "-----------------\n\n";
 
     dias.forEach((dia) => {
-        const ejerciciosDia = [];
-
+        prompt += `DIA ${dia.numero}\n`;
         for (let fila = dia.filaInicio; fila <= dia.filaFin; fila++) {
-            const rowData = datosHoja[fila - 1];
-            const ejercicio = rowData[0] ? rowData[0].toString().trim() : "";
-            const series = rowData[1] ? rowData[1].toString().trim() : "";
-            const notas = rowData[3] ? rowData[3].toString().trim() : "";
+            const row = datosSemana[fila - 1];
+            const ejercicio = (row?.[0] ?? "").toString().trim();
+            const series = (row?.[1] ?? "").toString().trim();
 
-            // Saltar filas vacías, encabezados y filas de estrellas
-            if (
-                !ejercicio ||
-                ejercicio.toUpperCase().includes("DIA") ||
-                ejercicio.toLowerCase().includes("ejercicio")
-            ) {
-                continue;
-            }
+            if (!ejercicio) continue;
+            if (ejercicio.toUpperCase().includes("DIA")) continue;
+            if (ejercicio.toLowerCase().includes("ejercicio")) continue;
 
-            if (ejercicio) {
-                ejerciciosDia.push({
-                    ejercicio: ejercicio,
-                    series: series,
-                    notas: notas
-                });
-            }
+            prompt += `- ${ejercicio}${series ? ` | ${series}` : ""}\n`;
         }
-
-        if (ejerciciosDia.length > 0) {
-            rutina.push({
-                dia: dia.numero,
-                ejercicios: ejerciciosDia
-            });
-        }
+        prompt += "\n";
     });
 
-    // Construir el prompt
-    let prompt = "=== RUTINA ACTUAL ===\n\n";
-
-    if (rutina.length > 0) {
-        rutina.forEach((dia) => {
-            prompt += `DÍA ${dia.dia}:\n`;
-            dia.ejercicios.forEach((ej) => {
-                prompt += `  - ${ej.ejercicio}`;
-                if (ej.series) prompt += ` | ${ej.series}`;
-                if (ej.notas) prompt += ` | Notas: ${ej.notas}`;
-                prompt += "\n";
-            });
-            prompt += "\n";
-        });
+    prompt += "EJERCICIOS (hoja Ejercicios, col A)\n";
+    prompt += "----------------------------------\n";
+    if (listaEjercicios.length === 0) {
+        prompt += "(No se encontró la hoja 'Ejercicios' o está vacía)\n\n";
     } else {
-        prompt += "(Sin ejercicios cargados)\n\n";
+        prompt += listaEjercicios.map((e) => `- ${e}`).join("\n") + "\n\n";
     }
 
-    prompt += "=== EJERCICIOS DISPONIBLES ===\n\n";
-
-    if (ejerciciosDisponibles.length > 0) {
-        // Agrupar por grupo muscular
-        const porGrupo = {};
-        ejerciciosDisponibles.forEach((ej) => {
-            const grupo = ej.grupo || "Sin grupo";
-            if (!porGrupo[grupo]) porGrupo[grupo] = [];
-            porGrupo[grupo].push(ej.nombre);
-        });
-
-        Object.keys(porGrupo).sort().forEach((grupo) => {
-            prompt += `${grupo.toUpperCase()}:\n`;
-            porGrupo[grupo].forEach((nombre) => {
-                prompt += `  - ${nombre}\n`;
-            });
-            prompt += "\n";
-        });
-    } else {
-        prompt += "(No se encontró la hoja 'Ejercicios')\n";
-    }
-
-    prompt += "=== FORMATO PARA RESPONDER ===\n\n";
-    prompt += "Responde con un JSON con esta estructura:\n";
+    prompt += "Cuando se te pida la rutina para el excel o google sheets, responde SOLO JSON (sin notas) con la rutina personalizada, siguiendo este formato:\n";
     prompt += '{\n';
     prompt += '  "dias": [\n';
     prompt += '    {\n';
@@ -131,9 +71,7 @@ function copiarRutinaComoPrompt() {
     prompt += '  ]\n';
     prompt += '}\n';
 
-    // IMPORTANTE: Apps Script (server-side) NO puede copiar al portapapeles.
-    // Necesitamos un UI (HTML) para que el usuario haga click en "Copiar".
-    // Este modal NO requiere preview visual, pero dejamos un textarea por si querés ver/editar.
+
     const tpl = HtmlService.createTemplate(`
       <html>
         <head>
@@ -141,13 +79,6 @@ function copiarRutinaComoPrompt() {
           <meta charset="utf-8" />
           <style>
             body { font-family: Arial, sans-serif; padding: 12px; }
-            textarea {
-              width: 100%;
-              height: 340px;
-              font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
-              font-size: 12px;
-              box-sizing: border-box;
-            }
             .row { margin-top: 10px; display: flex; gap: 10px; align-items: center; }
             button { padding: 10px 14px; cursor: pointer; }
             .ok { color: #188038; display: none; }
@@ -155,7 +86,8 @@ function copiarRutinaComoPrompt() {
           </style>
         </head>
         <body>
-          <textarea id="prompt" readonly></textarea>
+          <div style="margin-bottom:8px;">Click en <b>Copiar</b> para copiar el prompt (puede ser largo).</div>
+          <textarea id="prompt" readonly style="position:fixed;left:-9999px;opacity:0;height:1px;width:1px;"></textarea>
           <div class="row">
             <button onclick="copiar()">📋 Copiar</button>
             <button onclick="google.script.host.close()">Cerrar</button>

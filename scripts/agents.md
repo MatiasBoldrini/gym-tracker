@@ -2,6 +2,8 @@
 
 Este directorio contiene **código de Google Apps Script** (aunque ahora los archivos tengan extensión `.js`). Se ejecuta dentro de un Spreadsheet y usa servicios como `SpreadsheetApp`, `ScriptApp` y `HtmlService`.
 
+> Guía de estilo/modularidad del repo: ver `scripts/CONVENCIONES.md` (incluye la regla de no superar ~900 líneas por archivo).
+
 ## Mapa rápido (qué se ejecuta y cuándo)
 
 - **Menú y triggers**: `MenuYTriggers.js`
