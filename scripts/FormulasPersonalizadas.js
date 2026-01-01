@@ -165,3 +165,4 @@ function FRECUENCIA_MUSCULO(musculo, hoja) {
     return diasConMusculo.size;
 }
 
+

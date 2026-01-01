@@ -11,7 +11,9 @@ function copiarRutinaComoPrompt() {
     const nombreHoja = hojaActual.getName();
 
     // Obtener lista de ejercicios disponibles
-    const hojaEjercicios = ss.getSheetByName("Ejercicios");
+    const hojaEjercicios =
+        obtenerHojaPorNombreFlexible_(ss, "Ejercicios") ||
+        obtenerHojaPorNombreFlexible_(ss, "Ejercicio");
     let ejerciciosDisponibles = [];
 
     if (hojaEjercicios) {
@@ -129,47 +131,110 @@ function copiarRutinaComoPrompt() {
     prompt += '  ]\n';
     prompt += '}\n';
 
-    // Escapar el prompt para JavaScript
-    const promptEscaped = prompt
-        .replace(/\\/g, '\\\\')
-        .replace(/'/g, "\\'")
-        .replace(/\n/g, '\\n');
+    // IMPORTANTE: Apps Script (server-side) NO puede copiar al portapapeles.
+    // Necesitamos un UI (HTML) para que el usuario haga click en "Copiar".
+    // Este modal NO requiere preview visual, pero dejamos un textarea por si querés ver/editar.
+    const tpl = HtmlService.createTemplate(`
+      <html>
+        <head>
+          <base target="_top">
+          <meta charset="utf-8" />
+          <style>
+            body { font-family: Arial, sans-serif; padding: 12px; }
+            textarea {
+              width: 100%;
+              height: 340px;
+              font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+              font-size: 12px;
+              box-sizing: border-box;
+            }
+            .row { margin-top: 10px; display: flex; gap: 10px; align-items: center; }
+            button { padding: 10px 14px; cursor: pointer; }
+            .ok { color: #188038; display: none; }
+            .err { color: #d93025; display: none; }
+          </style>
+        </head>
+        <body>
+          <textarea id="prompt" readonly></textarea>
+          <div class="row">
+            <button onclick="copiar()">📋 Copiar</button>
+            <button onclick="google.script.host.close()">Cerrar</button>
+            <span id="ok" class="ok">✅ Copiado</span>
+            <span id="err" class="err">❌ No se pudo copiar</span>
+          </div>
+          <script>
+            const texto = <?!= JSON.stringify(prompt) ?>;
+            document.getElementById('prompt').value = texto;
 
-    // Modal que copia y se cierra automáticamente
-    const html = HtmlService.createHtmlOutput(`
-        <html><body>
-        <p style="font-family:sans-serif;font-size:14px;">Copiando...</p>
-        <script>
-            (function() {
-                const texto = '${promptEscaped}';
-                
-                // Copiar usando textarea (más compatible)
-                const ta = document.createElement('textarea');
-                ta.value = texto;
-                ta.style.position = 'fixed';
-                ta.style.left = '-9999px';
-                document.body.appendChild(ta);
-                ta.focus();
-                ta.select();
-                document.execCommand('copy');
-                document.body.removeChild(ta);
-                
-                // Cerrar inmediatamente
-                google.script.host.close();
-            })();
-        </script>
-        </body></html>
-    `)
-        .setWidth(150)
-        .setHeight(50);
+            async function copiar() {
+              const okEl = document.getElementById('ok');
+              const errEl = document.getElementById('err');
+              okEl.style.display = 'none';
+              errEl.style.display = 'none';
 
-    ui.showModelessDialog(html, "📋");
+              let ok = false;
+              try {
+                if (navigator.clipboard && navigator.clipboard.writeText) {
+                  await navigator.clipboard.writeText(texto);
+                  ok = true;
+                }
+              } catch (e) {}
 
-    // Pequeña pausa para que el dialog se ejecute
-    Utilities.sleep(500);
+              if (!ok) {
+                try {
+                  const ta = document.getElementById('prompt');
+                  ta.focus();
+                  ta.select();
+                  ok = document.execCommand('copy');
+                } catch (e) {}
+              }
 
-    // Mostrar toast de confirmación
-    ss.toast("📋 Prompt copiado al portapapeles", "✅ Listo", 3);
+              if (ok) {
+                okEl.style.display = 'inline';
+              } else {
+                errEl.style.display = 'inline';
+              }
+
+              try { google.script.run.toastResultadoCopia_(ok); } catch (e) {}
+            }
+          </script>
+        </body>
+      </html>
+    `);
+    tpl.prompt = prompt;
+    const html = tpl.evaluate().setWidth(650).setHeight(470);
+    ui.showModalDialog(html, "📋 Copiar rutina como prompt");
+}
+
+function toastResultadoCopia_(ok) {
+    const ss = SpreadsheetApp.getActiveSpreadsheet();
+    if (ok) {
+        ss.toast("📋 Prompt copiado al portapapeles", "✅ Listo", 3);
+    } else {
+        ss.toast("No se pudo copiar automáticamente. Probá de nuevo (a veces el navegador lo bloquea).", "⚠️", 5);
+    }
+}
+
+function obtenerHojaPorNombreFlexible_(ss, nombreBuscado) {
+    const norm = (s) =>
+        (s || "")
+            .toString()
+            .trim()
+            .toLowerCase()
+            .replace(/\s+/g, " ");
+
+    const target = norm(nombreBuscado);
+    const sheets = ss.getSheets();
+
+    // Match exact normalizado
+    for (const sh of sheets) {
+        if (norm(sh.getName()) === target) return sh;
+    }
+    // Match "incluye" por si hay prefijos/sufijos
+    for (const sh of sheets) {
+        if (norm(sh.getName()).includes(target)) return sh;
+    }
+    return null;
 }
 
 // ========== PEGAR RUTINA DESDE IA ==========
