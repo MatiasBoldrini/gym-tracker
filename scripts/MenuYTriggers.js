@@ -71,7 +71,9 @@ function actualizarPRs() {
         if (
           celda.includes("TABLA_PRS") ||
           celda.includes("PROMEDIO_ESTRELLAS") ||
-          celda.includes("FRECUENCIA_MUSCULO")
+          celda.includes("FRECUENCIA_MUSCULO") ||
+          celda.includes("SERIES_MUSCULO_EN_DIA") ||
+          celda.includes("GRILLA_SERIES_FATIGA")
         ) {
           const cell = hoja.getRange(i + 1, j + 1);
           const formula = cell.getFormula();

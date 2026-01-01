@@ -202,6 +202,67 @@ Calcula el 1RM estimado usando fórmulas de Brzycki/Epley.
 
 ---
 
+### SERIES_MUSCULO_EN_DIA(musculo, numDia, hoja)
+
+Calcula el total de series para un músculo en un día específico.
+Extrae el número de series del texto en columna B (ej: "3 x 8-12" → 3).
+
+**Uso:**
+
+```
+=SERIES_MUSCULO_EN_DIA("Pecho"; 1)                    // Series de Pecho en Día 1
+=SERIES_MUSCULO_EN_DIA("Pecho"; 1; "Semana 2")        // En otra semana
+=SERIES_MUSCULO_EN_DIA(C2; BUSCARV(H$1; $C$18:$D$22; 2; FALSO))  // Con mapeo dinámico
+```
+
+**Parámetros:**
+
+| Parámetro | Requerido | Descripción                                |
+| --------- | --------- | ------------------------------------------ |
+| musculo   | ✅        | Nombre del grupo muscular                  |
+| numDia    | ✅        | Número de día (1, 2, etc.) o texto "DIA 1" |
+| hoja      | ❌        | Hoja de semana (default: "Semana 1")       |
+
+---
+
+### GRILLA_SERIES_FATIGA(musculos, diasSemana, mapeo, hoja, modo, maxSeries)
+
+Genera una matriz completa con las series por músculo (filas) y día de semana (columnas).
+Ideal para llenar la grilla de Fatiga con una sola fórmula que se "derrama".
+
+**Uso:**
+
+```
+=GRILLA_SERIES_FATIGA(C2:C10; H1:N1; C18:D22)
+=GRILLA_SERIES_FATIGA(C2:C10; H1:N1; C18:D22; "Semana 2")
+=GRILLA_SERIES_FATIGA(C2:C10; H1:N1; C18:D22; "Semana 2"; "barra"; 12)
+=GRILLA_SERIES_FATIGA(C2:C10; H1:N1; C18:D22; "Semana 2"; "barra+numero"; 12)
+```
+
+**Parámetros:**
+
+| Parámetro  | Requerido | Descripción                                                   |
+| ---------- | --------- | ------------------------------------------------------------- |
+| musculos   | ✅        | Rango con los nombres de músculos (ej: C2:C10)                |
+| diasSemana | ✅        | Rango con los días de la semana (ej: H1:N1)                   |
+| mapeo      | ✅        | Rango con el mapeo día→DIA n (2 cols: día, DIA n)             |
+| hoja       | ❌        | Hoja de semana (default: "Semana 1")                          |
+| modo       | ❌        | `"numero"` (default) \| `"barra"` \| `"barra+numero"`         |
+| maxSeries  | ❌        | Máximo esperado de series para dibujar la barra (default: 12) |
+
+**Ejemplo de mapeo (C18:D22):**
+
+| C (Día) | D (N°) |
+| ------- | ------ |
+| Lun     | DIA 1  |
+| Mie     | DIA 2  |
+| Jue     | DIA 3  |
+| Sab     | DIA 4  |
+
+> La función devuelve "" (vacío) para días no mapeados o músculos sin series.
+
+---
+
 ## ⚙️ Código Apps Script Completo
 
 **Ubicación:** Extensiones → Apps Script
@@ -210,25 +271,27 @@ Calcula el 1RM estimado usando fórmulas de Brzycki/Epley.
 
 ### Resumen de funciones:
 
-| Función                             | Tipo            | Descripción                                 |
-| ----------------------------------- | --------------- | ------------------------------------------- |
-| `onOpen()`                          | Menú            | Crea el menú personalizado                  |
-| `actualizarPRs()`                   | Utilidad        | Fuerza recálculo de fórmulas personalizadas |
-| `crearTrigger()`                    | Utilidad        | Activa auto-actualización cada hora         |
-| `eliminarTriggers()`                | Utilidad        | Desactiva auto-actualización                |
-| `TABLA_PRS()`                       | Custom Function | Genera tabla de PRs                         |
-| `PROMEDIO_ESTRELLAS(celda)`         | Custom Function | Promedio de estrellas por día               |
-| `FRECUENCIA_MUSCULO(musculo, hoja)` | Custom Function | Frecuencia semanal de un músculo            |
-| `CALCULAR_1RM(peso, reps)`          | Custom Function | Calcula 1RM estimado                        |
-| `borrarDatosDia(dia)`               | Utilidad        | Borra datos de un día específico            |
-| `detectarDias(hoja)`                | Utilidad        | Detecta los días y sus rangos de filas      |
-| `crearMesociclo()`                  | Gestión         | Crea semanas duplicando Semana 1            |
-| `borrarMesociclo()`                 | Gestión         | Elimina todas las semanas excepto Semana 1  |
-| `limpiarDatosSemana(hoja)`          | Utilidad        | Limpia datos de reps/peso/estrellas         |
-| `copiarRutinaComoPrompt()`          | IA              | Genera prompt con rutina + ejercicios       |
-| `pegarRutinaDesdeIA()`              | IA              | Abre modal para pegar JSON de rutina        |
-| `obtenerHojasSemana()`              | Utilidad        | Lista hojas de semana para selector         |
-| `procesarRutinaJSON(json, hoja)`    | IA              | Procesa y escribe rutina desde JSON         |
+| Función                                             | Tipo            | Descripción                                 |
+| --------------------------------------------------- | --------------- | ------------------------------------------- |
+| `onOpen()`                                          | Menú            | Crea el menú personalizado                  |
+| `actualizarPRs()`                                   | Utilidad        | Fuerza recálculo de fórmulas personalizadas |
+| `crearTrigger()`                                    | Utilidad        | Activa auto-actualización cada hora         |
+| `eliminarTriggers()`                                | Utilidad        | Desactiva auto-actualización                |
+| `TABLA_PRS()`                                       | Custom Function | Genera tabla de PRs                         |
+| `PROMEDIO_ESTRELLAS(celda)`                         | Custom Function | Promedio de estrellas por día               |
+| `FRECUENCIA_MUSCULO(musculo, hoja)`                 | Custom Function | Frecuencia semanal de un músculo            |
+| `CALCULAR_1RM(peso, reps)`                          | Custom Function | Calcula 1RM estimado                        |
+| `SERIES_MUSCULO_EN_DIA(musculo, numDia, hoja)`      | Custom Function | Series de un músculo en un día específico   |
+| `GRILLA_SERIES_FATIGA(musculos, dias, mapeo, hoja)` | Custom Function | Matriz de series por músculo y día          |
+| `borrarDatosDia(dia)`                               | Utilidad        | Borra datos de un día específico            |
+| `detectarDias(hoja)`                                | Utilidad        | Detecta los días y sus rangos de filas      |
+| `crearMesociclo()`                                  | Gestión         | Crea semanas duplicando Semana 1            |
+| `borrarMesociclo()`                                 | Gestión         | Elimina todas las semanas excepto Semana 1  |
+| `limpiarDatosSemana(hoja)`                          | Utilidad        | Limpia datos de reps/peso/estrellas         |
+| `copiarRutinaComoPrompt()`                          | IA              | Genera prompt con rutina + ejercicios       |
+| `pegarRutinaDesdeIA()`                              | IA              | Abre modal para pegar JSON de rutina        |
+| `obtenerHojasSemana()`                              | Utilidad        | Lista hojas de semana para selector         |
+| `procesarRutinaJSON(json, hoja)`                    | IA              | Procesa y escribe rutina desde JSON         |
 
 ---
 
@@ -407,4 +470,3 @@ En Google Sheets con configuración regional en español:
 ---
 
 **Última actualización:** Enero 2025
-  
