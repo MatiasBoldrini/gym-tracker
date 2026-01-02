@@ -12,12 +12,15 @@ const BODYMAP_CONFIG = {
     START_ROW: 2,    // Fila donde empiezan los datos (después del header)
 
     // Celdas ancla para las imágenes (fila, columna)
-    FRONT_ANCHOR: { row: 2, col: 10 },   // J2
-    BACK_ANCHOR: { row: 2, col: 14 },    // N2
+    // Ejemplo solicitado: Frente en H13 y Espalda en K13
+    FRONT_ANCHOR: { row: 13, col: 8 },   // H13
+    BACK_ANCHOR: { row: 13, col: 11 },   // K13
 
-    // Tamaño de las imágenes insertadas
-    IMAGE_WIDTH: 300,
-    IMAGE_HEIGHT: 550,
+    // Tamaño/posicionamiento:
+    // - Alto: ~N filas (se calcula en px según el rowHeight real de la hoja)
+    // - Ancho: proporcional al alto (mantiene aspecto)
+    TARGET_HEIGHT_ROWS: 16,
+    ASPECT_RATIO: 300 / 550, // ancho/alto (ajusta si querés más ancho o más angosto)
 
     // Script Property key para la URL de Vercel
     RENDER_URL_PROP: "BODYMAP_RENDER_URL"
@@ -221,30 +224,76 @@ function renderizarVista_(baseUrl, view, intensityByGroupId) {
  * @param {string} imageKey Identificador para encontrar la imagen existente
  */
 function reemplazarImagen_(sheet, anchor, blob, imageKey) {
-    // Buscar y eliminar imagen existente en la posición aproximada
+    // Buscar y eliminar imagen existente:
+    // - Primero por tag (bodymap_front/bodymap_back) o por ancla exacta
+    // - Si no había nada (primera vez), borrar "cerca" del ancla para pisar fotos puestas manualmente
     const images = sheet.getImages();
+    let removedAny = false;
+
     for (const img of images) {
         const imgAnchor = img.getAnchorCell();
-        // Considerar "cerca" si está en un rango de ±3 filas/columnas del ancla
-        if (
-            Math.abs(imgAnchor.getRow() - anchor.row) <= 3 &&
-            Math.abs(imgAnchor.getColumn() - anchor.col) <= 3
-        ) {
+
+        const hasTitleGetter = typeof img.getAltTextTitle === "function";
+        const hasDescGetter = typeof img.getAltTextDescription === "function";
+        const title = hasTitleGetter ? (img.getAltTextTitle() || "") : "";
+        const desc = hasDescGetter ? (img.getAltTextDescription() || "") : "";
+        const matchesKey = title === imageKey || desc === imageKey;
+
+        const matchesAnchor =
+            imgAnchor.getRow() === anchor.row && imgAnchor.getColumn() === anchor.col;
+
+        if (matchesKey || matchesAnchor) {
             img.remove();
+            removedAny = true;
+        }
+    }
+
+    // Fallback (primera ejecución / imagen vieja movida a mano):
+    // borrar si está en un rango chico alrededor del ancla
+    if (!removedAny) {
+        for (const img of images) {
+            const imgAnchor = img.getAnchorCell();
+            if (
+                Math.abs(imgAnchor.getRow() - anchor.row) <= 2 &&
+                Math.abs(imgAnchor.getColumn() - anchor.col) <= 2
+            ) {
+                img.remove();
+            }
         }
     }
 
     // Insertar nueva imagen
-    const anchorCell = sheet.getRange(anchor.row, anchor.col);
     const newImage = sheet.insertImage(
         blob,
         anchor.col,
         anchor.row
     );
 
-    // Ajustar tamaño
-    newImage.setWidth(BODYMAP_CONFIG.IMAGE_WIDTH);
-    newImage.setHeight(BODYMAP_CONFIG.IMAGE_HEIGHT);
+    // Tag para poder reemplazar SIEMPRE esta imagen en futuras actualizaciones
+    if (typeof newImage.setAltTextTitle === "function") newImage.setAltTextTitle(imageKey);
+    if (typeof newImage.setAltTextDescription === "function") newImage.setAltTextDescription(imageKey);
+
+    // Ajustar tamaño: alto ≈ N filas, ancho proporcional (aspect ratio)
+    const heightPx = calcularAltoEnPx_(sheet, anchor.row, BODYMAP_CONFIG.TARGET_HEIGHT_ROWS);
+    const widthPx = Math.max(50, Math.round(heightPx * BODYMAP_CONFIG.ASPECT_RATIO));
+
+    newImage.setHeight(heightPx);
+    newImage.setWidth(widthPx);
+}
+
+/**
+ * Calcula alto en px equivalente a N filas, empezando desde startRow.
+ * @param {GoogleAppsScript.Spreadsheet.Sheet} sheet
+ * @param {number} startRow
+ * @param {number} numRows
+ * @returns {number}
+ */
+function calcularAltoEnPx_(sheet, startRow, numRows) {
+    let sum = 0;
+    for (let r = startRow; r < startRow + numRows; r++) {
+        sum += sheet.getRowHeight(r);
+    }
+    return sum;
 }
 
 // ========== UTILIDADES ==========
