@@ -29,6 +29,12 @@ function onOpen() {
         .addItem("📋 Copiar rutina como prompt", "copiarRutinaComoPrompt")
         .addItem("📥 Pegar rutina desde IA", "pegarRutinaDesdeIA")
     )
+    .addSubMenu(
+      SpreadsheetApp.getUi()
+        .createMenu("🧍 Body Map")
+        .addItem("🔄 Actualizar Body Map", "actualizarBodyMap")
+        .addItem("🔧 Configurar URL Vercel", "configurarUrlVercel")
+    )
     .addSeparator()
     .addItem("⚙️ Activar auto-actualización (1h)", "crearTrigger")
     .addItem("❌ Desactivar auto-actualización", "eliminarTriggers")

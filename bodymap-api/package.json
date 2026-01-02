@@ -1,0 +1,16 @@
+{
+  "name": "bodymap-api",
+  "version": "1.0.0",
+  "description": "API para renderizar body map muscular como PNG",
+  "private": true,
+  "scripts": {
+    "dev": "vercel dev"
+  },
+  "dependencies": {
+    "@resvg/resvg-js": "^2.6.2"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}
+
