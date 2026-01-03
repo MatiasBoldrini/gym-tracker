@@ -12,6 +12,7 @@ Este directorio contiene **código de Google Apps Script** (aunque ahora los arc
   - Crea/elimina un trigger horario para refrescar fórmulas.
 - **Operaciones sobre hojas “Semana X”**: `BorrarDatosDia.js`, `GestionMesociclos.js`, `IntegracionIA.js`
 - **Funciones personalizadas de Sheets** (`=...`): `FormulasPersonalizadas.js`
+- **Integración App Web (API)**: `WebAppAPI.js`
 
 > Dependencia clave: `detectarDias()` está en `BorrarDatosDia.js` y lo usa `IntegracionIA.js` para leer/escribir rutinas por “DIA 1..N”.
 
@@ -135,5 +136,21 @@ Este directorio contiene **código de Google Apps Script** (aunque ahora los arc
 **Dependencias**:
 - Usa `detectarDias()` (definida en `BorrarDatosDia.js`).
 - Es llamado desde el menú en `MenuYTriggers.js`.
+
+---
+
+## `WebAppAPI.js` — Punto de enlace para la aplicación web
+
+**Propósito**: manejar la persistencia de datos desde la web app externa (Next.js). Permite registrar series (peso/reps) en la hoja correcta.
+
+**Puntos de entrada**:
+- `doPost(e)`: recibe JSON con `weekId`, `dayId`, `exerciseName` y `sets`.
+
+**Funciones principales**:
+- `registrarSeries_(data)`: busca la hoja de la semana y el rango del día para escribir las series.
+- `buscarFilaEjercicio_(sheet, diaInfo, nombreEjercicio)`: helper para ubicar la fila exacta del ejercicio dentro de un día.
+
+**Dependencias**:
+- Usa `detectarDias()` (definida en `BorrarDatosDia.js`) para segmentar las semanas por días.
 
 

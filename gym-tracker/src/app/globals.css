@@ -1,0 +1,53 @@
+@import "tailwindcss";
+
+@theme {
+  --color-ios-blue: #007AFF;
+  --color-ios-green: #34C759;
+  --color-ios-red: #FF3B30;
+  --color-ios-orange: #FF9500;
+  --color-ios-yellow: #FFCC00;
+  --color-ios-gray: #8E8E93;
+  --color-ios-light-gray: #E5E5EA;
+  --color-ios-background: #F2F2F7;
+  
+  --radius-ios-xl: 20px;
+  --radius-ios-lg: 12px;
+  
+  --shadow-ios: 0 4px 12px rgba(0, 0, 0, 0.05);
+}
+
+:root {
+  --foreground-rgb: 0, 0, 0;
+  --background-rgb: 242, 242, 247;
+}
+
+body {
+  color: rgb(var(--foreground-rgb));
+  background: rgb(var(--background-rgb));
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+@layer components {
+  .ios-card {
+    @apply bg-white rounded-ios-xl shadow-ios border border-black/5 overflow-hidden;
+  }
+}
+
+/* Helper for hidden scrollbars */
+@utility no-scrollbar {
+  &::-webkit-scrollbar {
+    display: none;
+  }
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+@utility perspective-1000 {
+  perspective: 1000px;
+}
+
+.ios-picker-container {
+  mask-image: linear-gradient(to bottom, transparent, black 40%, black 60%, transparent);
+}
