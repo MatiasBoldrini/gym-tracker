@@ -27,20 +27,20 @@ export const ExerciseModal = ({
     // Default to 3 if parsing fails or returns 0
     const targetSetCount = Math.max(1, parseInt(exercise.prescribedSeries?.toString().split(/[\sxX]+/)[0]) || 3);
 
-    // Initialize exactly targetSetCount sets
-    const [sets, setSets] = useState<Set[]>(() => {
-        // Create initial array of correct size with 0 values
-        const initialSets = new Array(targetSetCount).fill({ weight: 0, reps: 0 });
+    const buildInitialSets = React.useCallback((): Set[] => {
+        const defaults: Set[] = Array.from({ length: targetSetCount }, () => ({ weight: null, reps: null }));
+        const fromExercise = exercise.sets || [];
+        return defaults.map((fallback, index) => {
+            const s = fromExercise[index];
+            if (!s) return fallback;
+            return {
+                weight: s.weight ?? null,
+                reps: s.reps ?? null,
+            };
+        });
+    }, [exercise.sets, targetSetCount]);
 
-        // Fill with existing data if available
-        if (exercise.sets && exercise.sets.length > 0) {
-            return initialSets.map((defaultSet, index) => {
-                return exercise.sets[index] || defaultSet;
-            });
-        }
-
-        return initialSets;
-    });
+    const [sets, setSets] = useState<Set[]>(buildInitialSets);
 
     const [activeSetIndex, setActiveSetIndex] = useState(0);
     const [completedSets, setCompletedSets] = useState<boolean[]>(new Array(targetSetCount).fill(false));
@@ -50,21 +50,13 @@ export const ExerciseModal = ({
     const weights = Array.from({ length: 401 }, (_, i) => i * 0.5); // 0 to 200kg in 0.5 steps
     const reps = Array.from({ length: 31 }, (_, i) => i); // 0 to 30 reps
 
-    // Sync completed sets state based on data
     React.useEffect(() => {
-        const compl = new Array(targetSetCount).fill(false);
-        sets.forEach((set, idx) => {
-            // If set has real data (loaded from sheet/state), mark as complete?
-            // Actually `exercise.sets` has the data. 
-            // Logic: If we are initializing from existing data, we might want to mark them complete?
-            // For now, let's leave as user interaction driven or simple check:
-            // If we passed in data, it's "done" for the day?
-            // The prompt didn't specify auto-complete, so leave false to let user confirm, 
-            // OR check if weight/reps are non-zero/null. 
-        });
-        // Simplification: just reset to false on open, unless we want persistence of "checked" state.
-        // Given current app state, persistence of "checked" isn't in data model explicitly (just existence of sets).
-    }, []);
+        if (!isOpen) return;
+        setSets(buildInitialSets());
+        setCompletedSets(new Array(targetSetCount).fill(false));
+        setActiveSetIndex(0);
+        setIsEditing(false);
+    }, [isOpen, buildInitialSets, targetSetCount]);
 
 
     const handleRegistration = () => {
@@ -85,9 +77,12 @@ export const ExerciseModal = ({
 
     const updateCurrentSet = (val: { [key: string]: string | number }) => {
         const newSets = [...sets];
+        const nextWeight = Number(val.weight ?? 0);
+        const nextReps = Number(val.reps ?? 0);
         newSets[activeSetIndex] = {
-            weight: Number(val.weight ?? 0),
-            reps: Number(val.reps ?? 0)
+            // Interpretar "0x0" como vacío para no guardar sets no cargados.
+            weight: (nextWeight === 0 && nextReps === 0) ? null : nextWeight,
+            reps: (nextWeight === 0 && nextReps === 0) ? null : nextReps,
         };
         setSets(newSets);
     };

@@ -1,7 +1,7 @@
 "use client";
 
 import { motion, useMotionValue, type PanInfo } from "framer-motion";
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect } from 'react';
 
 interface CardRotateProps {
     children: React.ReactNode;

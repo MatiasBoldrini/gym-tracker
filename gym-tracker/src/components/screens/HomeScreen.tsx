@@ -7,6 +7,9 @@ import { ExerciseCard } from "@/components/ui/ExerciseCard";
 import Stack from "@/components/ui/Stack";
 import { ExerciseModal } from "@/components/ui/ExerciseModal";
 import { DaySelector } from "@/components/ui/DaySelector";
+import { SetupModal } from "@/components/modals/SetupModal";
+import { useAuth } from "@/lib/hooks/useAuth";
+import { Settings } from "lucide-react";
 
 type HomeScreenProps = {
     initialWeek: Week;
@@ -23,6 +26,17 @@ export function HomeScreen({ initialWeek, initialPrs }: HomeScreenProps) {
     const [showWeekPicker, setShowWeekPicker] = useState(false);
     const [weeks, setWeeks] = useState<{ name: string; id: string }[]>([{ name: "Semana 1", id: "0" }]);
     const [selectedWeekName, setSelectedWeekName] = useState(initialWeek?.id ? `Semana ${initialWeek.id}` : "Semana 1");
+
+    // Auth state
+    const auth = useAuth();
+    const [showSetupModal, setShowSetupModal] = useState(false);
+
+    // Show setup modal if not fully configured (after initial load)
+    useEffect(() => {
+        if (!auth.isLoading && !auth.isSetupComplete) {
+            setShowSetupModal(true);
+        }
+    }, [auth.isLoading, auth.isSetupComplete]);
 
     useEffect(() => {
         const loadWeeks = async () => {
@@ -72,12 +86,10 @@ export function HomeScreen({ initialWeek, initialPrs }: HomeScreenProps) {
     const handleSaveSeries = async (sets: Set[]) => {
         if (!selectedExercise || !week || !currentDay) return;
 
-        console.log("Saving series for", selectedExercise.name, sets);
-
         try {
             // Filter out sets with null values and convert to the format expected by saveExerciseSets
             const validSets = sets
-                .filter(s => s.weight !== null && s.reps !== null)
+                .filter(s => s.weight !== null && s.reps !== null && !(s.weight === 0 && s.reps === 0))
                 .map(s => ({ weight: s.weight!, reps: s.reps! }));
 
             if (validSets.length > 0) {
@@ -128,7 +140,6 @@ export function HomeScreen({ initialWeek, initialPrs }: HomeScreenProps) {
                                         setSelectedWeekName(w.name);
                                         setShowWeekPicker(false);
                                         // Trigger re-fetch or navigation here in full implementation
-                                        console.log("Selected week:", w.name, w.id);
                                     }}
                                 >
                                     {w.name}
@@ -138,9 +149,20 @@ export function HomeScreen({ initialWeek, initialPrs }: HomeScreenProps) {
                     )}
                 </div>
 
-                <div className="bg-white rounded-full p-1.5 shadow-sm border border-black/5">
-                    <div className="w-8 h-8 rounded-full bg-ios-blue flex items-center justify-center text-white font-bold text-xs ring-2 ring-white">
-                        MB
+                <div className="flex items-center gap-2">
+                    {/* Settings Button */}
+                    <button
+                        onClick={() => setShowSetupModal(true)}
+                        className="w-10 h-10 bg-white rounded-full shadow-sm border border-black/5 flex items-center justify-center text-gray-500 active:scale-95 transition-transform"
+                    >
+                        <Settings size={18} />
+                    </button>
+
+                    {/* Profile Avatar */}
+                    <div className="bg-white rounded-full p-1.5 shadow-sm border border-black/5">
+                        <div className={`w-8 h-8 rounded-full flex items-center justify-center text-white font-bold text-xs ring-2 ring-white ${auth.isSetupComplete ? "bg-ios-green" : "bg-ios-orange"}`}>
+                            {auth.isSetupComplete ? "✓" : "!"}
+                        </div>
                     </div>
                 </div>
             </header>
@@ -185,6 +207,19 @@ export function HomeScreen({ initialWeek, initialPrs }: HomeScreenProps) {
                     onSave={handleSaveSeries}
                 />
             )}
+
+            {/* Setup Modal */}
+            <SetupModal
+                isOpen={showSetupModal}
+                onClose={() => setShowSetupModal(false)}
+                onComplete={() => {
+                    auth.refresh();
+                    setShowSetupModal(false);
+                }}
+                isAuthenticated={auth.isAuthenticated}
+                hasSpreadsheet={auth.hasSpreadsheet}
+                currentSpreadsheetId={auth.spreadsheetId}
+            />
         </div>
     );
 }

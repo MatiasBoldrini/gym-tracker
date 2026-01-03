@@ -21,6 +21,23 @@ export const MUSCLE_ALIASES: Record<string, string> = {
     "lumbar": "espalda",
 };
 
+// Umbrales compartidos (tabla + bodymap) para evitar duplicación de lógica.
+export const FATIGA_THRESHOLDS = {
+    low: 5,
+    medium: 12,
+    high: 18,
+} as const;
+
+export type FatigaBucket = "empty" | "low" | "medium" | "high" | "extreme";
+
+export function getFatigaBucket(series: number): FatigaBucket {
+    if (!series || series <= 0) return "empty";
+    if (series <= FATIGA_THRESHOLDS.low) return "low";
+    if (series <= FATIGA_THRESHOLDS.medium) return "medium";
+    if (series <= FATIGA_THRESHOLDS.high) return "high";
+    return "extreme";
+}
+
 export function computeFatigaFromSheet(data: any[][]) {
     const rows = data.slice(1).filter((row) => row[0]);
 

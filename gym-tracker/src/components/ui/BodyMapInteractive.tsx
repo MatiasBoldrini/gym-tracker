@@ -2,6 +2,7 @@
 
 import React from "react";
 import { cn } from "@/lib/utils";
+import { getFatigaBucket } from "@/lib/fatiga";
 
 type BodyMapProps = {
     view: "front" | "back";
@@ -22,15 +23,12 @@ const COLORS = {
 };
 
 const getFillColor = (intensity: number) => {
-    if (!intensity || intensity === 0) return COLORS.empty;
-    // Normalize assuming max is around 25 sets, but handled in parent usually.
-    // Here we strictly map raw sets to color if we want, OR we assume parent passes normalized 0-1?
-    // The previous code passed raw sets.
-    // Let's replicate the logic from FatigaScreen:
-    if (intensity <= 5) return COLORS.low;
-    if (intensity <= 12) return COLORS.medium;
-    if (intensity <= 18) return COLORS.high;
-    return COLORS.extreme;
+    const bucket = getFatigaBucket(intensity);
+    if (bucket === "low") return COLORS.low;
+    if (bucket === "medium") return COLORS.medium;
+    if (bucket === "high") return COLORS.high;
+    if (bucket === "extreme") return COLORS.extreme;
+    return COLORS.empty;
 };
 
 export function BodyMapInteractive({ view, intensityByGroupId, onMuscleClick, className }: BodyMapProps) {

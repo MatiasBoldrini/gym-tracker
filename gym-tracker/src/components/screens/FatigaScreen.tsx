@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { Info, Activity, X } from "lucide-react";
 import { BodyMapInteractive } from "../ui/BodyMapInteractive";
 import { AnimatePresence, motion } from "framer-motion";
-import { MUSCLE_MAPPING, MUSCLE_ALIASES } from "@/lib/fatiga";
+import { MUSCLE_MAPPING, MUSCLE_ALIASES, getFatigaBucket } from "@/lib/fatiga";
 
 type FatigaScreenProps = {
     initialRows: any[][];
@@ -157,12 +157,13 @@ export function FatigaScreen({ initialRows, intensityByGroupId }: FatigaScreenPr
                         const maxSeries = 25;
                         const percentage = Math.min((series / maxSeries) * 100, 100);
 
-                        const getColor = (val: number) => {
-                            if (val <= 5) return "bg-ios-green";
-                            if (val <= 12) return "bg-ios-yellow";
-                            if (val <= 18) return "bg-ios-orange";
-                            return "bg-ios-red";
-                        };
+                        const bucket = getFatigaBucket(series);
+                        const barColor =
+                            bucket === "low" ? "bg-ios-green" :
+                                bucket === "medium" ? "bg-ios-yellow" :
+                                    bucket === "high" ? "bg-ios-orange" :
+                                        bucket === "extreme" ? "bg-ios-red" :
+                                            "bg-gray-200";
 
                         return (
                             <div key={idx} className="p-4 flex items-center gap-4">
@@ -173,7 +174,7 @@ export function FatigaScreen({ initialRows, intensityByGroupId }: FatigaScreenPr
                                     </div>
                                     <div className="h-1.5 w-full bg-gray-100 rounded-full overflow-hidden">
                                         <div
-                                            className={`h-full rounded-full transition-all duration-1000 ${getColor(series)}`}
+                                            className={`h-full rounded-full transition-all duration-1000 ${barColor}`}
                                             style={{ width: `${percentage}%` }}
                                         />
                                     </div>
