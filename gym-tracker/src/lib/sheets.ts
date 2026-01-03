@@ -1,7 +1,7 @@
 import Papa from "papaparse";
 import { PersonalRecord, Week, Day, Exercise, Set } from "@/types";
 
-const SPREADSHEET_ID = process.env.NEXT_PUBLIC_SPREADSHEET_ID || "18WI1XU8zA3JXgZIiqqO5VnDHmiizeqliYlt8ujJ5Vi8";
+const SPREADSHEET_ID = process.env.NEXT_PUBLIC_SPREADSHEET_ID || "1XMFq-Twxtoa_Fs2_6kOWjB65mMqEgzFJ8ujzyZN7iCo";
 
 export async function fetchSheetCSV(gid: string): Promise<any[]> {
     const url = `https://docs.google.com/spreadsheets/d/${SPREADSHEET_ID}/export?format=csv&gid=${gid}`;
@@ -19,7 +19,7 @@ export async function fetchSheetCSV(gid: string): Promise<any[]> {
 }
 
 // Helper to parse "Semana X" sheets
-export function parseWeekData(data: any[][], weekId: number): Week {
+export function parseWeekData(data: any[][], weekId: number, exerciseMapping: Record<string, string> = {}): Week {
     const days: Day[] = [];
     let currentDay: Day | null = null;
 
@@ -40,6 +40,7 @@ export function parseWeekData(data: any[][], weekId: number): Week {
                 notes: row[3] || "",
                 sets: [],
                 muscleGroup: row[13] || "",
+                image: exerciseMapping[row[0].toLowerCase()] || undefined,
             };
 
             // Extract up to 4 sets (Columns F, G, H, I, J, K, L, M)
@@ -88,12 +89,27 @@ export function parsePRData(data: any[][]): PersonalRecord[] {
     })).filter(pr => pr.exercise);
 }
 
+export function parseExerciseMapping(data: any[][]): Record<string, string> {
+    const mapping: Record<string, string> = {};
+    // Skip header row if it exists, but let's be safe and check if row[0] is "Ejercicio"
+    data.forEach((row, idx) => {
+        if (idx === 0 && row[0]?.toString().toLowerCase().includes("ejercicio")) return;
+        const name = row[0]?.toString().trim();
+        const image = row[3]?.toString().trim(); // Column D is index 3
+        if (name && image) {
+            mapping[name.toLowerCase()] = image;
+        }
+    });
+    return mapping;
+}
+
 // GIDs for sheets (these might need validation from the URL or trial)
 // Typically, the first sheet is gid=0. Others need discovery.
 export const SHEET_GIDS = {
     SEMANA_1: "0",
     RM: "651025325",
     FATIGA: "761571141",
+    EJERCICIOS: "1847511840",
 };
 const APPS_SCRIPT_URL = process.env.NEXT_PUBLIC_APPS_SCRIPT_URL || "";
 

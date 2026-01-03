@@ -42,7 +42,7 @@ export function ExerciseCard({ exercise, pr, isStacked = false }: ExerciseCardPr
                            For now, we use a placeholder that resembles the image provided by the user.
                         */}
                         <img
-                            src={`https://api.placeholder.com/400/400?text=${exercise.name}`}
+                            src={exercise.image ? `/images/exercises/${exercise.image}` : `https://api.placeholder.com/400/400?text=${exercise.name}`}
                             alt={exercise.name}
                             className="w-full h-full object-contain"
                         />

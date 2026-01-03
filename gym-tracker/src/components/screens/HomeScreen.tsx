@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { fetchSheetCSV, parseWeekData, parsePRData, SHEET_GIDS, saveExerciseSets } from "@/lib/sheets";
+import { fetchSheetCSV, parseWeekData, parsePRData, parseExerciseMapping, SHEET_GIDS, saveExerciseSets } from "@/lib/sheets";
 import { Week, PersonalRecord, Exercise, Set } from "@/types";
 import { ExerciseCard } from "@/components/ui/ExerciseCard";
 import Stack from "@/components/ui/Stack";
@@ -21,8 +21,10 @@ export function HomeScreen() {
             try {
                 const weekDataRaw = await fetchSheetCSV(SHEET_GIDS.SEMANA_1);
                 const prDataRaw = await fetchSheetCSV(SHEET_GIDS.RM);
+                const exerciseMappingRaw = await fetchSheetCSV(SHEET_GIDS.EJERCICIOS);
 
-                setWeek(parseWeekData(weekDataRaw, 1));
+                const exerciseMapping = parseExerciseMapping(exerciseMappingRaw);
+                setWeek(parseWeekData(weekDataRaw, 1, exerciseMapping));
                 setPrs(parsePRData(prDataRaw));
             } catch (error) {
                 console.error("Failed to fetch data", error);
@@ -77,7 +79,7 @@ export function HomeScreen() {
             const validSets = sets
                 .filter(s => s.weight !== null && s.reps !== null)
                 .map(s => ({ weight: s.weight!, reps: s.reps! }));
-            
+
             if (validSets.length > 0) {
                 await saveExerciseSets(week.id, currentDay.id, selectedExercise.name, validSets);
             }

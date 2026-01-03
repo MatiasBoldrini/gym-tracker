@@ -100,9 +100,20 @@ export const ExerciseModal = ({
                         </div>
 
                         <div className="flex justify-between items-start mb-6">
-                            <div>
-                                <h2 className="text-2xl font-black tracking-tight text-black leading-tight uppercase">{exercise.name}</h2>
-                                <p className="text-ios-gray font-bold text-sm uppercase tracking-wide">{exercise.prescribedSeries}</p>
+                            <div className="flex gap-4 items-center">
+                                {exercise.image && (
+                                    <div className="w-16 h-16 bg-gray-50 rounded-2xl overflow-hidden border border-black/5 shrink-0">
+                                        <img
+                                            src={`/images/exercises/${exercise.image}`}
+                                            alt={exercise.name}
+                                            className="w-full h-full object-contain"
+                                        />
+                                    </div>
+                                )}
+                                <div>
+                                    <h2 className="text-2xl font-black tracking-tight text-black leading-tight uppercase">{exercise.name}</h2>
+                                    <p className="text-ios-gray font-bold text-sm uppercase tracking-wide">{exercise.prescribedSeries}</p>
+                                </div>
                             </div>
                             <button
                                 onClick={() => {
