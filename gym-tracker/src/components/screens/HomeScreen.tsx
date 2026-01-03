@@ -168,13 +168,7 @@ export function HomeScreen() {
             {/* Active Day Content - fills remaining space */}
             <div className="flex-1 flex flex-col items-center justify-center relative min-h-0 -mt-4">
                 {currentDay ? (
-                    <div className="w-full max-w-sm h-full flex flex-col pt-4">
-                        <div className="flex justify-center items-center mb-6 shrink-0">
-                            <h2 className="text-xl font-black uppercase tracking-tight text-center px-4 py-1 bg-white/50 backdrop-blur-md rounded-full border border-black/5">
-                                {currentDay.name}
-                            </h2>
-                        </div>
-
+                    <div className="w-full max-w-sm h-full flex flex-col">
                         {/* Card Stack Container */}
                         <div className="flex-1 w-full relative flex items-center justify-center max-h-[500px]">
                             <Stack
@@ -183,12 +177,6 @@ export function HomeScreen() {
                                 randomRotation={true}
                                 animationConfig={{ stiffness: 300, damping: 25 }}
                             />
-                        </div>
-
-                        <div className="h-12 shrink-0 flex items-start justify-center">
-                            <p className="text-center text-ios-gray text-[9px] font-black uppercase tracking-[0.2em] opacity-30 mt-2">
-                                Toca o desliza para navegar
-                            </p>
                         </div>
                     </div>
                 ) : (
