@@ -95,7 +95,7 @@ export function HomeScreen() {
     };
 
     return (
-        <div className="h-[100dvh] w-full flex flex-col overflow-hidden bg-[#F2F2F7]">
+        <div className="fixed inset-0 w-full flex flex-col overflow-hidden bg-[#F2F2F7] overscroll-none">
             {/* Header with Week Picker */}
             <header className="flex justify-between items-center px-6 pt-12 pb-2 shrink-0 z-10 relative">
                 <div className="relative">
@@ -144,7 +144,7 @@ export function HomeScreen() {
                 <span className="text-[10px] font-black text-ios-gray uppercase tracking-[0.2em] ml-1">
                     Día
                 </span>
-                <div className="flex gap-3 overflow-x-auto no-scrollbar pb-2">
+                <div className="flex items-center justify-center gap-3 overflow-x-auto no-scrollbar py-4">
                     {week?.days.map((day, idx) => (
                         <button
                             key={day.id}
@@ -166,7 +166,7 @@ export function HomeScreen() {
             </div>
 
             {/* Active Day Content - fills remaining space */}
-            <div className="flex-1 flex flex-col items-center justify-center relative min-h-0 -mt-4">
+            <div className="flex-1 flex flex-col items-center justify-center relative min-h-0 -mt-4 overflow-hidden">
                 {currentDay ? (
                     <div className="w-full max-w-sm h-full flex flex-col">
                         {/* Card Stack Container */}

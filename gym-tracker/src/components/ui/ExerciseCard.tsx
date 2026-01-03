@@ -35,7 +35,7 @@ export function ExerciseCard({ exercise, pr, isStacked = false }: ExerciseCardPr
 
             <div className="flex-1 flex items-center justify-center bg-ios-blue/5 rounded-[24px] mb-6 overflow-hidden border border-ios-blue/10 relative group">
                 {/* Exercise Illustration */}
-                <div className="absolute inset-0">
+                <div className="absolute inset-0 bg-white">
                     <img
                         src={exercise.image ? `/images/exercises/${exercise.image}` : `https://api.placeholder.com/400/400?text=${exercise.name}`}
                         alt={exercise.name}
