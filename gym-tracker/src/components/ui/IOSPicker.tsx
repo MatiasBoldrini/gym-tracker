@@ -39,10 +39,10 @@ export const IOSPicker = ({ value, onChange, selections }: IOSPickerProps) => {
         const el = refs.current[key];
         if (!el) return;
         isProgrammaticScroll.current[key] = true;
-        el.scrollTo({ top: idx * itemHeight, behavior });
+        el.scrollTo({ top: idx * itemHeight, behavior, left: 0 }); // Asegurar que left siempre sea 0
         window.setTimeout(() => {
             isProgrammaticScroll.current[key] = false;
-        }, behavior === "smooth" ? 150 : 0);
+        }, behavior === "smooth" ? 80 : 0); // Reducir también este tiempo
     }, [itemHeight]);
 
     const computeIndexFromScrollTop = React.useCallback((scrollTop: number) => {
@@ -90,6 +90,8 @@ export const IOSPicker = ({ value, onChange, selections }: IOSPickerProps) => {
                                 // Solo lo esencial para inercia máxima en iOS
                                 WebkitOverflowScrolling: "touch",
                                 overscrollBehavior: "contain",
+                                touchAction: "pan-y", // Solo permite scroll vertical, previene movimiento lateral
+                                overflowX: "hidden", // Asegura que no haya scroll horizontal
                             }}
                             onTouchStart={() => {
                                 isScrolling.current[key] = true;
@@ -109,7 +111,7 @@ export const IOSPicker = ({ value, onChange, selections }: IOSPickerProps) => {
                                 const prev = scrollEndTimers.current[key];
                                 if (prev) window.clearTimeout(prev);
 
-                                // Delay más largo para dejar que la inercia corra libremente
+                                // Delay más corto para snap más rápido
                                 scrollEndTimers.current[key] = window.setTimeout(() => {
                                     const idx = normalizeIndex(computeIndexFromScrollTop(el.scrollTop), options.length);
                                     const nextVal = options[idx];
@@ -119,7 +121,7 @@ export const IOSPicker = ({ value, onChange, selections }: IOSPickerProps) => {
                                         onChange({ ...value, [key]: nextVal });
                                     }
                                     isScrolling.current[key] = false;
-                                }, 70);
+                                }, 30);
                             }}
                         >
                             {/* Padding superior para centrar el item seleccionado */}
