@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState, useEffect } from "react";
+import { useMemo, useState, useEffect, useRef } from "react";
 import { saveExerciseSets, fetchExerciseSets, fetchWeekData, fetchWeeksList, WeekListItem } from "@/lib/sheets-client";
 import { Week, PersonalRecord, Exercise, Set } from "@/types";
 import { ExerciseCard } from "@/components/ui/ExerciseCard";
@@ -9,7 +9,7 @@ import { ExerciseModal } from "@/components/ui/ExerciseModal";
 import { DaySelector } from "@/components/ui/DaySelector";
 import { SetupModal } from "@/components/modals/SetupModal";
 import { useAuth } from "@/lib/hooks/useAuth";
-import { Settings } from "lucide-react";
+import { Info, Loader2, Settings } from "lucide-react";
 
 type HomeScreenProps = {
     initialWeek: Week;
@@ -31,6 +31,11 @@ export function HomeScreen({ initialWeek, initialPrs }: HomeScreenProps) {
     // Auth state
     const auth = useAuth();
     const [showSetupModal, setShowSetupModal] = useState(false);
+
+    // Info popover (rutina + progreso)
+    const [showInfoPopover, setShowInfoPopover] = useState(false);
+    const [isRefreshingInfo, setIsRefreshingInfo] = useState(false);
+    const infoPopoverRef = useRef<HTMLDivElement>(null);
 
     // Show setup modal if not fully configured (after initial load)
     useEffect(() => {
@@ -101,6 +106,120 @@ export function HomeScreen({ initialWeek, initialPrs }: HomeScreenProps) {
     }, [prs]);
 
     const currentDay = week.days[currentDayIndex];
+
+    const routineProgress = useMemo(() => {
+        if (!currentDay) return [];
+
+        const isValidSet = (s: Set) =>
+            s.weight !== null && s.weight !== undefined && s.weight >= 0 &&
+            s.reps !== null && s.reps !== undefined && s.reps > 0;
+
+        return currentDay.exercises.map((exercise) => {
+            const targetSetCount = Math.max(
+                1,
+                parseInt(exercise.prescribedSeries?.toString().split(/[\sxX]+/)[0]) || 3
+            );
+            const completedSetsCount = exercise.sets?.slice(0, targetSetCount).filter(isValidSet).length || 0;
+            return {
+                name: exercise.name,
+                completed: completedSetsCount,
+                target: targetSetCount,
+                isComplete: completedSetsCount >= targetSetCount,
+            };
+        });
+    }, [currentDay]);
+
+    useEffect(() => {
+        if (!showInfoPopover) return;
+
+        const handlePointerDown = (e: MouseEvent | TouchEvent) => {
+            const el = infoPopoverRef.current;
+            if (!el) return;
+            if (e.target instanceof Node && !el.contains(e.target)) {
+                setShowInfoPopover(false);
+            }
+        };
+
+        const handleKeyDown = (e: KeyboardEvent) => {
+            if (e.key === "Escape") setShowInfoPopover(false);
+        };
+
+        document.addEventListener("mousedown", handlePointerDown);
+        document.addEventListener("touchstart", handlePointerDown, { passive: true });
+        document.addEventListener("keydown", handleKeyDown);
+        return () => {
+            document.removeEventListener("mousedown", handlePointerDown);
+            document.removeEventListener("touchstart", handlePointerDown);
+            document.removeEventListener("keydown", handleKeyDown);
+        };
+    }, [showInfoPopover]);
+
+    useEffect(() => {
+        if (!showInfoPopover) return;
+        if (auth.isLoading) return;
+        if (!auth.isSetupComplete) return;
+        if (!currentDay) return;
+
+        const weekId = week.id;
+        const dayId = currentDay.id;
+        const exerciseNames = currentDay.exercises.map((e) => e.name);
+
+        let cancelled = false;
+
+        const refresh = async () => {
+            setIsRefreshingInfo(true);
+            try {
+                const results = await Promise.all(
+                    exerciseNames.map(async (exerciseName) => {
+                        try {
+                            const { sets } = await fetchExerciseSets({ weekId, dayId, exerciseName });
+                            const normalized: Set[] = (sets || []).map((s) => ({
+                                // 0x0 = vacío; peso 0 con reps>0 es válido.
+                                weight: (s.weight === 0 && s.reps === 0) ? null : (s.weight ?? null),
+                                reps: (s.weight === 0 && s.reps === 0) ? null : (s.reps ?? null),
+                            }));
+                            return { exerciseName, sets: normalized };
+                        } catch {
+                            return { exerciseName, sets: null as Set[] | null };
+                        }
+                    })
+                );
+
+                if (cancelled) return;
+
+                setWeek((prev) => {
+                    const updated = { ...prev };
+                    const dayIdx = updated.days.findIndex((d) => d.id === dayId);
+                    if (dayIdx < 0) return prev;
+
+                    const day = updated.days[dayIdx];
+                    updated.days = [...updated.days];
+                    updated.days[dayIdx] = { ...day, exercises: [...day.exercises] };
+
+                    for (const r of results) {
+                        if (!r.sets) continue;
+                        const exIdx = updated.days[dayIdx].exercises.findIndex((e) => e.name === r.exerciseName);
+                        if (exIdx < 0) continue;
+                        updated.days[dayIdx].exercises[exIdx] = {
+                            ...updated.days[dayIdx].exercises[exIdx],
+                            sets: r.sets,
+                        };
+                    }
+
+                    return updated;
+                });
+            } finally {
+                if (!cancelled) setIsRefreshingInfo(false);
+            }
+        };
+
+        refresh();
+
+        return () => {
+            cancelled = true;
+        };
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [showInfoPopover, auth.isLoading, auth.isSetupComplete, week.id, currentDayIndex]);
 
     const exerciseCards = currentDay?.exercises.map((exercise, idx) => {
         const pr = prByExercise.get(exercise.name.toLowerCase());
@@ -256,11 +375,66 @@ export function HomeScreen({ initialWeek, initialPrs }: HomeScreenProps) {
                         <Settings size={18} />
                     </button>
 
-                    {/* Profile Avatar */}
-                    <div className="bg-white rounded-full p-1.5 shadow-sm border border-black/5">
-                        <div className={`w-8 h-8 rounded-full flex items-center justify-center text-white font-bold text-xs ring-2 ring-white ${auth.isSetupComplete ? "bg-ios-green" : "bg-ios-orange"}`}>
-                            {auth.isSetupComplete ? "✓" : "!"}
-                        </div>
+                    {/* Info Popover */}
+                    <div ref={infoPopoverRef} className="relative">
+                        <button
+                            type="button"
+                            onClick={() => {
+                                setShowInfoPopover((v) => !v);
+                                setShowWeekPicker(false);
+                            }}
+                            className="w-10 h-10 bg-white rounded-full shadow-sm border border-black/5 flex items-center justify-center text-gray-500 active:scale-95 transition-transform"
+                            aria-label="Info de rutina de hoy"
+                            aria-expanded={showInfoPopover}
+                        >
+                            <Info size={18} />
+                        </button>
+
+                        {showInfoPopover && (
+                            <div className="absolute right-0 top-full mt-2 w-72 bg-white/90 backdrop-blur-xl rounded-2xl shadow-xl border border-black/5 overflow-hidden origin-top-right animate-in fade-in zoom-in-95 duration-200">
+                                <div className="px-4 py-3 border-b border-black/5 flex items-center justify-between">
+                                    <div className="flex flex-col">
+                                        <span className="text-[10px] uppercase font-black tracking-wider text-gray-400">
+                                            Rutina de hoy
+                                        </span>
+                                        <span className="text-sm font-black text-black">
+                                            {currentDay ? `Día ${currentDay.id}` : "Sin rutina"}
+                                        </span>
+                                    </div>
+                                    {isRefreshingInfo && (
+                                        <div className="text-gray-400">
+                                            <Loader2 size={16} className="animate-spin" />
+                                        </div>
+                                    )}
+                                </div>
+
+                                {!currentDay ? (
+                                    <div className="px-4 py-4 text-sm font-bold text-gray-400">
+                                        No hay rutina programada para hoy.
+                                    </div>
+                                ) : routineProgress.length === 0 ? (
+                                    <div className="px-4 py-4 text-sm font-bold text-gray-400">
+                                        No hay ejercicios para este día.
+                                    </div>
+                                ) : (
+                                    <ul className="max-h-80 overflow-auto">
+                                        {routineProgress.map((item) => (
+                                            <li
+                                                key={item.name}
+                                                className="px-4 py-3 flex items-center justify-between gap-3 border-b border-black/5 last:border-0"
+                                            >
+                                                <span className="text-sm font-black text-black truncate">
+                                                    {item.name}
+                                                </span>
+                                                <span className={`text-sm font-black tabular-nums ${item.isComplete ? "text-ios-green" : "text-black"}`}>
+                                                    {item.completed}/{item.target}
+                                                </span>
+                                            </li>
+                                        ))}
+                                    </ul>
+                                )}
+                            </div>
+                        )}
                     </div>
                 </div>
             </header>
