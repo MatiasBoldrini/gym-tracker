@@ -59,11 +59,15 @@ export const ExerciseModal = ({
         setSets(initialSets);
         const nextDraft = Array.from({ length: targetSetCount }, (_, idx) => {
             const s = initialSets[idx];
-            const hasSaved = s && s.weight !== null && s.reps !== null;
-            if (hasSaved) return { weight: s.weight as number, reps: s.reps as number };
-            // Serie 1: por defecto al PR si existe
-            if (idx === 0 && pr) return { weight: pr.weight ?? 0, reps: pr.reps ?? 0 };
-            // El resto arranca vacío; al cambiar de tab se hereda de la anterior (local, instantáneo).
+            // Considerar guardado si tiene al menos reps > 0 o weight > 0
+            const hasSaved = s && (
+                (s.weight !== null && s.weight > 0) || 
+                (s.reps !== null && s.reps > 0)
+            );
+            if (hasSaved) return { weight: s.weight ?? 0, reps: s.reps ?? 0 };
+            // TODAS las series vacías arrancan con el PR si existe (no solo la primera)
+            if (pr) return { weight: pr.weight ?? 0, reps: pr.reps ?? 0 };
+            // Sin PR, arranca en 0
             return { weight: 0, reps: 0 };
         });
         setDraft(nextDraft);
@@ -302,30 +306,47 @@ export const ExerciseModal = ({
                         </div>
 
                         <div className="mb-6">
-                            <div className="flex justify-around mb-1 px-4">
-                                <span className="text-[9px] font-black text-gray-300 uppercase tracking-[0.2em]">Peso (kg)</span>
-                                <span className="text-[9px] font-black text-gray-300 uppercase tracking-[0.2em]">Reps</span>
-                            </div>
-                            <div className={`relative h-[180px] bg-gray-50 rounded-[24px] overflow-hidden border border-black/5 transition-all ${completedSets[activeSetIndex] && !isEditing ? "opacity-30 grayscale pointer-events-none scale-95" : "opacity-100 scale-100"}`}>
-                                <IOSPicker
-                                    // Removed key={activeSetIndex} to prevent remounting and lag
-
-                                    value={{
-                                        weight: draft[activeSetIndex]?.weight ?? 0,
-                                        reps: draft[activeSetIndex]?.reps ?? 0
-                                    }}
-                                    onChange={(val) => {
-                                        if ('weight' in val && 'reps' in val) {
-                                            updateCurrentSet(val);
-                                        }
-                                    }}
-                                    selections={{
-                                        weight: weights,
-                                        reps: reps,
-                                    }}
-                                />
-
-                            </div>
+                            {completedSets[activeSetIndex] && !isEditing ? (
+                                /* Serie completada - mostrar mensaje en lugar de pickers */
+                                <div className="relative h-[180px] bg-gradient-to-b from-ios-green/5 to-ios-green/10 rounded-[24px] overflow-hidden border border-ios-green/20 flex flex-col items-center justify-center gap-3">
+                                    <div className="w-16 h-16 bg-ios-green/20 rounded-full flex items-center justify-center">
+                                        <Check size={32} strokeWidth={3} className="text-ios-green" />
+                                    </div>
+                                    <div className="text-center">
+                                        <p className="text-lg font-black text-ios-green uppercase tracking-wide">
+                                            Serie completada
+                                        </p>
+                                        <p className="text-sm text-gray-500 mt-1">
+                                            {sets[activeSetIndex]?.weight}kg × {sets[activeSetIndex]?.reps} reps
+                                        </p>
+                                    </div>
+                                </div>
+                            ) : (
+                                /* Pickers normales para registrar/editar */
+                                <>
+                                    <div className="flex justify-around mb-1 px-4">
+                                        <span className="text-[9px] font-black text-gray-300 uppercase tracking-[0.2em]">Peso (kg)</span>
+                                        <span className="text-[9px] font-black text-gray-300 uppercase tracking-[0.2em]">Reps</span>
+                                    </div>
+                                    <div className="relative h-[180px] bg-gray-50 rounded-[24px] overflow-hidden border border-black/5">
+                                        <IOSPicker
+                                            value={{
+                                                weight: draft[activeSetIndex]?.weight ?? 0,
+                                                reps: draft[activeSetIndex]?.reps ?? 0
+                                            }}
+                                            onChange={(val) => {
+                                                if ('weight' in val && 'reps' in val) {
+                                                    updateCurrentSet(val);
+                                                }
+                                            }}
+                                            selections={{
+                                                weight: weights,
+                                                reps: reps,
+                                            }}
+                                        />
+                                    </div>
+                                </>
+                            )}
                         </div>
 
                         <div className="flex flex-col gap-2">

@@ -19,6 +19,8 @@ export const IOSPicker = ({ value, onChange, selections }: IOSPickerProps) => {
     const refs = React.useRef<Record<string, HTMLDivElement | null>>({});
     const scrollEndTimers = React.useRef<Record<string, number | null>>({});
     const isProgrammaticScroll = React.useRef<Record<string, boolean>>({});
+    const isScrolling = React.useRef<Record<string, boolean>>({});
+    const lastScrollTime = React.useRef<Record<string, number>>({});
 
     const normalizeIndex = React.useCallback((idx: number, length: number) => {
         if (length <= 0) return 0;
@@ -40,7 +42,7 @@ export const IOSPicker = ({ value, onChange, selections }: IOSPickerProps) => {
         el.scrollTo({ top: idx * itemHeight, behavior });
         window.setTimeout(() => {
             isProgrammaticScroll.current[key] = false;
-        }, behavior === "smooth" ? 250 : 0);
+        }, behavior === "smooth" ? 150 : 0);
     }, [itemHeight]);
 
     const computeIndexFromScrollTop = React.useCallback((scrollTop: number) => {
@@ -52,9 +54,11 @@ export const IOSPicker = ({ value, onChange, selections }: IOSPickerProps) => {
     // Mantener el wheel sincronizado si `value` cambia externamente (por ejemplo, al abrir el modal o al tocar botones rápidos).
     React.useEffect(() => {
         for (const key of keys) {
+            // No sincronizar mientras el usuario está scrolleando activamente
+            if (isScrolling.current[key]) continue;
             const options = selections[key] || [];
             const idx = normalizeIndex(findIndexForValue(options, value[key]), options.length);
-            // No animamos para evitar “tirones” al abrir.
+            // No animamos para evitar "tirones" al abrir.
             scrollToIndex(key, idx, "auto");
         }
         // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -67,7 +71,7 @@ export const IOSPicker = ({ value, onChange, selections }: IOSPickerProps) => {
             <div
                 className="absolute inset-0 pointer-events-none z-10"
                 style={{
-                    background: 'linear-gradient(to bottom, rgba(255,255,255,1) 0%, rgba(255,255,255,0) 30%, rgba(255,255,255,0) 70%, rgba(255,255,255,1) 100%)'
+                    background: 'linear-gradient(to bottom, rgba(249,250,251,1) 0%, rgba(249,250,251,0) 30%, rgba(249,250,251,0) 70%, rgba(249,250,251,1) 100%)'
                 }}
             />
             <div className="grid grid-cols-2 h-[200px]">
@@ -84,27 +88,47 @@ export const IOSPicker = ({ value, onChange, selections }: IOSPickerProps) => {
                             className="h-[200px] overflow-y-scroll no-scrollbar"
                             style={{
                                 WebkitOverflowScrolling: "touch",
-                                scrollSnapType: "y mandatory",
+                                // Usar "proximity" permite inercia natural - solo hace snap cuando está cerca
+                                scrollSnapType: "y proximity",
                                 scrollPaddingTop: pad,
                                 scrollPaddingBottom: pad,
                                 touchAction: "pan-y",
+                                // Scroll suave para mejor inercia
+                                scrollBehavior: "smooth",
+                            }}
+                            onTouchStart={() => {
+                                isScrolling.current[key] = true;
+                                // Cancelar cualquier timer pendiente al tocar
+                                const prev = scrollEndTimers.current[key];
+                                if (prev) window.clearTimeout(prev);
+                            }}
+                            onTouchEnd={() => {
+                                // Marcar el fin del touch pero dejar que la inercia continúe
+                                lastScrollTime.current[key] = Date.now();
                             }}
                             onScroll={(e) => {
                                 if (isProgrammaticScroll.current[key]) return;
                                 const el = e.currentTarget;
+                                lastScrollTime.current[key] = Date.now();
 
                                 const prev = scrollEndTimers.current[key];
                                 if (prev) window.clearTimeout(prev);
 
+                                // Delay más corto para detectar fin de scroll con inercia
                                 scrollEndTimers.current[key] = window.setTimeout(() => {
                                     const idx = normalizeIndex(computeIndexFromScrollTop(el.scrollTop), options.length);
                                     const nextVal = options[idx];
-                                    // Snap suave al item más cercano (mantiene inercia real y evita quedar “entre items”).
-                                    scrollToIndex(key, idx, "smooth");
+                                    // Solo hacer snap suave si es necesario
+                                    const currentScrollIdx = computeIndexFromScrollTop(el.scrollTop);
+                                    const diff = Math.abs(currentScrollIdx - idx);
+                                    if (diff > 0.1) {
+                                        scrollToIndex(key, idx, "smooth");
+                                    }
                                     if (nextVal !== undefined) {
                                         onChange({ ...value, [key]: nextVal });
                                     }
-                                }, 80);
+                                    isScrolling.current[key] = false;
+                                }, 50);
                             }}
                         >
                             {/* Padding superior para centrar el item seleccionado */}
@@ -114,8 +138,8 @@ export const IOSPicker = ({ value, onChange, selections }: IOSPickerProps) => {
                                 return (
                                     <div
                                         key={String(option)}
-                                        className={`flex items-center justify-center h-[40px] transition-all duration-150 select-none ${selected ? 'text-black font-black text-2xl scale-110' : 'text-gray-300 font-medium text-lg'}`}
-                                        style={{ scrollSnapAlign: "center", scrollSnapStop: "always" }}
+                                        className={`flex items-center justify-center h-[40px] transition-all duration-100 select-none ${selected ? 'text-black font-black text-2xl scale-110' : 'text-gray-300 font-medium text-lg'}`}
+                                        style={{ scrollSnapAlign: "center" }}
                                     >
                                         {option}
                                     </div>

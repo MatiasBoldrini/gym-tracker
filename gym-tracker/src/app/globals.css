@@ -26,6 +26,11 @@ html, body {
   height: 100%;
 }
 
+/* Evita layout shift horizontal cuando aparece/desaparece el scrollbar (ej: al abrir popovers/modals) */
+html {
+  scrollbar-gutter: stable;
+}
+
 body {
   color: rgb(var(--foreground-rgb));
   background: rgb(var(--background-rgb));
