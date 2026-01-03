@@ -21,24 +21,49 @@ export const ExerciseModal = ({
     onClose,
     onSave,
 }: ExerciseModalProps) => {
-    // Start with 1 set, but allow up to 4
-    const [sets, setSets] = useState<Set[]>(exercise.sets.length > 0 ? exercise.sets : [{ weight: 60, reps: 10 }]);
+    // Parse target sets from prescribed series string (e.g. "3 x 10")
+    // Default to 3 if parsing fails or returns 0
+    const targetSetCount = Math.max(1, parseInt(exercise.prescribedSeries?.toString().split(/[\sxX]+/)[0]) || 3);
+
+    // Initialize exactly targetSetCount sets
+    const [sets, setSets] = useState<Set[]>(() => {
+        // Create initial array of correct size
+        const initialSets = new Array(targetSetCount).fill({ weight: 60, reps: 10 });
+
+        // Fill with existing data if available
+        if (exercise.sets && exercise.sets.length > 0) {
+            return initialSets.map((defaultSet, index) => {
+                return exercise.sets[index] || defaultSet;
+            });
+        }
+
+        return initialSets;
+    });
+
     const [activeSetIndex, setActiveSetIndex] = useState(0);
-    const [completedSets, setCompletedSets] = useState<boolean[]>(new Array(4).fill(false));
+    const [completedSets, setCompletedSets] = useState<boolean[]>(new Array(targetSetCount).fill(false));
     const [isEditing, setIsEditing] = useState(false);
 
     // Generate options for the picker
     const weights = Array.from({ length: 401 }, (_, i) => i * 0.5); // 0 to 200kg in 0.5 steps
     const reps = Array.from({ length: 31 }, (_, i) => i); // 0 to 30 reps
 
-    const addSet = () => {
-        if (sets.length < 4) {
-            const lastSet = sets[sets.length - 1];
-            setSets([...sets, { ...lastSet }]);
-            setActiveSetIndex(sets.length);
-            setIsEditing(false);
-        }
-    };
+    // Sync completed sets state based on data
+    React.useEffect(() => {
+        const compl = new Array(targetSetCount).fill(false);
+        sets.forEach((set, idx) => {
+            // If set has real data (loaded from sheet/state), mark as complete?
+            // Actually `exercise.sets` has the data. 
+            // Logic: If we are initializing from existing data, we might want to mark them complete?
+            // For now, let's leave as user interaction driven or simple check:
+            // If we passed in data, it's "done" for the day?
+            // The prompt didn't specify auto-complete, so leave false to let user confirm, 
+            // OR check if weight/reps are non-zero/null. 
+        });
+        // Simplification: just reset to false on open, unless we want persistence of "checked" state.
+        // Given current app state, persistence of "checked" isn't in data model explicitly (just existence of sets).
+    }, []);
+
 
     const handleRegistration = () => {
         const newCompleted = [...completedSets];
@@ -92,34 +117,34 @@ export const ExerciseModal = ({
                         animate={{ y: 0 }}
                         exit={{ y: "100%" }}
                         transition={{ type: "spring", damping: 25, stiffness: 200 }}
-                        className="fixed bottom-0 left-0 right-0 bg-white rounded-t-[32px] z-50 px-6 pt-2 pb-20 shadow-2xl"
+                        className="fixed bottom-0 left-0 right-0 bg-white rounded-t-[32px] z-50 px-6 pt-6 pb-32 shadow-2xl"
                     >
                         {/* Handle */}
-                        <div className="flex justify-center mb-6">
-                            <div className="w-12 h-1.5 bg-gray-200 rounded-full" />
-                        </div>
+                        <div className="absolute top-3 left-1/2 -translate-x-1/2 w-12 h-1.5 bg-gray-200 rounded-full" />
 
-                        <div className="flex justify-between items-start mb-4">
-                            <div className="flex gap-3 items-center">
+                        <div className="flex justify-between items-start mb-6">
+                            <div className="flex gap-4 items-center">
                                 {exercise.image && (
-                                    <div className="w-12 h-12 bg-ios-blue/10 rounded-xl overflow-hidden border border-ios-blue/10 shrink-0">
+                                    <div className="w-16 h-16 bg-white rounded-2xl overflow-hidden border border-black/5 shadow-sm shrink-0 p-1">
                                         <img
                                             src={`/images/exercises/${exercise.image}`}
                                             alt={exercise.name}
-                                            className="w-full h-full object-contain"
+                                            className="w-full h-full object-contain mix-blend-multiply"
                                         />
                                     </div>
                                 )}
                                 <div className="flex-1 min-w-0">
-                                    <div className="flex items-baseline gap-2 flex-wrap">
-                                        <h2 className="text-xl font-black tracking-tight text-black uppercase truncate">{exercise.name}</h2>
+                                    <h2 className="text-xl font-black tracking-tight text-black uppercase leading-tight mb-1">{exercise.name}</h2>
+                                    <div className="flex items-center gap-2 flex-wrap">
+                                        <span className="px-2 py-0.5 rounded-md bg-gray-100 text-gray-500 font-bold text-[10px] uppercase tracking-wide border border-black/5">
+                                            {exercise.prescribedSeries}
+                                        </span>
                                         {pr && (
-                                            <span className="text-[10px] font-black text-ios-blue uppercase tracking-widest whitespace-nowrap">
-                                                PR: {pr.weight}kg x {pr.reps}
+                                            <span className="px-2 py-0.5 rounded-md bg-ios-blue/10 text-ios-blue font-bold text-[10px] uppercase tracking-wide whitespace-nowrap">
+                                                PR: {pr.weight}kg
                                             </span>
                                         )}
                                     </div>
-                                    <p className="text-ios-gray font-bold text-[10px] uppercase tracking-wide">{exercise.prescribedSeries}</p>
                                 </div>
                             </div>
                             <button
@@ -129,37 +154,29 @@ export const ExerciseModal = ({
                                 }}
                                 className="w-8 h-8 bg-gray-100 rounded-full flex items-center justify-center text-gray-500 active:scale-90 transition-transform shrink-0"
                             >
-                                <X size={16} />
+                                <X size={18} />
                             </button>
                         </div>
 
                         {/* Set Selector Tabs */}
-                        <div className="flex gap-2 mb-6 overflow-x-auto no-scrollbar pb-1">
+                        <div className="flex gap-2 mb-8 overflow-x-auto no-scrollbar pb-1">
                             {sets.map((_, idx) => (
                                 <button
                                     key={idx}
                                     onClick={() => handleTabClick(idx)}
                                     className={`
-                                        flex-1 min-w-[75px] py-2.5 rounded-xl font-black text-[9px] uppercase tracking-wider transition-all relative flex items-center justify-center gap-1
+                                        flex-1 min-w-[60px] h-12 rounded-2xl font-black text-xs transition-all relative flex items-center justify-center gap-1.5
                                         ${activeSetIndex === idx
-                                            ? "bg-black text-white shadow-lg shadow-black/20"
+                                            ? "bg-black text-white shadow-lg shadow-black/20 scale-105 z-10"
                                             : completedSets[idx]
-                                                ? "bg-ios-green/10 text-ios-green border border-ios-green/20"
-                                                : "bg-gray-100 text-gray-400"}
+                                                ? "bg-ios-green text-white shadow-md shadow-ios-green/20"
+                                                : "bg-[#F2F2F7] text-gray-400"}
                                     `}
                                 >
-                                    {completedSets[idx] && <Check size={10} strokeWidth={3} className={activeSetIndex === idx ? "text-white" : "text-ios-green"} />}
-                                    Serie {idx + 1}
+                                    {completedSets[idx] && activeSetIndex !== idx && <Check size={12} strokeWidth={4} />}
+                                    {idx + 1}
                                 </button>
                             ))}
-                            {sets.length < 4 && (
-                                <button
-                                    onClick={addSet}
-                                    className="w-10 h-8 flex items-center justify-center bg-ios-blue/10 text-ios-blue rounded-xl active:scale-95 transition-transform shrink-0"
-                                >
-                                    <Plus size={18} />
-                                </button>
-                            )}
                         </div>
 
                         <div className="mb-6">
