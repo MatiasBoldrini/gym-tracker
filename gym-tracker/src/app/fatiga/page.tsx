@@ -10,13 +10,20 @@ export default async function FatigaPage() {
     try {
         const store = await getUserStore();
         if (!isUserAuthenticated(store) || !store.spreadsheetId) {
-            return <FatigaScreen initialRows={[]} intensityByGroupId={{}} />;
+            return <FatigaScreen muscleRows={[]} daySummary={[]} calendarDays={[]} intensityByGroupId={{}} />;
         }
 
         const accessToken = await refreshAccessToken(store.refreshToken!);
         const data = await readSheetValues(accessToken, store.spreadsheetId, `'Fatiga'!A:Z`);
-        const { rows, raw } = computeFatigaFromSheet(data);
-        return <FatigaScreen initialRows={rows} intensityByGroupId={raw} />;
+        const { muscleRows, daySummary, calendarDays, raw } = computeFatigaFromSheet(data);
+        return (
+            <FatigaScreen
+                muscleRows={muscleRows}
+                daySummary={daySummary}
+                calendarDays={calendarDays}
+                intensityByGroupId={raw}
+            />
+        );
     } catch (error) {
         console.error("Error loading Fatiga page:", error);
         return (

@@ -38,16 +38,166 @@ export function getFatigaBucket(series: number): FatigaBucket {
     return "extreme";
 }
 
+export type FatigaMuscleRow = {
+    muscle: string;
+    series: number;
+    frequency?: number | null;
+    // Valores por día (Lun..Dom) cuando existan en la tabla superior.
+    calendar?: Array<number | null>;
+};
+
+export type FatigaDaySummaryRow = {
+    day: string;
+    dayNumber?: string;
+    avgStars?: number | null;
+    series?: number | null;
+};
+
+function normCell(v: unknown): string {
+    return String(v ?? "")
+        .trim()
+        .toLowerCase()
+        .normalize("NFD")
+        .replace(/[\u0300-\u036f]/g, "");
+}
+
+function findHeaderRow(data: any[][]) {
+    for (let r = 0; r < data.length; r++) {
+        const row = data[r] || [];
+        const normalized = row.map(normCell);
+        const hasMuscles = normalized.some((c) => c === "musculos" || c.includes("muscul"));
+        const hasSeries = normalized.some((c) => c === "series" || c.includes("serie"));
+        if (hasMuscles && hasSeries) return r;
+    }
+    return -1;
+}
+
+function findDayColumns(headerRow: any[]): { label: string; idx: number }[] {
+    const days = ["lun", "mar", "mie", "mié", "jue", "vie", "sab", "sáb", "dom"];
+    const normalized = headerRow.map(normCell);
+    const cols: { label: string; idx: number }[] = [];
+    for (let i = 0; i < normalized.length; i++) {
+        const c = normalized[i];
+        if (!c) continue;
+        if (days.includes(c)) {
+            // Usamos el texto original del header para display cuando sea posible.
+            cols.push({ label: String(headerRow[i] ?? "").trim() || c, idx: i });
+        }
+    }
+    // Orden correcto Lun..Dom aunque en la hoja estén desordenados.
+    const order: Record<string, number> = { lun: 0, mar: 1, mie: 2, jue: 3, vie: 4, sab: 5, dom: 6 };
+    return cols.sort((a, b) => {
+        const na = normCell(a.label);
+        const nb = normCell(b.label);
+        const ka = order[na as keyof typeof order] ?? 999;
+        const kb = order[nb as keyof typeof order] ?? 999;
+        return ka - kb;
+    });
+}
+
+function parseMuscleSection(data: any[][]) {
+    const headerRowIdx = findHeaderRow(data);
+    if (headerRowIdx < 0) return null;
+
+    const header = data[headerRowIdx] || [];
+    const normalized = header.map(normCell);
+    const muscleCol = normalized.findIndex((c) => c === "musculos" || c.includes("muscul"));
+    const seriesCol = normalized.findIndex((c) => c === "series" || c.includes("serie"));
+    // Frecuencia: algunas plantillas lo ponen como "F" o "Frecuencia".
+    const freqCol = normalized.findIndex((c) => c === "f" || c.includes("frecuencia"));
+    const dayCols = findDayColumns(header);
+
+    if (muscleCol < 0 || seriesCol < 0) return null;
+
+    const muscleRows: FatigaMuscleRow[] = [];
+    for (let r = headerRowIdx + 1; r < data.length; r++) {
+        const row = data[r] || [];
+        const muscle = String(row[muscleCol] ?? "").trim();
+        const muscleNorm = normCell(muscle);
+        if (!muscleNorm) break;
+        // Cuando arranca el resumen (fila con "DIA"), cortamos.
+        if (muscleNorm === "dia") break;
+
+        const series = Number(row[seriesCol] ?? 0);
+        const frequency = freqCol >= 0 ? Number(row[freqCol] ?? NaN) : NaN;
+        const calendar =
+            dayCols.length > 0
+                ? dayCols.map(({ idx }) => {
+                    const v = row[idx];
+                    const n = Number(v);
+                    return Number.isFinite(n) ? n : null;
+                })
+                : undefined;
+
+        muscleRows.push({
+            muscle,
+            series: Number.isFinite(series) ? series : 0,
+            frequency: Number.isFinite(frequency) ? frequency : null,
+            calendar,
+        });
+    }
+
+    return {
+        headerRowIdx,
+        muscleRows,
+        dayCols,
+    };
+}
+
+function parseDaySummarySection(data: any[][]): FatigaDaySummaryRow[] {
+    // Buscamos la fila header del resumen (contiene DIA + PROMEDIO)
+    let headerIdx = -1;
+    for (let r = 0; r < data.length; r++) {
+        const row = data[r] || [];
+        const normalized = row.map(normCell);
+        const hasDia = normalized.some((c) => c === "dia");
+        const hasProm = normalized.some((c) => c.includes("promedio"));
+        if (hasDia && hasProm) {
+            headerIdx = r;
+            break;
+        }
+    }
+    if (headerIdx < 0) return [];
+
+    const header = data[headerIdx] || [];
+    const normalized = header.map(normCell);
+    const dayCol = normalized.findIndex((c) => c === "dia");
+    const nCol = normalized.findIndex((c) => c === "n" || c === "n°" || c.includes("n"));
+    const avgCol = normalized.findIndex((c) => c.includes("promedio"));
+    const seriesCol = normalized.findIndex((c) => c === "series" || c.includes("serie"));
+
+    const rows: FatigaDaySummaryRow[] = [];
+    for (let r = headerIdx + 1; r < data.length; r++) {
+        const row = data[r] || [];
+        const day = String(row[dayCol] ?? "").trim();
+        if (!normCell(day)) break;
+
+        const avg = avgCol >= 0 ? Number(row[avgCol] ?? NaN) : NaN;
+        const series = seriesCol >= 0 ? Number(row[seriesCol] ?? NaN) : NaN;
+        rows.push({
+            day,
+            dayNumber: nCol >= 0 ? String(row[nCol] ?? "").trim() : undefined,
+            avgStars: Number.isFinite(avg) ? avg : null,
+            series: Number.isFinite(series) ? series : null,
+        });
+    }
+    return rows;
+}
+
 export function computeFatigaFromSheet(data: any[][]) {
-    const rows = data.slice(1).filter((row) => row[0]);
+    const parsed = parseMuscleSection(data);
+    const daySummary = parseDaySummarySection(data);
+
+    const muscleRows: FatigaMuscleRow[] = parsed?.muscleRows ?? [];
+    const calendarDays = parsed?.dayCols?.map((d) => d.label) ?? [];
 
     // Calculate intensities for Body Map
     const intensities: Record<string, number> = {};
     let maxSeries = 0;
 
-    rows.forEach((row) => {
-        const rawMuscleName = row[0].toLowerCase().trim();
-        const series = parseInt(row[1]) || 0;
+    muscleRows.forEach((row) => {
+        const rawMuscleName = row.muscle.toLowerCase().trim();
+        const series = Number(row.series) || 0;
         if (series > maxSeries) maxSeries = series;
 
         // Resolve canonical name using aliases or direct lookup
@@ -104,5 +254,11 @@ export function computeFatigaFromSheet(data: any[][]) {
         });
     }
 
-    return { rows, normalized, raw: intensities };
+    return {
+        muscleRows,
+        daySummary,
+        calendarDays,
+        normalized,
+        raw: intensities,
+    };
 }

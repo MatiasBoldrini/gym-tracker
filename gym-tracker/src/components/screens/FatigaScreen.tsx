@@ -1,21 +1,29 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useMemo, useState } from "react";
 import { Info, Activity, X } from "lucide-react";
 import { BodyMapInteractive } from "../ui/BodyMapInteractive";
 import { AnimatePresence, motion } from "framer-motion";
-import { MUSCLE_MAPPING, MUSCLE_ALIASES, getFatigaBucket } from "@/lib/fatiga";
+import { MUSCLE_MAPPING, MUSCLE_ALIASES, getFatigaBucket, type FatigaDaySummaryRow, type FatigaMuscleRow } from "@/lib/fatiga";
 
 type FatigaScreenProps = {
-    initialRows: any[][];
+    muscleRows: FatigaMuscleRow[];
+    daySummary: FatigaDaySummaryRow[];
+    calendarDays: string[];
     intensityByGroupId: Record<string, number>;
 };
 
-export function FatigaScreen({ initialRows, intensityByGroupId }: FatigaScreenProps) {
-    const [fatigaData] = useState<any[][]>(initialRows);
+export function FatigaScreen({ muscleRows, daySummary, calendarDays, intensityByGroupId }: FatigaScreenProps) {
     const [selectedMuscle, setSelectedMuscle] = useState<string | null>(null);
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [popoverPosition, setPopoverPosition] = useState<{ x: number; y: number } | null>(null);
+
+    const sortedMuscleRows = useMemo(() => {
+        return (muscleRows || [])
+            .filter((r) => (Number(r.series) || 0) >= 0) // ocultar menores a 0
+            .slice()
+            .sort((a, b) => (Number(b.series) || 0) - (Number(a.series) || 0));
+    }, [muscleRows]);
 
     const handleMuscleClick = (muscleId: string, e: React.MouseEvent) => {
         setSelectedMuscle(muscleId);
@@ -42,12 +50,12 @@ export function FatigaScreen({ initialRows, intensityByGroupId }: FatigaScreenPr
         // Aggregate sets from all rows that map to this canonical name
         // This handles cases where multiple sheet rows (aliases) map to one group (e.g. deltoids -> hombro)
         let totalSets = 0;
-        fatigaData.forEach(row => {
-            const rawName = row[0].toLowerCase().trim();
+        sortedMuscleRows.forEach(row => {
+            const rawName = row.muscle.toLowerCase().trim();
             const resolvedName = MUSCLE_ALIASES[rawName] || rawName;
 
             if (resolvedName === canonicalName) {
-                totalSets += (parseInt(row[1]) || 0);
+                totalSets += (Number(row.series) || 0);
             }
         });
 
@@ -144,6 +152,40 @@ export function FatigaScreen({ initialRows, intensityByGroupId }: FatigaScreenPr
                 )}
             </AnimatePresence>
 
+            {/* Resumen (Frecuencia / Promedio ★) */}
+            {daySummary?.length > 0 && (
+                <div className="ios-card overflow-hidden mb-8">
+                    <div className="bg-black px-4 py-4 flex items-center justify-between">
+                        <h2 className="text-sm font-black uppercase tracking-[0.2em] text-white">Frecuencia y Promedio ★</h2>
+                        <Info size={16} className="text-white/40" />
+                    </div>
+                    <div className="divide-y divide-black/5 bg-white">
+                        {daySummary.map((r, idx) => (
+                            <div key={idx} className="p-4 flex items-center justify-between gap-4">
+                                <div className="flex items-baseline gap-3">
+                                    <span className="font-black text-xs uppercase tracking-wider text-black">{r.day}</span>
+                                    {r.dayNumber && (
+                                        <span className="text-[10px] font-black text-ios-gray uppercase"> {r.dayNumber}</span>
+                                    )}
+                                </div>
+                                <div className="flex items-center gap-4">
+                                    {typeof r.avgStars === "number" && (
+                                        <div className="text-[10px] font-black text-ios-gray uppercase">
+                                            ★ {r.avgStars}
+                                        </div>
+                                    )}
+                                    {typeof r.series === "number" && (
+                                        <div className="text-[10px] font-black text-ios-gray uppercase">
+                                            {r.series} <span className="text-[8px] opacity-60">series</span>
+                                        </div>
+                                    )}
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                </div>
+            )}
+
             {/* Fatigue Table */}
             <div className="ios-card overflow-hidden">
                 <div className="bg-black px-4 py-4 flex items-center justify-between">
@@ -151,9 +193,9 @@ export function FatigaScreen({ initialRows, intensityByGroupId }: FatigaScreenPr
                     <Activity size={16} className="text-white/40" />
                 </div>
                 <div className="divide-y divide-black/5 bg-white">
-                    {fatigaData.map((row, idx) => {
-                        const muscle = row[0];
-                        const series = parseInt(row[1]) || 0;
+                    {sortedMuscleRows.map((row, idx) => {
+                        const muscle = row.muscle;
+                        const series = Number(row.series) || 0;
                         const maxSeries = 25;
                         const percentage = Math.min((series / maxSeries) * 100, 100);
 
@@ -170,7 +212,12 @@ export function FatigaScreen({ initialRows, intensityByGroupId }: FatigaScreenPr
                                 <div className="flex-1">
                                     <div className="flex justify-between items-baseline mb-2">
                                         <span className="font-black text-xs uppercase tracking-wider text-black">{muscle}</span>
-                                        <span className="text-[10px] font-black text-ios-gray uppercase">{series} <span className="text-[8px] opacity-60">sets</span></span>
+                                        <span className="text-[10px] font-black text-ios-gray uppercase">
+                                            {series} <span className="text-[8px] opacity-60">series</span>
+                                            {typeof row.frequency === "number" && (
+                                                <span className="ml-2 text-[8px] opacity-60">• F {row.frequency}</span>
+                                            )}
+                                        </span>
                                     </div>
                                     <div className="h-1.5 w-full bg-gray-100 rounded-full overflow-hidden">
                                         <div
@@ -184,6 +231,57 @@ export function FatigaScreen({ initialRows, intensityByGroupId }: FatigaScreenPr
                     })}
                 </div>
             </div>
+
+            {/* Calendario (Lun..Dom) */}
+            {calendarDays?.length > 0 && sortedMuscleRows.some((r) => (r.calendar?.length || 0) === calendarDays.length) && (
+                <div className="ios-card overflow-hidden mt-8">
+                    <div className="bg-black px-4 py-4 flex items-center justify-between">
+                        <h2 className="text-sm font-black uppercase tracking-[0.2em] text-white">Calendario</h2>
+                        <Activity size={16} className="text-white/40" />
+                    </div>
+                    <div className="bg-white overflow-auto">
+                        <div
+                            className="min-w-[520px] grid gap-0"
+                            style={{ gridTemplateColumns: `180px repeat(${calendarDays.length}, minmax(44px, 1fr))` }}
+                        >
+                            <div className="sticky left-0 bg-white z-10 border-b border-black/5 p-3 text-[10px] font-black text-ios-gray uppercase tracking-wider">
+                                Músculo
+                            </div>
+                            {calendarDays.map((d) => (
+                                <div key={d} className="border-b border-black/5 p-3 text-center text-[10px] font-black text-ios-gray uppercase tracking-wider">
+                                    {d}
+                                </div>
+                            ))}
+
+                            {sortedMuscleRows.map((r, idx) => {
+                                const cal = r.calendar;
+                                if (!cal || cal.length !== calendarDays.length) return null;
+
+                                return (
+                                    <div key={`${r.muscle}-${idx}`} className="contents">
+                                        <div className="sticky left-0 bg-white z-10 border-b border-black/5 p-3">
+                                            <div className="text-[10px] font-black uppercase tracking-wider text-black">{r.muscle}</div>
+                                        </div>
+                                        {cal.map((v, j) => {
+                                            const n = typeof v === "number" ? v : null;
+                                            const active = typeof n === "number" && n > 0;
+                                            return (
+                                                <div
+                                                    key={`${idx}-${j}`}
+                                                    className={`border-b border-black/5 p-3 text-center text-[11px] font-black ${active ? "text-black" : "text-ios-gray"
+                                                        }`}
+                                                >
+                                                    {typeof n === "number" ? n : ""}
+                                                </div>
+                                            );
+                                        })}
+                                    </div>
+                                );
+                            })}
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 }
