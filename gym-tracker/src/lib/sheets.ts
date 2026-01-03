@@ -1,10 +1,17 @@
 import Papa from "papaparse";
 import { PersonalRecord, Week, Day, Exercise, Set } from "@/types";
 
-const SPREADSHEET_ID = process.env.NEXT_PUBLIC_SPREADSHEET_ID || "1XMFq-Twxtoa_Fs2_6kOWjB65mMqEgzFJ8ujzyZN7iCo";
-
-export async function fetchSheetCSV(gid: string, fetchOptions?: RequestInit): Promise<any[]> {
-    const url = `https://docs.google.com/spreadsheets/d/${SPREADSHEET_ID}/export?format=csv&gid=${gid}`;
+/**
+ * OJO: Export CSV por gid es frágil (el gid cambia por copia) y no sirve para modo multi-usuario.
+ * Se mantiene solo para debug/demo. El modo real usa Sheets API con OAuth.
+ */
+export async function fetchSheetCSV(params: {
+    spreadsheetId: string;
+    gid: string;
+    fetchOptions?: RequestInit;
+}): Promise<any[]> {
+    const { spreadsheetId, gid, fetchOptions } = params;
+    const url = `https://docs.google.com/spreadsheets/d/${spreadsheetId}/export?format=csv&gid=${gid}`;
     const response = await fetch(url, fetchOptions);
 
     if (!response.ok) {
@@ -59,10 +66,14 @@ export function parseWeekData(data: any[][], weekId: number, exerciseMapping: Re
                 const reps = parseFloat(row[repCol]);
                 const weight = parseFloat(row[weightCol]);
 
-                if (!isNaN(reps) || !isNaN(weight)) {
+                // Solo consideramos "set" si hay reps y peso numéricos.
+                // (La UI solo permite reps 0..30 y peso 0..200; valores fuera suelen ser ruido de plantilla.)
+                const repsOk = Number.isFinite(reps) && reps >= 0 && reps <= 30;
+                const weightOk = Number.isFinite(weight) && weight >= 0 && weight <= 200;
+                if (repsOk && weightOk) {
                     exercise.sets.push({
-                        reps: isNaN(reps) ? null : reps,
-                        weight: isNaN(weight) ? null : weight,
+                        reps,
+                        weight,
                     });
                 }
             }
@@ -108,11 +119,6 @@ export function parseExerciseMapping(data: any[][]): Record<string, string> {
     return mapping;
 }
 
-// GIDs for sheets (these might need validation from the URL or trial)
-// Typically, the first sheet is gid=0. Others need discovery.
-export const SHEET_GIDS = {
-    SEMANA_1: "0",
-    RM: "651025325",
-    FATIGA: "761571141",
-    EJERCICIOS: "1847511840",
-};
+// Nota: exportar CSV por `gid` sirve solo para debug/demo.
+// No lo uses como “DB” en producción porque el `gid` cambia al copiar la plantilla.
+// En modo real se usan nombres de pestañas + Google Sheets API (OAuth).

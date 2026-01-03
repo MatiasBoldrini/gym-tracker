@@ -1,12 +1,20 @@
 import { FatigaScreen } from "@/components/screens/FatigaScreen";
-import { fetchSheetCSV, SHEET_GIDS } from "@/lib/sheets";
 import { computeFatigaFromSheet } from "@/lib/fatiga";
+import { getUserStore, isUserAuthenticated } from "@/lib/user-store";
+import { refreshAccessToken } from "@/lib/google/oauth";
+import { readSheetValues } from "@/lib/google/sheets";
 
-export const revalidate = 300;
+export const dynamic = "force-dynamic";
 
 export default async function FatigaPage() {
     try {
-        const data = await fetchSheetCSV(SHEET_GIDS.FATIGA, { next: { revalidate } } as any);
+        const store = await getUserStore();
+        if (!isUserAuthenticated(store) || !store.spreadsheetId) {
+            return <FatigaScreen initialRows={[]} intensityByGroupId={{}} />;
+        }
+
+        const accessToken = await refreshAccessToken(store.refreshToken!);
+        const data = await readSheetValues(accessToken, store.spreadsheetId, `'Fatiga'!A:Z`);
         const { rows, raw } = computeFatigaFromSheet(data);
         return <FatigaScreen initialRows={rows} intensityByGroupId={raw} />;
     } catch (error) {

@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState, useEffect } from "react";
-import { saveExerciseSets, fetchWeeksList } from "@/lib/sheets-client";
+import { saveExerciseSets, fetchExerciseSets, fetchWeekData, fetchWeeksList, WeekListItem } from "@/lib/sheets-client";
 import { Week, PersonalRecord, Exercise, Set } from "@/types";
 import { ExerciseCard } from "@/components/ui/ExerciseCard";
 import Stack from "@/components/ui/Stack";
@@ -24,7 +24,8 @@ export function HomeScreen({ initialWeek, initialPrs }: HomeScreenProps) {
     const [isModalOpen, setIsModalOpen] = useState(false);
 
     const [showWeekPicker, setShowWeekPicker] = useState(false);
-    const [weeks, setWeeks] = useState<{ name: string; id: string }[]>([{ name: "Semana 1", id: "0" }]);
+    const [weeks, setWeeks] = useState<WeekListItem[]>([]);
+    const [selectedWeekId, setSelectedWeekId] = useState<number>(initialWeek?.id || 1);
     const [selectedWeekName, setSelectedWeekName] = useState(initialWeek?.id ? `Semana ${initialWeek.id}` : "Semana 1");
 
     // Auth state
@@ -39,20 +40,59 @@ export function HomeScreen({ initialWeek, initialPrs }: HomeScreenProps) {
     }, [auth.isLoading, auth.isSetupComplete]);
 
     useEffect(() => {
+        if (auth.isLoading) return;
+        if (!auth.isSetupComplete) return;
+
+        let cancelled = false;
+
         const loadWeeks = async () => {
             const fetchedWeeks = await fetchWeeksList();
-            if (fetchedWeeks.length > 0) {
-                // Sort by name (Semana 1, Semana 2, etc.)
-                const sorted = fetchedWeeks.sort((a, b) => {
-                    const numA = parseInt(a.name.replace(/\D/g, '')) || 0;
-                    const numB = parseInt(b.name.replace(/\D/g, '')) || 0;
-                    return numA - numB;
-                });
-                setWeeks(sorted);
+            if (cancelled) return;
+
+            const sorted = fetchedWeeks.sort((a, b) => a.id - b.id);
+            setWeeks(sorted);
+
+            const resolvedWeekId =
+                sorted.some((w) => w.id === selectedWeekId)
+                    ? selectedWeekId
+                    : (sorted[0]?.id ?? 1);
+
+            setSelectedWeekId(resolvedWeekId);
+            setSelectedWeekName(`Semana ${resolvedWeekId}`);
+        };
+
+        loadWeeks();
+
+        return () => {
+            cancelled = true;
+        };
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [auth.isLoading, auth.isSetupComplete]);
+
+    useEffect(() => {
+        if (auth.isLoading) return;
+        if (!auth.isSetupComplete) return;
+
+        let cancelled = false;
+
+        const loadWeek = async () => {
+            try {
+                const data = await fetchWeekData(selectedWeekId);
+                if (cancelled) return;
+                setWeek(data.week);
+                setCurrentDayIndex(0);
+                setSelectedWeekName(`Semana ${selectedWeekId}`);
+            } catch (e) {
+                console.error("Failed to load week:", e);
             }
         };
-        loadWeeks();
-    }, []);
+
+        loadWeek();
+
+        return () => {
+            cancelled = true;
+        };
+    }, [auth.isLoading, auth.isSetupComplete, selectedWeekId]);
 
     const prByExercise = useMemo(() => {
         const map = new Map<string, PersonalRecord>();
@@ -68,9 +108,47 @@ export function HomeScreen({ initialWeek, initialPrs }: HomeScreenProps) {
             <div
                 key={idx}
                 className="w-full h-full"
-                onClick={() => {
+                onClick={async () => {
                     setSelectedExercise(exercise);
                     setIsModalOpen(true);
+
+                    // If the spreadsheet can be modified elsewhere, pull latest sets on open.
+                    if (!auth.isSetupComplete) return;
+
+                    try {
+                        const { sets } = await fetchExerciseSets({
+                            weekId: week.id,
+                            dayId: currentDay.id,
+                            exerciseName: exercise.name,
+                        });
+
+                        const normalizedSets: Set[] = (sets || []).map((s) => ({
+                            // Misma convención que en el modal: 0x0 = vacío, pero peso 0 con reps>0 es válido.
+                            weight: (s.weight === 0 && s.reps === 0) ? null : (s.weight ?? null),
+                            reps: (s.weight === 0 && s.reps === 0) ? null : (s.reps ?? null),
+                        }));
+
+                        setWeek((prev) => {
+                            const updated = { ...prev };
+                            const dayIdx = updated.days.findIndex((d) => d.id === currentDay.id);
+                            if (dayIdx < 0) return prev;
+                            const exIdx = updated.days[dayIdx].exercises.findIndex((e) => e.name === exercise.name);
+                            if (exIdx < 0) return prev;
+                            updated.days = [...updated.days];
+                            updated.days[dayIdx] = { ...updated.days[dayIdx] };
+                            updated.days[dayIdx].exercises = [...updated.days[dayIdx].exercises];
+                            updated.days[dayIdx].exercises[exIdx] = {
+                                ...updated.days[dayIdx].exercises[exIdx],
+                                sets: normalizedSets,
+                            };
+                            return updated;
+                        });
+
+                        // Keep modal state in sync too.
+                        setSelectedExercise((prev) => (prev && prev.name === exercise.name ? { ...prev, sets: normalizedSets } : prev));
+                    } catch (e) {
+                        console.error("Failed to preload sets:", e);
+                    }
                 }}
             >
                 <ExerciseCard
@@ -134,12 +212,13 @@ export function HomeScreen({ initialWeek, initialPrs }: HomeScreenProps) {
                         <div className="absolute top-full left-0 mt-2 w-48 bg-white/90 backdrop-blur-xl rounded-2xl shadow-xl border border-black/5 overflow-hidden origin-top-left animate-in fade-in zoom-in-95 duration-200">
                             {weeks.map((w, idx) => (
                                 <button
-                                    key={w.id}
+                                    key={String(w.id)}
                                     className="w-full text-left px-4 py-3 font-bold text-sm hover:bg-black/5 active:bg-black/10 transition-colors border-b border-black/5 last:border-0"
                                     onClick={() => {
+                                        setSelectedWeekId(w.id);
                                         setSelectedWeekName(w.name);
                                         setShowWeekPicker(false);
-                                        // Trigger re-fetch or navigation here in full implementation
+                                        setCurrentDayIndex(0);
                                     }}
                                 >
                                     {w.name}

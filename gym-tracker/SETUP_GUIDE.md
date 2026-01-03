@@ -67,9 +67,9 @@
 
 ---
 
-## 📋 Paso 2: Configurar Vercel KV
+## 📋 Paso 2: Storage / DB
 
-**Actualización**: esta versión del proyecto **NO usa KV/Redis/DB**. Guardamos el `refresh_token` y el `spreadsheetId` en una **cookie HttpOnly cifrada**, así que no necesitás configurar Storage en Vercel.
+Esta versión del proyecto **NO usa KV/Redis/DB**. Guardamos el `refresh_token` y el `spreadsheetId` en una **cookie HttpOnly cifrada**, así que no necesitás configurar Storage en Vercel.
 
 ---
 
@@ -225,7 +225,16 @@ Una vez completados estos pasos, tu app debería estar funcionando con:
 
 - ✅ Autenticación OAuth con Google
 - ✅ Escritura a Google Sheets sin CORS
-- ✅ Persistencia multi-usuario en Vercel KV
+- ✅ Persistencia multi-usuario vía cookie HttpOnly cifrada (sin DB)
 - ✅ Onboarding user-friendly
+
+### Nombres de pestañas esperados (importante)
+
+La app lee los datos por **título de pestaña** (no por gid). Asegurate de tener:
+
+- `Semana 1`, `Semana 2`, ... (solo aparecen en el selector las que existan)
+- `RM` (PRs)
+- `Ejercicios` (mapeo nombre→imagen)
+- `Fatiga` (tabla de volumen semanal)
 
 Si tenés algún problema, revisá los logs en Vercel o en la consola del navegador.

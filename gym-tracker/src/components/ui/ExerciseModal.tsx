@@ -52,8 +52,17 @@ export const ExerciseModal = ({
 
     React.useEffect(() => {
         if (!isOpen) return;
-        setSets(buildInitialSets());
-        setCompletedSets(new Array(targetSetCount).fill(false));
+        const initialSets = buildInitialSets();
+        setSets(initialSets);
+        // Marcar como "cargados" los sets que ya existen (p.ej. si se cargaron desde Sheets).
+        setCompletedSets(
+            initialSets.map((s) => {
+                const w = s.weight;
+                const r = s.reps;
+                // Consideramos cargado si hay reps > 0 y peso definido (incluye 0 para peso corporal)
+                return r !== null && r !== undefined && r > 0 && w !== null && w !== undefined && w >= 0;
+            })
+        );
         setActiveSetIndex(0);
         setIsEditing(false);
     }, [isOpen, buildInitialSets, targetSetCount]);

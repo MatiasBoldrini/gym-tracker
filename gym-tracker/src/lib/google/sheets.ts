@@ -15,6 +15,100 @@ export interface SaveExerciseParams {
     sets: SetData[];
 }
 
+export async function listSpreadsheetSheetTitles(accessToken: string, spreadsheetId: string): Promise<string[]> {
+    const auth = getAuthenticatedClient(accessToken);
+    const sheets = google.sheets({ version: "v4", auth });
+
+    const response = await sheets.spreadsheets.get({
+        spreadsheetId,
+        fields: "sheets.properties.title",
+    });
+
+    return (
+        response.data.sheets
+            ?.map((s) => s.properties?.title || "")
+            .filter(Boolean) || []
+    );
+}
+
+export async function readSheetValues(
+    accessToken: string,
+    spreadsheetId: string,
+    range: string
+): Promise<any[][]> {
+    const auth = getAuthenticatedClient(accessToken);
+    const sheets = google.sheets({ version: "v4", auth });
+
+    const response = await sheets.spreadsheets.values.get({
+        spreadsheetId,
+        range,
+        // Importante: evita valores formateados tipo "72,1" y devuelve números como números.
+        valueRenderOption: "UNFORMATTED_VALUE",
+    });
+
+    return (response.data.values as any[][]) || [];
+}
+
+export async function readExerciseSets(params: {
+    accessToken: string;
+    spreadsheetId: string;
+    weekId: number;
+    dayId: number;
+    exerciseName: string;
+}): Promise<SetData[]> {
+    const { accessToken, spreadsheetId, weekId, dayId, exerciseName } = params;
+    const auth = getAuthenticatedClient(accessToken);
+    const sheets = google.sheets({ version: "v4", auth });
+
+    const sheetName = `Semana ${weekId}`;
+
+    // Read A:M to have exercise names + up to 4 set pairs (F..M)
+    const readResponse = await sheets.spreadsheets.values.get({
+        spreadsheetId,
+        range: `'${sheetName}'!A:M`,
+        valueRenderOption: "UNFORMATTED_VALUE",
+    });
+
+    const rows = (readResponse.data.values as any[][]) || [];
+
+    let inCorrectDay = false;
+    let targetRow: any[] | null = null;
+
+    for (let i = 0; i < rows.length; i++) {
+        const cellValue = rows[i]?.[0]?.toString().toUpperCase() || "";
+
+        if (cellValue.startsWith("DIA ")) {
+            const currentDayId = parseInt(cellValue.replace("DIA ", ""));
+            inCorrectDay = currentDayId === dayId;
+        } else if (inCorrectDay && rows[i]?.[0]?.toString().toLowerCase() === exerciseName.toLowerCase()) {
+            targetRow = rows[i];
+            break;
+        }
+    }
+
+    if (!targetRow) {
+        throw new Error(`Exercise "${exerciseName}" not found in ${sheetName} Day ${dayId}`);
+    }
+
+    const sets: SetData[] = [];
+    for (let i = 0; i < 4; i++) {
+        const repCol = 5 + i * 2; // F is index 5
+        const weightCol = 6 + i * 2; // G is index 6
+        const repsRaw = targetRow[repCol];
+        const weightRaw = targetRow[weightCol];
+
+        const reps = Number.parseFloat(repsRaw);
+        const weight = Number.parseFloat(weightRaw);
+
+        sets.push({
+            reps: Number.isFinite(reps) ? reps : 0,
+            weight: Number.isFinite(weight) ? weight : 0,
+        });
+    }
+
+    return sets;
+}
+
 /**
  * Finds the row for an exercise and updates/appends set data.
  * 
@@ -93,17 +187,7 @@ export async function testSpreadsheetAccess(
     spreadsheetId: string
 ): Promise<{ ok: boolean; sheetNames?: string[]; error?: string }> {
     try {
-        const auth = getAuthenticatedClient(accessToken);
-        const sheets = google.sheets({ version: "v4", auth });
-
-        const response = await sheets.spreadsheets.get({
-            spreadsheetId,
-            fields: "sheets.properties.title",
-        });
-
-        const sheetNames = response.data.sheets?.map(
-            (s) => s.properties?.title || ""
-        ).filter(Boolean) || [];
+        const sheetNames = await listSpreadsheetSheetTitles(accessToken, spreadsheetId);
 
         return { ok: true, sheetNames };
     } catch (error: any) {

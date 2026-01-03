@@ -1,18 +1,49 @@
 import { HomeScreen } from "@/components/screens/HomeScreen";
-import { fetchSheetCSV, parseExerciseMapping, parsePRData, parseWeekData, SHEET_GIDS } from "@/lib/sheets";
+import { getUserStore, isUserAuthenticated } from "@/lib/user-store";
+import { refreshAccessToken } from "@/lib/google/oauth";
+import { listSpreadsheetSheetTitles, readSheetValues } from "@/lib/google/sheets";
+import { parseExerciseMapping, parsePRData, parseWeekData } from "@/lib/sheets";
+import type { Week } from "@/types";
 
-export const revalidate = 300;
+export const dynamic = "force-dynamic";
 
-async function getHomeData() {
-    const [weekDataRaw, prDataRaw, exerciseMappingRaw] = await Promise.all([
-        fetchSheetCSV(SHEET_GIDS.SEMANA_1, { next: { revalidate } } as any),
-        fetchSheetCSV(SHEET_GIDS.RM, { next: { revalidate } } as any),
-        fetchSheetCSV(SHEET_GIDS.EJERCICIOS, { next: { revalidate } } as any),
+function parseWeekFromTitle(title: string): number | null {
+    const match = title.trim().match(/^Semana\s+(\d+)$/i);
+    if (!match) return null;
+    const id = Number(match[1]);
+    if (!Number.isFinite(id) || id < 1) return null;
+    return Math.trunc(id);
+}
+
+async function getHomeData(): Promise<{ week: Week; prs: any[] }> {
+    const store = await getUserStore();
+
+    // Sin auth/spreadsheet, devolvemos vacío: el cliente mostrará el modal de setup.
+    if (!isUserAuthenticated(store) || !store.spreadsheetId) {
+        return { week: { id: 1, days: [] }, prs: [] };
+    }
+
+    const accessToken = await refreshAccessToken(store.refreshToken!);
+    const spreadsheetId = store.spreadsheetId;
+
+    // Detectar semanas disponibles por títulos reales.
+    const titles = await listSpreadsheetSheetTitles(accessToken, spreadsheetId);
+    const availableWeekIds = titles
+        .map(parseWeekFromTitle)
+        .filter((n): n is number => typeof n === "number")
+        .sort((a, b) => a - b);
+
+    const weekId = availableWeekIds[0] ?? 1;
+
+    const [weekValues, prValues, mappingValues] = await Promise.all([
+        readSheetValues(accessToken, spreadsheetId, `'Semana ${weekId}'!A:N`),
+        readSheetValues(accessToken, spreadsheetId, `'RM'!A:E`).catch(() => []),
+        readSheetValues(accessToken, spreadsheetId, `'Ejercicios'!A:D`).catch(() => []),
     ]);
 
-    const exerciseMapping = parseExerciseMapping(exerciseMappingRaw);
-    const week = parseWeekData(weekDataRaw, 1, exerciseMapping);
-    const prs = parsePRData(prDataRaw);
+    const exerciseMapping = parseExerciseMapping(mappingValues);
+    const week = parseWeekData(weekValues, weekId, exerciseMapping);
+    const prs = parsePRData(prValues);
 
     return { week, prs };
 }

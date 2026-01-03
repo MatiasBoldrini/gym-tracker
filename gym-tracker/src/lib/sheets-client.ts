@@ -8,6 +8,11 @@ export interface SaveResult {
     error?: string;
 }
 
+export interface WeekListItem {
+    id: number;
+    name: string; // "Semana X"
+}
+
 export async function saveExerciseSets(
     weekId: number,
     dayId: number,
@@ -49,16 +54,36 @@ export async function saveExerciseSets(
 
 /**
  * Fetch list of weeks from the user's spreadsheet.
- * This would need a corresponding API endpoint if you want dynamic week discovery.
- * For now, returns a static list based on common conventions.
  */
-export async function fetchWeeksList(): Promise<{ name: string; id: string }[]> {
-    // TODO: Implement dynamic week discovery via API if needed
-    // For now, return a static list
-    return [
-        { name: "Semana 1", id: "1" },
-        { name: "Semana 2", id: "2" },
-        { name: "Semana 3", id: "3" },
-        { name: "Semana 4", id: "4" },
-    ];
+export async function fetchWeeksList(): Promise<WeekListItem[]> {
+    const response = await fetch("/api/sheets/weeks", { method: "GET" });
+    if (!response.ok) return [];
+    const data = await response.json();
+    return Array.isArray(data.weeks) ? (data.weeks as WeekListItem[]) : [];
+}
+
+export async function fetchWeekData(weekId: number) {
+    const response = await fetch(`/api/sheets/week?weekId=${encodeURIComponent(String(weekId))}`, {
+        method: "GET",
+    });
+    if (!response.ok) {
+        const data = await response.json().catch(() => ({}));
+        throw new Error(data?.error || `Error ${response.status}`);
+    }
+    return (await response.json()) as { week: any };
+}
+
+export async function fetchExerciseSets(params: {
+    weekId: number;
+    dayId: number;
+    exerciseName: string;
+}) {
+    const { weekId, dayId, exerciseName } = params;
+    const url = `/api/sheets/exercise?weekId=${encodeURIComponent(String(weekId))}&dayId=${encodeURIComponent(String(dayId))}&exerciseName=${encodeURIComponent(exerciseName)}`;
+    const response = await fetch(url, { method: "GET" });
+    if (!response.ok) {
+        const data = await response.json().catch(() => ({}));
+        throw new Error(data?.error || `Error ${response.status}`);
+    }
+    return (await response.json()) as { sets: { weight: number; reps: number }[] };
 }

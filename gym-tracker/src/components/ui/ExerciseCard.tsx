@@ -20,7 +20,7 @@ export function ExerciseCard({ exercise, pr, isStacked = false, priority = false
     // We access the count from exercise.sets which should have the user data
     // SLICE to targetSetCount to ignore extra/garbage sets (e.g. 4 sets of data for a 3-set exercise)
     const completedSetsCount = exercise.sets?.slice(0, targetSetCount).filter(s =>
-        s.weight !== null && s.weight !== undefined && s.weight > 0 &&
+        s.weight !== null && s.weight !== undefined && s.weight >= 0 &&
         s.reps !== null && s.reps !== undefined && s.reps > 0
     ).length || 0;
 
