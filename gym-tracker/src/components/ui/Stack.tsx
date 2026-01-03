@@ -5,22 +5,35 @@ import { useState, useEffect } from 'react';
 
 interface CardRotateProps {
     children: React.ReactNode;
-    onSendToBack: () => void;
+    onSwipeNext: () => void;
+    onSwipePrev: () => void;
     sensitivity: number;
     disableDrag?: boolean;
 }
 
-function CardRotate({ children, onSendToBack, sensitivity, disableDrag = false }: CardRotateProps) {
+function CardRotate({ children, onSwipeNext, onSwipePrev, sensitivity, disableDrag = false }: CardRotateProps) {
     const x = useMotionValue(0);
     const y = useMotionValue(0);
 
     function handleDragEnd(_event: MouseEvent | TouchEvent | PointerEvent, info: PanInfo) {
-        if (Math.abs(info.offset.x) > sensitivity || Math.abs(info.offset.y) > sensitivity) {
-            onSendToBack();
-        } else {
-            x.set(0);
-            y.set(0);
+        const absX = Math.abs(info.offset.x);
+        const absY = Math.abs(info.offset.y);
+
+        // Preferimos dirección horizontal para navegación atrás/adelante.
+        if (absX > absY && absX > sensitivity) {
+            if (info.offset.x < 0) onSwipeNext(); // swipe izquierda => siguiente
+            else onSwipePrev(); // swipe derecha => anterior
+            return;
         }
+
+        // Swipe vertical: mantenemos el comportamiento previo (avanzar).
+        if (absY > sensitivity) {
+            onSwipeNext();
+            return;
+        }
+
+        x.set(0);
+        y.set(0);
     }
 
     if (disableDrag) {
@@ -89,7 +102,9 @@ export default function Stack({
 
     const [stack, setStack] = useState<{ id: number; content: React.ReactNode }[]>(() => {
         if (cards.length) {
-            return cards.map((content, index) => ({ id: index + 1, content }));
+            // Invertimos para que la 1ra card (en el orden recibido) quede arriba.
+            // (En este componente, la "top card" es la última del array.)
+            return cards.map((content, index) => ({ id: index + 1, content })).reverse();
         } else {
             return [];
         }
@@ -105,10 +120,11 @@ export default function Stack({
 
     useEffect(() => {
         if (cards.length) {
-            setStack(cards.map((content, index) => ({ id: index + 1, content })));
+            setStack(cards.map((content, index) => ({ id: index + 1, content })).reverse());
         }
     }, [cards]);
 
+    // "Next": mueve la card actual (top) al fondo y deja arriba la siguiente.
     const sendToBack = (id: number) => {
         setStack(prev => {
             const newStack = [...prev];
@@ -116,6 +132,17 @@ export default function Stack({
             const [card] = newStack.splice(index, 1);
             newStack.unshift(card);
             return newStack;
+        });
+    };
+
+    // "Prev": rota el stack en sentido contrario para traer la anterior arriba.
+    const bringPrevToTop = () => {
+        setStack((prev) => {
+            if (prev.length <= 1) return prev;
+            const next = [...prev];
+            const [bottom] = next.splice(0, 1);
+            next.push(bottom);
+            return next;
         });
     };
 
@@ -151,7 +178,8 @@ export default function Stack({
                 return (
                     <CardRotate
                         key={card.id}
-                        onSendToBack={() => sendToBack(card.id)}
+                        onSwipeNext={() => sendToBack(card.id)}
+                        onSwipePrev={bringPrevToTop}
                         sensitivity={sensitivity}
                         disableDrag={shouldDisableDrag}
                     >
