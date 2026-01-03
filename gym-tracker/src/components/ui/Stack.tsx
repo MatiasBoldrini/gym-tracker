@@ -13,8 +13,7 @@ interface CardRotateProps {
 function CardRotate({ children, onSendToBack, sensitivity, disableDrag = false }: CardRotateProps) {
     const x = useMotionValue(0);
     const y = useMotionValue(0);
-    const rotateX = useTransform(y, [-100, 100], [60, -60]);
-    const rotateY = useTransform(x, [-100, 100], [-60, 60]);
+    const rotateY = useMotionValue(0); // Keep it straight or remove usage
 
     function handleDragEnd(_event: MouseEvent | TouchEvent | PointerEvent, info: PanInfo) {
         if (Math.abs(info.offset.x) > sensitivity || Math.abs(info.offset.y) > sensitivity) {
@@ -36,7 +35,7 @@ function CardRotate({ children, onSendToBack, sensitivity, disableDrag = false }
     return (
         <motion.div
             className="absolute inset-0 cursor-grab"
-            style={{ x, y, rotateX, rotateY }}
+            style={{ x, y }}
             drag
             dragConstraints={{ top: 0, right: 0, bottom: 0, left: 0 }}
             dragElastic={0.6}
@@ -134,7 +133,13 @@ export default function Stack({
             onMouseLeave={() => pauseOnHover && setIsPaused(false)}
         >
             {stack.map((card, index) => {
-                const randomRotate = randomRotation ? Math.random() * 10 - 5 : 0;
+                // Determine if this card is one of the top 3
+                const isStacked = index >= stack.length - 3;
+                if (!isStacked) return null;
+
+                const isTop = index === stack.length - 1;
+                const randomRotate = randomRotation && !isTop ? Math.random() * 6 - 3 : 0;
+
                 return (
                     <CardRotate
                         key={card.id}
@@ -143,12 +148,13 @@ export default function Stack({
                         disableDrag={shouldDisableDrag}
                     >
                         <motion.div
-                            className="rounded-2xl overflow-hidden w-full h-full"
+                            className="rounded-2xl overflow-hidden w-full h-full will-change-transform"
                             onClick={() => shouldEnableClick && sendToBack(card.id)}
                             animate={{
-                                rotateZ: (stack.length - index - 1) * 4 + randomRotate,
-                                scale: 1 + index * 0.06 - stack.length * 0.06,
-                                transformOrigin: '90% 90%'
+                                rotateZ: isTop ? 0 : (stack.length - index - 1) * 3 + randomRotate,
+                                scale: 1 + index * 0.05 - stack.length * 0.05,
+                                y: isTop ? 0 : (stack.length - index - 1) * -4,
+                                transformOrigin: '50% 100%'
                             }}
                             initial={false}
                             transition={{

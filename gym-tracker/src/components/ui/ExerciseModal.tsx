@@ -92,7 +92,7 @@ export const ExerciseModal = ({
                         animate={{ y: 0 }}
                         exit={{ y: "100%" }}
                         transition={{ type: "spring", damping: 25, stiffness: 200 }}
-                        className="fixed bottom-0 left-0 right-0 bg-white rounded-t-[32px] z-50 px-6 pt-2 pb-20 shadow-2xl max-h-[90vh] overflow-y-auto"
+                        className="fixed bottom-0 left-0 right-0 bg-white rounded-t-[32px] z-50 px-6 pt-2 pb-20 shadow-2xl"
                     >
                         {/* Handle */}
                         <div className="flex justify-center mb-6">
@@ -102,11 +102,11 @@ export const ExerciseModal = ({
                         <div className="flex justify-between items-start mb-6">
                             <div className="flex gap-4 items-center">
                                 {exercise.image && (
-                                    <div className="w-16 h-16 bg-gray-50 rounded-2xl overflow-hidden border border-black/5 shrink-0">
+                                    <div className="w-16 h-16 bg-ios-blue/10 rounded-2xl overflow-hidden border border-ios-blue/10 shrink-0">
                                         <img
                                             src={`/images/exercises/${exercise.image}`}
                                             alt={exercise.name}
-                                            className="w-full h-full object-contain"
+                                            className="w-full h-full object-cover"
                                         />
                                     </div>
                                 )}
