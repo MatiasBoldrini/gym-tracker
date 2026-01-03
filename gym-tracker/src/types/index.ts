@@ -8,6 +8,7 @@ export interface Exercise {
     prescribedSeries: string; // e.g., "3 x 8-12"
     notes?: string;
     muscleGroup?: string;
+    image?: string;
     sets: Set[]; // Actual sets performed
 }
 
