@@ -117,7 +117,17 @@ export const ExerciseModal = ({
                         initial={{ y: "100%" }}
                         animate={{ y: 0 }}
                         exit={{ y: "100%" }}
-                        transition={{ type: "spring", damping: 25, stiffness: 200 }}
+                        transition={{ type: "spring", damping: 25, stiffness: 300, mass: 0.8 }}
+                        drag="y"
+                        dragConstraints={{ top: 0 }}
+                        dragElastic={0.1}
+                        dragMomentum={false}
+                        onDragEnd={(e, { offset, velocity }) => {
+                            if (offset.y > 100 || velocity.y > 500) {
+                                onSave(sets);
+                                onClose();
+                            }
+                        }}
                         className="fixed bottom-0 left-0 right-0 bg-white rounded-t-[32px] z-50 px-6 pt-6 pb-32 shadow-2xl"
                     >
                         {/* Handle */}
@@ -205,7 +215,7 @@ export const ExerciseModal = ({
                                         reps: reps,
                                     }}
                                 />
-                                <div className="absolute inset-x-0 top-1/2 -translate-y-1/2 h-10 border-y border-black/5 pointer-events-none" />
+
                             </div>
                         </div>
 

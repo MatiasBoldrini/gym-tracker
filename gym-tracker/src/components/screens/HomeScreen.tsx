@@ -6,6 +6,7 @@ import { Week, PersonalRecord, Exercise, Set } from "@/types";
 import { ExerciseCard } from "@/components/ui/ExerciseCard";
 import Stack from "@/components/ui/Stack";
 import { ExerciseModal } from "@/components/ui/ExerciseModal";
+import { DaySelector } from "@/components/ui/DaySelector";
 
 type HomeScreenProps = {
     initialWeek: Week;
@@ -126,29 +127,12 @@ export function HomeScreen({ initialWeek, initialPrs }: HomeScreenProps) {
             </header>
 
             {/* Day Selector */}
-            <div className="flex flex-col gap-2 px-6 pb-4 shrink-0">
-                <span className="text-[10px] font-black text-ios-gray uppercase tracking-[0.2em] ml-1">
-                    Día
-                </span>
-                <div className="flex items-center justify-center gap-3 overflow-x-auto no-scrollbar py-4">
-                    {week?.days.map((day, idx) => (
-                        <button
-                            key={day.id}
-                            onClick={() => setCurrentDayIndex(idx)}
-                            className={`flex flex-col items-center justify-center transition-all duration-300 relative group
-                                ${idx === currentDayIndex ? "scale-100" : "scale-95 opacity-60 hover:opacity-100"}
-                            `}
-                        >
-                            <div className={`w-12 h-12 rounded-2xl flex items-center justify-center text-lg font-black transition-all duration-300
-                                ${idx === currentDayIndex
-                                    ? "bg-ios-blue text-white shadow-lg shadow-ios-blue/30 scale-110"
-                                    : "bg-white text-gray-400 border border-black/5"}
-                            `}>
-                                {day.id}
-                            </div>
-                        </button>
-                    ))}
-                </div>
+            <div className="px-6 pb-2 shrink-0 z-20">
+                <DaySelector
+                    days={week?.days || []}
+                    selectedIndex={currentDayIndex}
+                    onSelect={setCurrentDayIndex}
+                />
             </div>
 
             {/* Active Day Content - fills remaining space */}
