@@ -1,7 +1,7 @@
 "use client";
 
 import { motion, useMotionValue, type PanInfo } from "framer-motion";
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 
 interface CardRotateProps {
     children: React.ReactNode;
@@ -13,7 +13,6 @@ interface CardRotateProps {
 function CardRotate({ children, onSendToBack, sensitivity, disableDrag = false }: CardRotateProps) {
     const x = useMotionValue(0);
     const y = useMotionValue(0);
-    const rotateY = useMotionValue(0); // Keep it straight or remove usage
 
     function handleDragEnd(_event: MouseEvent | TouchEvent | PointerEvent, info: PanInfo) {
         if (Math.abs(info.offset.x) > sensitivity || Math.abs(info.offset.y) > sensitivity) {
@@ -96,6 +95,14 @@ export default function Stack({
         }
     });
 
+    // Stable random rotations computed once per card set (client-side only)
+    const [rotations, setRotations] = useState<number[]>([]);
+    useEffect(() => {
+        if (randomRotation && cards.length > 0) {
+            setRotations(cards.map(() => Math.random() * 6 - 3));
+        }
+    }, [cards.length, randomRotation]);
+
     useEffect(() => {
         if (cards.length) {
             setStack(cards.map((content, index) => ({ id: index + 1, content })));
@@ -138,7 +145,8 @@ export default function Stack({
                 if (!isStacked) return null;
 
                 const isTop = index === stack.length - 1;
-                const randomRotate = randomRotation && !isTop ? Math.random() * 6 - 3 : 0;
+                // Use stable rotation from state, fallback to 0 on SSR/initial
+                const randomRotate = randomRotation && !isTop ? (rotations[card.id - 1] ?? 0) : 0;
 
                 return (
                     <CardRotate

@@ -156,7 +156,7 @@ export function HomeScreen({ initialWeek, initialPrs }: HomeScreenProps) {
                 {currentDay ? (
                     <div className="w-full max-w-sm h-full flex flex-col">
                         {/* Card Stack Container */}
-                        <div className="flex-1 w-full relative flex items-center justify-center max-h-[500px] px-4">
+                        <div className="w-full h-[420px] relative flex items-center justify-center px-4">
                             <Stack
                                 cards={exerciseCards}
                                 sensitivity={150}
