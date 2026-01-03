@@ -12,9 +12,35 @@ interface IOSPickerProps {
 }
 
 export const IOSPicker = ({ value, onChange, selections }: IOSPickerProps) => {
+    const containerRef = React.useRef<HTMLDivElement>(null);
+
+    React.useEffect(() => {
+        const container = containerRef.current;
+        if (!container) return;
+
+        const stopPropagation = (e: Event) => {
+            e.stopPropagation();
+        };
+
+        // Framer Motion uses native listeners for drag, so we need to stop propagation
+        // at the native level before React even sees the events.
+        // We capture all potential "start" events for dragging.
+        container.addEventListener('touchstart', stopPropagation, { passive: false });
+        container.addEventListener('pointerdown', stopPropagation);
+        container.addEventListener('mousedown', stopPropagation);
+
+        return () => {
+            container.removeEventListener('touchstart', stopPropagation);
+            container.removeEventListener('pointerdown', stopPropagation);
+            container.removeEventListener('mousedown', stopPropagation);
+        };
+    }, []);
+
     return (
         <div
+            ref={containerRef}
             className="ios-picker-container w-full h-[200px] overflow-hidden relative"
+            // Keep React handlers just in case, though native ones handle the heavy lifting
             onPointerDown={(e) => e.stopPropagation()}
             onTouchStart={(e) => e.stopPropagation()}
         >

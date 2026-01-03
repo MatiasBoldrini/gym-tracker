@@ -21,6 +21,34 @@ function doPost(e) {
 }
 
 /**
+ * Punto de entrada para peticiones GET.
+ * Retorna la lista de hojas válidas (Semana X) y sus IDs.
+ */
+function doGet(e) {
+    try {
+        const ss = SpreadsheetApp.getActiveSpreadsheet();
+        const sheets = ss.getSheets();
+        const weeks = [];
+
+        sheets.forEach(sheet => {
+            const name = sheet.getName();
+            if (name.toLowerCase().startsWith("semana ")) {
+                weeks.push({
+                    name: name,
+                    id: sheet.getSheetId().toString()
+                });
+            }
+        });
+
+        return ContentService.createTextOutput(JSON.stringify(weeks))
+            .setMimeType(ContentService.MimeType.JSON);
+    } catch (error) {
+        return ContentService.createTextOutput(JSON.stringify({ error: error.message }))
+            .setMimeType(ContentService.MimeType.JSON);
+    }
+}
+
+/**
  * Procesa el registro de series en la hoja.
  * @param {Object} data { weekId, dayId, exerciseName, sets: [{reps, weight}] }
  * @returns {string} Resultado de la operación

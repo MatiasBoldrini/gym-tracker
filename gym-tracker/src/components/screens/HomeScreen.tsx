@@ -1,7 +1,7 @@
 "use client";
 
-import { useMemo, useState } from "react";
-import { saveExerciseSets } from "@/lib/sheets-client";
+import { useMemo, useState, useEffect } from "react";
+import { saveExerciseSets, fetchWeeksList } from "@/lib/sheets-client";
 import { Week, PersonalRecord, Exercise, Set } from "@/types";
 import { ExerciseCard } from "@/components/ui/ExerciseCard";
 import Stack from "@/components/ui/Stack";
@@ -21,7 +21,24 @@ export function HomeScreen({ initialWeek, initialPrs }: HomeScreenProps) {
     const [isModalOpen, setIsModalOpen] = useState(false);
 
     const [showWeekPicker, setShowWeekPicker] = useState(false);
-    const weeks = ["Semana 1", "Semana 2", "Semana 3", "Semana 4"]; // Placeholder weeks
+    const [weeks, setWeeks] = useState<{ name: string; id: string }[]>([{ name: "Semana 1", id: "0" }]);
+    const [selectedWeekName, setSelectedWeekName] = useState(initialWeek?.id ? `Semana ${initialWeek.id}` : "Semana 1");
+
+    useEffect(() => {
+        const loadWeeks = async () => {
+            const fetchedWeeks = await fetchWeeksList();
+            if (fetchedWeeks.length > 0) {
+                // Sort by name (Semana 1, Semana 2, etc.)
+                const sorted = fetchedWeeks.sort((a, b) => {
+                    const numA = parseInt(a.name.replace(/\D/g, '')) || 0;
+                    const numB = parseInt(b.name.replace(/\D/g, '')) || 0;
+                    return numA - numB;
+                });
+                setWeeks(sorted);
+            }
+        };
+        loadWeeks();
+    }, []);
 
     const prByExercise = useMemo(() => {
         const map = new Map<string, PersonalRecord>();
@@ -83,15 +100,15 @@ export function HomeScreen({ initialWeek, initialPrs }: HomeScreenProps) {
 
     return (
         <div className="min-h-[calc(100dvh-(var(--bottom-nav-base)+env(safe-area-inset-bottom)))] w-full flex flex-col bg-[#F2F2F7] overflow-x-hidden">
-            {/* Header with Week Picker */}
-            <header className="flex justify-between items-center px-6 pt-[calc(env(safe-area-inset-top)+2.5rem)] pb-2 shrink-0 z-10 relative">
+            {/* Header with Week Picker - Increased z-index to sit above DaySelector */}
+            <header className="flex justify-between items-center px-6 pt-[calc(env(safe-area-inset-top)+2.5rem)] pb-2 shrink-0 z-30 relative">
                 <div className="relative">
                     <button
                         onClick={() => setShowWeekPicker(!showWeekPicker)}
                         className="flex items-center gap-2 active:opacity-60 transition-opacity"
                     >
                         <h1 className="text-3xl font-black tracking-tight text-black">
-                            {weeks[0]}
+                            {selectedWeekName}
                         </h1>
                         <div className={`text-ios-blue transition-transform ${showWeekPicker ? "rotate-180" : ""}`}>
                             <svg width="12" height="12" viewBox="0 0 12 12" fill="none" xmlns="http://www.w3.org/2000/svg">
@@ -105,14 +122,16 @@ export function HomeScreen({ initialWeek, initialPrs }: HomeScreenProps) {
                         <div className="absolute top-full left-0 mt-2 w-48 bg-white/90 backdrop-blur-xl rounded-2xl shadow-xl border border-black/5 overflow-hidden origin-top-left animate-in fade-in zoom-in-95 duration-200">
                             {weeks.map((w, idx) => (
                                 <button
-                                    key={idx}
+                                    key={w.id}
                                     className="w-full text-left px-4 py-3 font-bold text-sm hover:bg-black/5 active:bg-black/10 transition-colors border-b border-black/5 last:border-0"
                                     onClick={() => {
-                                        // TODO: Implement actual week switching
+                                        setSelectedWeekName(w.name);
                                         setShowWeekPicker(false);
+                                        // Trigger re-fetch or navigation here in full implementation
+                                        console.log("Selected week:", w.name, w.id);
                                     }}
                                 >
-                                    {w}
+                                    {w.name}
                                 </button>
                             ))}
                         </div>

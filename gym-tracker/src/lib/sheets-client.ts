@@ -32,4 +32,20 @@ export async function saveExerciseSets(
     }
 }
 
+export async function fetchWeeksList(): Promise<{ name: string; id: string }[]> {
+    if (!APPS_SCRIPT_URL) return [];
+
+    try {
+        const response = await fetch(APPS_SCRIPT_URL, {
+            method: "GET",
+        });
+        const data = await response.json();
+        return Array.isArray(data) ? data : [];
+    } catch (error) {
+        console.error("Error fetching weeks list:", error);
+        return [];
+    }
+}
+
+
 

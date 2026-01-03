@@ -180,7 +180,7 @@ export const ExerciseModal = ({
                                     key={idx}
                                     onClick={() => handleTabClick(idx)}
                                     className={`
-                                        flex-1 min-w-[60px] h-12 rounded-2xl font-black text-xs transition-all relative flex items-center justify-center gap-1.5
+                                        flex-none min-w-[60px] h-12 rounded-2xl font-black text-xs transition-all relative flex items-center justify-center gap-1.5 px-4
                                         ${activeSetIndex === idx
                                             ? "bg-black text-white shadow-lg shadow-black/20 scale-105 z-10"
                                             : completedSets[idx]
@@ -189,7 +189,11 @@ export const ExerciseModal = ({
                                     `}
                                 >
                                     {completedSets[idx] && activeSetIndex !== idx && <Check size={12} strokeWidth={4} />}
-                                    {idx + 1}
+                                    {completedSets[idx] ? (
+                                        <span className="whitespace-nowrap">{sets[idx].weight}kg x {sets[idx].reps}</span>
+                                    ) : (
+                                        idx + 1
+                                    )}
                                 </button>
                             ))}
                         </div>
@@ -201,7 +205,8 @@ export const ExerciseModal = ({
                             </div>
                             <div className={`relative h-[180px] bg-gray-50 rounded-[24px] overflow-hidden border border-black/5 transition-all ${completedSets[activeSetIndex] && !isEditing ? "opacity-30 grayscale pointer-events-none scale-95" : "opacity-100 scale-100"}`}>
                                 <IOSPicker
-                                    key={activeSetIndex} // Reset picker on set change
+                                    // Removed key={activeSetIndex} to prevent remounting and lag
+
                                     value={{
                                         weight: sets[activeSetIndex]?.weight || 0,
                                         reps: sets[activeSetIndex]?.reps || 0

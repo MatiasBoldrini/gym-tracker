@@ -6,6 +6,11 @@ const SPREADSHEET_ID = process.env.NEXT_PUBLIC_SPREADSHEET_ID || "1XMFq-Twxtoa_F
 export async function fetchSheetCSV(gid: string, fetchOptions?: RequestInit): Promise<any[]> {
     const url = `https://docs.google.com/spreadsheets/d/${SPREADSHEET_ID}/export?format=csv&gid=${gid}`;
     const response = await fetch(url, fetchOptions);
+
+    if (!response.ok) {
+        throw new Error(`Failed to fetch sheet (GID: ${gid}): ${response.status} ${response.statusText}`);
+    }
+
     const csvText = await response.text();
 
     return new Promise((resolve, reject) => {
