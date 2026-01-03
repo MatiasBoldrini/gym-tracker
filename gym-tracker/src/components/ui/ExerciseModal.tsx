@@ -119,11 +119,12 @@ export const ExerciseModal = ({
                         exit={{ y: "100%" }}
                         transition={{ type: "spring", damping: 25, stiffness: 300, mass: 0.8 }}
                         drag="y"
-                        dragConstraints={{ top: 0 }}
-                        dragElastic={0.1}
+                        dragConstraints={{ top: 0, bottom: 0 }}
+                        dragElastic={0.7}
                         dragMomentum={false}
                         onDragEnd={(e, { offset, velocity }) => {
-                            if (offset.y > 100 || velocity.y > 500) {
+                            const swipeThreshold = typeof window !== 'undefined' ? window.innerHeight * 0.3 : 100;
+                            if (offset.y > swipeThreshold || velocity.y > 500) {
                                 onSave(sets);
                                 onClose();
                             }
@@ -173,7 +174,7 @@ export const ExerciseModal = ({
                         </div>
 
                         {/* Set Selector Tabs */}
-                        <div className="flex gap-2 mb-8 overflow-x-auto no-scrollbar p-4">
+                        <div className="flex gap-2 mb-8 overflow-x-auto no-scrollbar p-4 touch-pan-x">
                             {sets.map((_, idx) => (
                                 <button
                                     key={idx}
