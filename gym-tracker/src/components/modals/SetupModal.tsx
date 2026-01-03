@@ -245,7 +245,7 @@ export function SetupModal({
                                         rel="noreferrer"
                                         className="inline-flex items-center justify-center gap-2 text-xs text-ios-blue font-semibold mb-4 break-all"
                                     >
-                                        {`https://docs.google.com/spreadsheets/d/${currentSpreadsheetId}/edit`}
+                                        Hacé click acá para abrir tu Google Sheet
                                         <ExternalLink size={12} />
                                     </a>
                                 )}
