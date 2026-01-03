@@ -14,8 +14,8 @@ export default function RootLayout({
 }) {
     return (
         <html lang="es">
-            <body className="bg-ios-background text-black min-h-screen pb-24">
-                <main className="max-w-md mx-auto min-h-screen">
+            <body className="bg-ios-background text-black min-h-[100dvh] overflow-x-hidden pb-[calc(var(--bottom-nav-base)+env(safe-area-inset-bottom))]">
+                <main className="max-w-md mx-auto">
                     {children}
                 </main>
                 <BottomNav />

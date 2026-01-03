@@ -1,15 +1,16 @@
 "use client";
 
 import { Exercise, PersonalRecord } from "@/types";
-import { Trophy } from "lucide-react";
+import Image from "next/image";
 
 interface ExerciseCardProps {
     exercise: Exercise;
     pr?: PersonalRecord;
     isStacked?: boolean;
+    priority?: boolean;
 }
 
-export function ExerciseCard({ exercise, pr, isStacked = false }: ExerciseCardProps) {
+export function ExerciseCard({ exercise, pr, isStacked = false, priority = false }: ExerciseCardProps) {
     return (
         <div className={`
             bg-white rounded-[32px] p-6 h-full flex flex-col 
@@ -36,11 +37,20 @@ export function ExerciseCard({ exercise, pr, isStacked = false }: ExerciseCardPr
             <div className="flex-1 flex items-center justify-center bg-ios-blue/5 rounded-[24px] mb-6 overflow-hidden border border-ios-blue/10 relative group">
                 {/* Exercise Illustration */}
                 <div className="absolute inset-0 bg-white">
-                    <img
-                        src={exercise.image ? `/images/exercises/${exercise.image}` : `https://api.placeholder.com/400/400?text=${exercise.name}`}
-                        alt={exercise.name}
-                        className="w-full h-full object-contain transition-transform duration-500 group-hover:scale-105"
-                    />
+                    {exercise.image ? (
+                        <Image
+                            src={`/images/exercises/${exercise.image}`}
+                            alt={exercise.name}
+                            fill
+                            sizes="(max-width: 480px) 90vw, 400px"
+                            priority={priority}
+                            className="object-contain transition-transform duration-500 group-hover:scale-105"
+                        />
+                    ) : (
+                        <div className="w-full h-full flex items-center justify-center text-ios-gray font-black text-sm px-6 text-center">
+                            {exercise.name}
+                        </div>
+                    )}
                 </div>
 
                 {/* Detail Overlay */}

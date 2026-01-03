@@ -1,56 +1,37 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { fetchSheetCSV, parseWeekData, parsePRData, parseExerciseMapping, SHEET_GIDS, saveExerciseSets } from "@/lib/sheets";
+import { useMemo, useState } from "react";
+import { saveExerciseSets } from "@/lib/sheets-client";
 import { Week, PersonalRecord, Exercise, Set } from "@/types";
 import { ExerciseCard } from "@/components/ui/ExerciseCard";
 import Stack from "@/components/ui/Stack";
 import { ExerciseModal } from "@/components/ui/ExerciseModal";
-import { Calendar } from "lucide-react";
 
-export function HomeScreen() {
-    const [week, setWeek] = useState<Week | null>(null);
-    const [prs, setPrs] = useState<PersonalRecord[]>([]);
+type HomeScreenProps = {
+    initialWeek: Week;
+    initialPrs: PersonalRecord[];
+};
+
+export function HomeScreen({ initialWeek, initialPrs }: HomeScreenProps) {
+    const [week, setWeek] = useState<Week>(initialWeek);
+    const [prs] = useState<PersonalRecord[]>(initialPrs);
     const [currentDayIndex, setCurrentDayIndex] = useState(0);
-    const [loading, setLoading] = useState(true);
     const [selectedExercise, setSelectedExercise] = useState<Exercise | null>(null);
     const [isModalOpen, setIsModalOpen] = useState(false);
-
-    useEffect(() => {
-        async function init() {
-            try {
-                const weekDataRaw = await fetchSheetCSV(SHEET_GIDS.SEMANA_1);
-                const prDataRaw = await fetchSheetCSV(SHEET_GIDS.RM);
-                const exerciseMappingRaw = await fetchSheetCSV(SHEET_GIDS.EJERCICIOS);
-
-                const exerciseMapping = parseExerciseMapping(exerciseMappingRaw);
-                setWeek(parseWeekData(weekDataRaw, 1, exerciseMapping));
-                setPrs(parsePRData(prDataRaw));
-            } catch (error) {
-                console.error("Failed to fetch data", error);
-            } finally {
-                setLoading(false);
-            }
-        }
-        init();
-    }, []);
 
     const [showWeekPicker, setShowWeekPicker] = useState(false);
     const weeks = ["Semana 1", "Semana 2", "Semana 3", "Semana 4"]; // Placeholder weeks
 
-    if (loading) {
-        return (
-            <div className="flex flex-col items-center justify-center h-[100dvh] w-full p-8 text-ios-gray">
-                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-ios-blue mb-4"></div>
-                <p className="font-medium">Cargando rutina...</p>
-            </div>
-        );
-    }
+    const prByExercise = useMemo(() => {
+        const map = new Map<string, PersonalRecord>();
+        for (const pr of prs) map.set(pr.exercise.toLowerCase(), pr);
+        return map;
+    }, [prs]);
 
-    const currentDay = week?.days[currentDayIndex];
+    const currentDay = week.days[currentDayIndex];
 
     const exerciseCards = currentDay?.exercises.map((exercise, idx) => {
-        const pr = prs.find(p => p.exercise.toLowerCase() === exercise.name.toLowerCase());
+        const pr = prByExercise.get(exercise.name.toLowerCase());
         return (
             <div
                 key={idx}
@@ -60,7 +41,12 @@ export function HomeScreen() {
                     setIsModalOpen(true);
                 }}
             >
-                <ExerciseCard exercise={exercise} pr={pr} isStacked />
+                <ExerciseCard
+                    exercise={exercise}
+                    pr={pr}
+                    isStacked
+                    priority={idx === (currentDay.exercises.length - 1)}
+                />
             </div>
         );
     }) || [];
@@ -95,9 +81,9 @@ export function HomeScreen() {
     };
 
     return (
-        <div className="fixed inset-0 w-full flex flex-col overflow-hidden bg-[#F2F2F7] overscroll-none">
+        <div className="min-h-[calc(100dvh-(var(--bottom-nav-base)+env(safe-area-inset-bottom)))] w-full flex flex-col bg-[#F2F2F7] overflow-x-hidden">
             {/* Header with Week Picker */}
-            <header className="flex justify-between items-center px-6 pt-12 pb-2 shrink-0 z-10 relative">
+            <header className="flex justify-between items-center px-6 pt-[calc(env(safe-area-inset-top)+2.5rem)] pb-2 shrink-0 z-10 relative">
                 <div className="relative">
                     <button
                         onClick={() => setShowWeekPicker(!showWeekPicker)}
@@ -170,7 +156,7 @@ export function HomeScreen() {
                 {currentDay ? (
                     <div className="w-full max-w-sm h-full flex flex-col">
                         {/* Card Stack Container */}
-                        <div className="flex-1 w-full relative flex items-center justify-center max-h-[500px]">
+                        <div className="flex-1 w-full relative flex items-center justify-center max-h-[500px] px-4">
                             <Stack
                                 cards={exerciseCards}
                                 sensitivity={150}
@@ -190,7 +176,7 @@ export function HomeScreen() {
             {selectedExercise && (
                 <ExerciseModal
                     exercise={selectedExercise}
-                    pr={prs.find(p => p.exercise.toLowerCase() === selectedExercise?.name.toLowerCase())}
+                    pr={prByExercise.get(selectedExercise.name.toLowerCase())}
                     isOpen={isModalOpen}
                     onClose={() => setIsModalOpen(false)}
                     onSave={handleSaveSeries}

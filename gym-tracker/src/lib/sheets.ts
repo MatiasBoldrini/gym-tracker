@@ -3,9 +3,9 @@ import { PersonalRecord, Week, Day, Exercise, Set } from "@/types";
 
 const SPREADSHEET_ID = process.env.NEXT_PUBLIC_SPREADSHEET_ID || "1XMFq-Twxtoa_Fs2_6kOWjB65mMqEgzFJ8ujzyZN7iCo";
 
-export async function fetchSheetCSV(gid: string): Promise<any[]> {
+export async function fetchSheetCSV(gid: string, fetchOptions?: RequestInit): Promise<any[]> {
     const url = `https://docs.google.com/spreadsheets/d/${SPREADSHEET_ID}/export?format=csv&gid=${gid}`;
-    const response = await fetch(url);
+    const response = await fetch(url, fetchOptions);
     const csvText = await response.text();
 
     return new Promise((resolve, reject) => {
@@ -111,31 +111,3 @@ export const SHEET_GIDS = {
     FATIGA: "761571141",
     EJERCICIOS: "1847511840",
 };
-const APPS_SCRIPT_URL = process.env.NEXT_PUBLIC_APPS_SCRIPT_URL || "";
-
-export async function saveExerciseSets(weekId: number, dayId: number, exerciseName: string, sets: { weight: number; reps: number }[]) {
-    if (!APPS_SCRIPT_URL) {
-        console.warn("Apps Script URL not configured. Data not saved to Sheet.");
-        return;
-    }
-
-    try {
-        const response = await fetch(APPS_SCRIPT_URL, {
-            method: "POST",
-            mode: "no-cors", // Apps Script redirects can cause CORS issues, no-cors handles the submission
-            headers: {
-                "Content-Type": "application/json",
-            },
-            body: JSON.stringify({
-                weekId,
-                dayId,
-                exerciseName,
-                sets,
-            }),
-        });
-        return response;
-    } catch (error) {
-        console.error("Error saving to Sheets:", error);
-        throw error;
-    }
-}

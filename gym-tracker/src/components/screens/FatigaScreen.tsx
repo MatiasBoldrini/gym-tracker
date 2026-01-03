@@ -1,69 +1,28 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { fetchSheetCSV, SHEET_GIDS } from "@/lib/sheets";
 import { Info, Activity } from "lucide-react";
 
-const MUSCLE_MAPPING: Record<string, string[]> = {
-    "pecho": ["chest"],
-    "abdominales": ["abdominals"],
-    "biceps": ["biceps"],
-    "triceps": ["triceps"],
-    "antebrazos": ["forearms"],
-    "cuadriceps": ["quads"],
-    "isquiotibiales": ["hamstrings"],
-    "gluteos": ["glutes"],
-    "gemelos": ["calves"],
-    "espalda": ["lats", "lowerback", "traps", "traps-middle"],
-    "deltoides anterior": ["front-shoulders"],
-    "deltoides lateral": ["front-shoulders"],
-    "deltoides posterior": ["rear-shoulders"]
+type FatigaScreenProps = {
+    initialRows: any[][];
+    intensityByGroupId: Record<string, number>;
 };
 
-export function FatigaScreen() {
-    const [fatigaData, setFatigaData] = useState<any[]>([]);
-    const [loading, setLoading] = useState(true);
+export function FatigaScreen({ initialRows, intensityByGroupId }: FatigaScreenProps) {
+    const [fatigaData] = useState<any[][]>(initialRows);
+    const [loadingMaps, setLoadingMaps] = useState(true);
     const [bodyMapFront, setBodyMapFront] = useState<string | null>(null);
     const [bodyMapBack, setBodyMapBack] = useState<string | null>(null);
 
     useEffect(() => {
         async function init() {
             try {
-                const data = await fetchSheetCSV(SHEET_GIDS.FATIGA);
-                const rows = data.slice(1).filter(row => row[0]);
-                setFatigaData(rows);
-
-                // Calculate intensities for Body Map
-                const intensities: Record<string, number> = {};
-                let maxSeries = 0;
-
-                rows.forEach(row => {
-                    const muscle = row[0].toLowerCase();
-                    const series = parseInt(row[1]) || 0;
-                    if (series > maxSeries) maxSeries = series;
-
-                    const targetGroups = MUSCLE_MAPPING[muscle];
-                    if (targetGroups) {
-                        targetGroups.forEach(group => {
-                            intensities[group] = Math.max(intensities[group] || 0, series);
-                        });
-                    }
-                });
-
-                // Normalize intensities relative to max
-                const normalized: Record<string, number> = {};
-                if (maxSeries > 0) {
-                    Object.keys(intensities).forEach(key => {
-                        normalized[key] = intensities[key] / maxSeries;
-                    });
-                }
-
                 // Fetch Body Map images via local proxy to avoid CORS
                 const fetchMap = async (view: "front" | "back") => {
                     const response = await fetch("/api/bodymap", {
                         method: "POST",
                         headers: { "Content-Type": "application/json" },
-                        body: JSON.stringify({ view, intensityByGroupId: normalized })
+                        body: JSON.stringify({ view, intensityByGroupId })
                     });
                     const blob = await response.blob();
                     return URL.createObjectURL(blob);
@@ -80,13 +39,13 @@ export function FatigaScreen() {
             } catch (error) {
                 console.error("Failed to fetch fatiga data", error);
             } finally {
-                setLoading(false);
+                setLoadingMaps(false);
             }
         }
         init();
-    }, []);
+    }, [intensityByGroupId]);
 
-    if (loading) {
+    if (loadingMaps) {
         return (
             <div className="flex flex-col items-center justify-center min-h-screen p-8 text-ios-gray">
                 <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-ios-blue mb-4"></div>
@@ -96,7 +55,7 @@ export function FatigaScreen() {
     }
 
     return (
-        <div className="px-5 pt-8 pb-32">
+        <div className="px-5 pt-8 pb-10">
             <header className="mb-8">
                 <h1 className="text-3xl font-extrabold tracking-tight">Fatiga</h1>
                 <p className="text-ios-gray mt-1 text-sm font-medium uppercase tracking-wider">Volumen Semanal</p>

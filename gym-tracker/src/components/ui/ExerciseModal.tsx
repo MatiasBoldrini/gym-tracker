@@ -5,6 +5,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { X, Check, Plus } from "lucide-react";
 import { Exercise, PersonalRecord, Set } from "@/types";
 import { IOSPicker } from "./IOSPicker";
+import Image from "next/image";
 
 interface ExerciseModalProps {
     exercise: Exercise;
@@ -126,9 +127,12 @@ export const ExerciseModal = ({
                             <div className="flex gap-4 items-center">
                                 {exercise.image && (
                                     <div className="w-16 h-16 bg-white rounded-2xl overflow-hidden border border-black/5 shadow-sm shrink-0 p-1">
-                                        <img
+                                        <Image
                                             src={`/images/exercises/${exercise.image}`}
                                             alt={exercise.name}
+                                            width={64}
+                                            height={64}
+                                            sizes="64px"
                                             className="w-full h-full object-contain mix-blend-multiply"
                                         />
                                     </div>
@@ -159,7 +163,7 @@ export const ExerciseModal = ({
                         </div>
 
                         {/* Set Selector Tabs */}
-                        <div className="flex gap-2 mb-8 overflow-x-auto no-scrollbar pb-1">
+                        <div className="flex gap-2 mb-8 overflow-x-auto no-scrollbar p-4">
                             {sets.map((_, idx) => (
                                 <button
                                     key={idx}
