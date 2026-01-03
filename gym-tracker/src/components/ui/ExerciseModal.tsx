@@ -29,8 +29,8 @@ export const ExerciseModal = ({
 
     // Initialize exactly targetSetCount sets
     const [sets, setSets] = useState<Set[]>(() => {
-        // Create initial array of correct size
-        const initialSets = new Array(targetSetCount).fill({ weight: 60, reps: 10 });
+        // Create initial array of correct size with 0 values
+        const initialSets = new Array(targetSetCount).fill({ weight: 0, reps: 0 });
 
         // Fill with existing data if available
         if (exercise.sets && exercise.sets.length > 0) {

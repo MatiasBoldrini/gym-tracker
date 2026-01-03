@@ -3,6 +3,8 @@
 import { Exercise, PersonalRecord } from "@/types";
 import Image from "next/image";
 
+import { Check } from "lucide-react";
+
 interface ExerciseCardProps {
     exercise: Exercise;
     pr?: PersonalRecord;
@@ -11,6 +13,19 @@ interface ExerciseCardProps {
 }
 
 export function ExerciseCard({ exercise, pr, isStacked = false, priority = false }: ExerciseCardProps) {
+    // Parse target sets from prescribed series string (e.g. "3 x 10")
+    const targetSetCount = Math.max(1, parseInt(exercise.prescribedSeries?.toString().split(/[\sxX]+/)[0]) || 3);
+
+    // Count completed sets (sets with valid weight AND reps)
+    // We access the count from exercise.sets which should have the user data
+    // SLICE to targetSetCount to ignore extra/garbage sets (e.g. 4 sets of data for a 3-set exercise)
+    const completedSetsCount = exercise.sets?.slice(0, targetSetCount).filter(s =>
+        s.weight !== null && s.weight !== undefined && s.weight > 0 &&
+        s.reps !== null && s.reps !== undefined && s.reps > 0
+    ).length || 0;
+
+    const isComplete = completedSetsCount >= targetSetCount;
+
     return (
         <div className={`
             bg-white rounded-[32px] p-6 h-full flex flex-col 
@@ -56,6 +71,50 @@ export function ExerciseCard({ exercise, pr, isStacked = false, priority = false
                 {/* Detail Overlay */}
                 <div className="absolute inset-0 bg-gradient-to-t from-black/5 to-transparent pointer-events-none" />
             </div>
+
+            {/* Progress Footer */}
+            {(completedSetsCount > 0 || isComplete) && (
+                <div className="flex items-center gap-3 pt-2">
+                    {/* Progress Bar & Text */}
+                    <div className="flex-1 flex flex-col gap-1.5">
+                        <div className="flex justify-between items-center px-1">
+                            <span className="text-[10px] uppercase font-black tracking-wider text-gray-400">
+                                Progreso
+                            </span>
+                            <span className={`text-xs font-black ${isComplete ? "text-ios-green" : "text-black"}`}>
+                                {completedSetsCount}/{targetSetCount}
+                            </span>
+                        </div>
+
+                        {/* Segmented Progress Bar */}
+                        <div className="flex gap-1 h-1.5 w-full">
+                            {Array.from({ length: targetSetCount }).map((_, idx) => (
+                                <div
+                                    key={idx}
+                                    className={`
+                                        h-full rounded-full flex-1 transition-all duration-500
+                                        ${idx < completedSetsCount
+                                            ? "bg-ios-green" // Completed
+                                            : "bg-gray-100"} // Pending
+                                    `}
+                                />
+                            ))}
+                        </div>
+                    </div>
+
+                    {/* Status Icon */}
+                    <div className={`
+                        w-8 h-8 rounded-full flex items-center justify-center shrink-0 transition-colors
+                        ${isComplete ? "bg-ios-green text-white" : "bg-gray-100 text-gray-400"}
+                    `}>
+                        {isComplete ? (
+                            <Check size={16} strokeWidth={3} />
+                        ) : (
+                            <span className="text-xs font-black">{completedSetsCount}</span>
+                        )}
+                    </div>
+                </div>
+            )}
         </div>
     );
 }
