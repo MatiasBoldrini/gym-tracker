@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState } from "react";
-import { motion, AnimatePresence } from "framer-motion";
+import { motion, AnimatePresence, useDragControls } from "framer-motion";
 import { X, Check, Plus } from "lucide-react";
 import { Exercise, PersonalRecord, Set } from "@/types";
 import { IOSPicker } from "./IOSPicker";
@@ -22,6 +22,7 @@ export const ExerciseModal = ({
     onClose,
     onSave,
 }: ExerciseModalProps) => {
+    const dragControls = useDragControls();
     // Parse target sets from prescribed series string (e.g. "3 x 10")
     // Default to 3 if parsing fails or returns 0
     const targetSetCount = Math.max(1, parseInt(exercise.prescribedSeries?.toString().split(/[\sxX]+/)[0]) || 3);
@@ -119,9 +120,18 @@ export const ExerciseModal = ({
                         exit={{ y: "100%" }}
                         transition={{ type: "spring", damping: 25, stiffness: 300, mass: 0.8 }}
                         drag="y"
+                        dragControls={dragControls}
+                        dragListener={false}
                         dragConstraints={{ top: 0, bottom: 0 }}
                         dragElastic={0.7}
                         dragMomentum={false}
+                        onPointerDown={(e) => {
+                            const target = e.target as HTMLElement;
+                            // Only start drag if we are NOT clicking inside the ios picker
+                            if (!target.closest('.ios-picker-container')) {
+                                dragControls.start(e);
+                            }
+                        }}
                         onDragEnd={(e, { offset, velocity }) => {
                             const swipeThreshold = typeof window !== 'undefined' ? window.innerHeight * 0.3 : 100;
                             if (offset.y > swipeThreshold || velocity.y > 500) {
