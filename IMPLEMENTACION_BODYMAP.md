@@ -268,3 +268,4 @@ npx vercel --yes
 **Estado:** ✅ Completado y deployado
 
 
+

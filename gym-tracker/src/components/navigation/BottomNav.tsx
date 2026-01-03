@@ -27,7 +27,7 @@ export function BottomNav() {
                         className={`flex flex-col items-center gap-1 transition-colors ${isActive ? "text-ios-blue" : "text-ios-gray"
                             }`}
                     >
-                        <Icon size={24} variant={isActive ? "fill" : "outline"} />
+                        <Icon size={24} />
                         <span className="text-[10px] font-medium">{item.name}</span>
                     </Link>
                 );

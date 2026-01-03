@@ -56,11 +56,11 @@ export const ExerciseModal = ({
         }
     };
 
-    const updateCurrentSet = (val: { weight: number | string; reps: number | string }) => {
+    const updateCurrentSet = (val: { [key: string]: string | number }) => {
         const newSets = [...sets];
         newSets[activeSetIndex] = {
-            weight: Number(val.weight),
-            reps: Number(val.reps)
+            weight: Number(val.weight ?? 0),
+            reps: Number(val.reps ?? 0)
         };
         setSets(newSets);
     };
@@ -165,7 +165,11 @@ export const ExerciseModal = ({
                                         weight: sets[activeSetIndex]?.weight || 0,
                                         reps: sets[activeSetIndex]?.reps || 0
                                     }}
-                                    onChange={(val) => updateCurrentSet(val)}
+                                    onChange={(val) => {
+                                        if ('weight' in val && 'reps' in val) {
+                                            updateCurrentSet(val);
+                                        }
+                                    }}
                                     selections={{
                                         weight: weights,
                                         reps: reps,

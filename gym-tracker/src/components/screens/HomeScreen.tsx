@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { fetchSheetCSV, parseWeekData, parsePRData, SHEET_GIDS, saveExerciseSets } from "@/lib/sheets";
-import { Week, PersonalRecord, Exercise } from "@/types";
+import { Week, PersonalRecord, Exercise, Set } from "@/types";
 import { ExerciseCard } from "@/components/ui/ExerciseCard";
 import Stack from "@/components/ui/Stack";
 import { ExerciseModal } from "@/components/ui/ExerciseModal";
@@ -67,23 +67,27 @@ export function HomeScreen() {
         }
     };
 
-    const handleSaveSeries = async (sets: { weight: number; reps: number }[]) => {
+    const handleSaveSeries = async (sets: Set[]) => {
         if (!selectedExercise || !week || !currentDay) return;
 
         console.log("Saving series for", selectedExercise.name, sets);
 
         try {
-            await saveExerciseSets(week.id, currentDay.id, selectedExercise.name, sets);
+            // Filter out sets with null values and convert to the format expected by saveExerciseSets
+            const validSets = sets
+                .filter(s => s.weight !== null && s.reps !== null)
+                .map(s => ({ weight: s.weight!, reps: s.reps! }));
+            
+            if (validSets.length > 0) {
+                await saveExerciseSets(week.id, currentDay.id, selectedExercise.name, validSets);
+            }
 
             // Optionally update local state to show progress immediately
             const updatedWeek = { ...week };
             const dayIdx = updatedWeek.days.findIndex(d => d.id === currentDay.id);
             const exIdx = updatedWeek.days[dayIdx].exercises.findIndex(e => e.name === selectedExercise.name);
 
-            updatedWeek.days[dayIdx].exercises[exIdx].sets = sets.map(s => ({
-                weight: s.weight,
-                reps: s.reps
-            }));
+            updatedWeek.days[dayIdx].exercises[exIdx].sets = sets;
 
             setWeek(updatedWeek);
         } catch (error) {
