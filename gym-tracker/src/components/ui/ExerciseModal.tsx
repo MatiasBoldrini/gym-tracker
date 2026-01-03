@@ -41,6 +41,8 @@ export const ExerciseModal = ({
     }, [exercise.sets, targetSetCount]);
 
     const [sets, setSets] = useState<Set[]>(buildInitialSets);
+    // Valores "visuales" del picker. Puede arrancar desde PR aunque el set aún no esté guardado.
+    const [draft, setDraft] = useState<Array<{ weight: number; reps: number }>>([]);
 
     const [activeSetIndex, setActiveSetIndex] = useState(0);
     const [completedSets, setCompletedSets] = useState<boolean[]>(new Array(targetSetCount).fill(false));
@@ -54,6 +56,19 @@ export const ExerciseModal = ({
         if (!isOpen) return;
         const initialSets = buildInitialSets();
         setSets(initialSets);
+        setDraft(
+            Array.from({ length: targetSetCount }, (_, idx) => {
+                const s = initialSets[idx];
+                const hasSaved = s && s.weight !== null && s.reps !== null;
+                if (hasSaved) {
+                    return { weight: s.weight as number, reps: s.reps as number };
+                }
+                if (pr) {
+                    return { weight: pr.weight ?? 0, reps: pr.reps ?? 0 };
+                }
+                return { weight: 0, reps: 0 };
+            })
+        );
         // Marcar como "cargados" los sets que ya existen (p.ej. si se cargaron desde Sheets).
         setCompletedSets(
             initialSets.map((s) => {
@@ -65,35 +80,45 @@ export const ExerciseModal = ({
         );
         setActiveSetIndex(0);
         setIsEditing(false);
-    }, [isOpen, buildInitialSets, targetSetCount]);
+    }, [isOpen, buildInitialSets, targetSetCount, pr]);
 
 
     const handleRegistration = () => {
-        const newCompleted = [...completedSets];
-        newCompleted[activeSetIndex] = true;
-        setCompletedSets(newCompleted);
+        const currentDraft = draft[activeSetIndex] || { weight: 0, reps: 0 };
+        const nextWeight = Number(currentDraft.weight ?? 0);
+        const nextReps = Number(currentDraft.reps ?? 0);
 
-        // Always save to sync state
-        onSave(sets);
-
-        if (isEditing) {
-            setIsEditing(false);
-        } else if (activeSetIndex < sets.length - 1) {
-            // Auto-advance
-            setTimeout(() => setActiveSetIndex(activeSetIndex + 1), 300);
-        }
-    };
-
-    const updateCurrentSet = (val: { [key: string]: string | number }) => {
         const newSets = [...sets];
-        const nextWeight = Number(val.weight ?? 0);
-        const nextReps = Number(val.reps ?? 0);
         newSets[activeSetIndex] = {
             // Interpretar "0x0" como vacío para no guardar sets no cargados.
             weight: (nextWeight === 0 && nextReps === 0) ? null : nextWeight,
             reps: (nextWeight === 0 && nextReps === 0) ? null : nextReps,
         };
         setSets(newSets);
+
+        const newCompleted = [...completedSets];
+        // Consideramos cargado si hay reps > 0 y peso definido (incluye 0 para peso corporal)
+        const isFilled = nextReps > 0 && nextWeight >= 0 && !(nextWeight === 0 && nextReps === 0);
+        newCompleted[activeSetIndex] = isFilled;
+        setCompletedSets(newCompleted);
+
+        // Always save to sync state
+        onSave(newSets);
+
+        if (isEditing) {
+            setIsEditing(false);
+        } else if (newCompleted[activeSetIndex] && activeSetIndex < sets.length - 1) {
+            // Auto-advance
+            setTimeout(() => setActiveSetIndex(activeSetIndex + 1), 300);
+        }
+    };
+
+    const updateCurrentSet = (val: { [key: string]: string | number }) => {
+        const nextWeight = Number(val.weight ?? 0);
+        const nextReps = Number(val.reps ?? 0);
+        const newDraft = [...draft];
+        newDraft[activeSetIndex] = { weight: nextWeight, reps: nextReps };
+        setDraft(newDraft);
     };
 
     const handleTabClick = (idx: number) => {
@@ -171,7 +196,7 @@ export const ExerciseModal = ({
                                         </span>
                                         {pr && (
                                             <span className="px-2 py-0.5 rounded-md bg-ios-blue/10 text-ios-blue font-bold text-[10px] uppercase tracking-wide whitespace-nowrap">
-                                                PR: {pr.weight}kg
+                                                PR: {pr.weight}kg x {pr.reps} reps
                                             </span>
                                         )}
                                     </div>
@@ -223,8 +248,8 @@ export const ExerciseModal = ({
                                     // Removed key={activeSetIndex} to prevent remounting and lag
 
                                     value={{
-                                        weight: sets[activeSetIndex]?.weight || 0,
-                                        reps: sets[activeSetIndex]?.reps || 0
+                                        weight: draft[activeSetIndex]?.weight ?? 0,
+                                        reps: draft[activeSetIndex]?.reps ?? 0
                                     }}
                                     onChange={(val) => {
                                         if ('weight' in val && 'reps' in val) {

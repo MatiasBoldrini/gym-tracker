@@ -2,7 +2,8 @@
 
 import { useMemo, useState } from "react";
 import type { PersonalRecord } from "@/types";
-import { Search, LineChart } from "lucide-react";
+import { Search, LineChart, X } from "lucide-react";
+import { AnimatePresence, motion } from "framer-motion";
 
 type ProgresoScreenProps = {
     initialPrs: PersonalRecord[];
@@ -10,15 +11,14 @@ type ProgresoScreenProps = {
 
 export function ProgresoScreen({ initialPrs }: ProgresoScreenProps) {
     const [query, setQuery] = useState("");
-    const [sort, setSort] = useState<"1rm" | "date">("1rm");
+    const [selected, setSelected] = useState<PersonalRecord | null>(null);
 
     const filtered = useMemo(() => {
         const q = query.trim().toLowerCase();
         const base = (initialPrs || []).filter((pr) => !q || pr.exercise.toLowerCase().includes(q));
 
+        // Orden por fecha (si no parsea, cae a string compare).
         const sorted = base.slice().sort((a, b) => {
-            if (sort === "1rm") return (b.estimated1RM || 0) - (a.estimated1RM || 0);
-            // Orden por fecha (mejor esfuerzo): si no parsea, cae a string compare.
             const da = Date.parse(a.date);
             const db = Date.parse(b.date);
             if (Number.isFinite(da) && Number.isFinite(db)) return db - da;
@@ -26,7 +26,7 @@ export function ProgresoScreen({ initialPrs }: ProgresoScreenProps) {
         });
 
         return sorted;
-    }, [initialPrs, query, sort]);
+    }, [initialPrs, query]);
 
     return (
         <div className="px-5 pt-8 pb-10 relative">
@@ -37,7 +37,8 @@ export function ProgresoScreen({ initialPrs }: ProgresoScreenProps) {
 
             <div className="ios-card p-4 mb-6 bg-white">
                 <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 rounded-full bg-black/5 flex items-center justify-center text-black/60">
+                    {/* En iOS/Safari a veces se deforma si no forzamos un cuadrado real */}
+                    <div className="w-10 h-10 aspect-square min-w-10 min-h-10 flex-none rounded-full bg-black/5 flex items-center justify-center text-black/60">
                         <Search size={18} />
                     </div>
                     <input
@@ -46,14 +47,6 @@ export function ProgresoScreen({ initialPrs }: ProgresoScreenProps) {
                         placeholder="Buscar ejercicio..."
                         className="flex-1 bg-transparent outline-none font-bold placeholder:text-ios-gray/70"
                     />
-                    <select
-                        value={sort}
-                        onChange={(e) => setSort(e.target.value as any)}
-                        className="text-xs font-black uppercase tracking-wider bg-black text-white rounded-full px-3 py-2"
-                    >
-                        <option value="1rm">1RM</option>
-                        <option value="date">Fecha</option>
-                    </select>
                 </div>
             </div>
 
@@ -70,7 +63,12 @@ export function ProgresoScreen({ initialPrs }: ProgresoScreenProps) {
                 ) : (
                     <div className="divide-y divide-black/5 bg-white">
                         {filtered.map((pr, idx) => (
-                            <div key={`${pr.exercise}-${idx}`} className="p-4 flex items-center justify-between gap-4">
+                            <button
+                                key={`${pr.exercise}-${idx}`}
+                                type="button"
+                                onClick={() => setSelected(pr)}
+                                className="w-full text-left p-4 flex items-center justify-between gap-4 active:bg-black/5 transition-colors"
+                            >
                                 <div className="min-w-0">
                                     <div className="font-black text-xs uppercase tracking-wider text-black truncate">
                                         {pr.exercise}
@@ -87,16 +85,75 @@ export function ProgresoScreen({ initialPrs }: ProgresoScreenProps) {
                                             {pr.weight}kg <span className="text-[11px] text-ios-gray">x {pr.reps}</span>
                                         </div>
                                     </div>
-                                    <div className="text-right">
-                                        <div className="text-[10px] font-black text-ios-gray uppercase">1RM</div>
-                                        <div className="text-sm font-black text-black">{Math.round(pr.estimated1RM || 0)}kg</div>
-                                    </div>
                                 </div>
-                            </div>
+                            </button>
                         ))}
                     </div>
                 )}
             </div>
+
+            {/* Mini modal: equivalente en RM (1RM estimado) */}
+            <AnimatePresence>
+                {selected && (
+                    <>
+                        <motion.div
+                            className="fixed inset-0 z-40 bg-black/20"
+                            initial={{ opacity: 0 }}
+                            animate={{ opacity: 1 }}
+                            exit={{ opacity: 0 }}
+                            onClick={() => setSelected(null)}
+                        />
+
+                        <motion.div
+                            className="fixed inset-0 z-50 flex items-center justify-center px-6"
+                            initial={{ opacity: 0, y: 10, scale: 0.98 }}
+                            animate={{ opacity: 1, y: 0, scale: 1 }}
+                            exit={{ opacity: 0, y: 10, scale: 0.98 }}
+                            onClick={() => setSelected(null)}
+                        >
+                            <div
+                                className="w-full max-w-xs bg-white rounded-3xl shadow-2xl border border-black/10 overflow-hidden"
+                                onClick={(e) => e.stopPropagation()}
+                            >
+                                <div className="px-5 py-4 flex items-start justify-between gap-4 bg-white">
+                                    <div className="min-w-0">
+                                        <div className="text-xs font-black uppercase tracking-wider text-ios-gray">Equivalente en RM</div>
+                                        <div className="text-base font-black uppercase tracking-tight text-black truncate">{selected.exercise}</div>
+                                        <div className="text-[10px] font-black text-ios-gray uppercase tracking-wider">{selected.date || "—"}</div>
+                                    </div>
+                                    <button
+                                        type="button"
+                                        onClick={() => setSelected(null)}
+                                        className="w-9 h-9 aspect-square rounded-full bg-black/5 flex items-center justify-center text-black/60 active:scale-95 transition-transform"
+                                    >
+                                        <X size={18} />
+                                    </button>
+                                </div>
+
+                                <div className="px-5 pb-5">
+                                    <div className="rounded-2xl bg-black/5 p-4">
+                                        <div className="flex items-center justify-between">
+                                            <div className="text-[10px] font-black text-ios-gray uppercase tracking-wider">PR</div>
+                                            <div className="text-sm font-black text-black">
+                                                {selected.weight}kg <span className="text-[11px] text-ios-gray">x {selected.reps}</span>
+                                            </div>
+                                        </div>
+                                        <div className="mt-3 flex items-center justify-between">
+                                            <div className="text-[10px] font-black text-ios-gray uppercase tracking-wider">1RM estimado</div>
+                                            <div className="text-lg font-black text-black">
+                                                {Math.round(selected.estimated1RM || 0)}kg
+                                            </div>
+                                        </div>
+                                        <div className="mt-1 text-[10px] font-bold text-ios-gray">
+                                            (No se muestra en la lista; tocá una fila para verlo)
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </motion.div>
+                    </>
+                )}
+            </AnimatePresence>
         </div>
     );
 }
