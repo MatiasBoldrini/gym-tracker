@@ -13,7 +13,11 @@ interface IOSPickerProps {
 
 export const IOSPicker = ({ value, onChange, selections }: IOSPickerProps) => {
     return (
-        <div className="ios-picker-container w-full h-[200px] overflow-hidden relative">
+        <div
+            className="ios-picker-container w-full h-[200px] overflow-hidden relative"
+            onPointerDown={(e) => e.stopPropagation()}
+            onTouchStart={(e) => e.stopPropagation()}
+        >
             <div
                 className="absolute inset-0 pointer-events-none z-10"
                 style={{
