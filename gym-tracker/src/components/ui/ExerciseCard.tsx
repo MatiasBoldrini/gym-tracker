@@ -39,7 +39,7 @@ export function ExerciseCard({ exercise, pr, isStacked = false }: ExerciseCardPr
                     <img
                         src={exercise.image ? `/images/exercises/${exercise.image}` : `https://api.placeholder.com/400/400?text=${exercise.name}`}
                         alt={exercise.name}
-                        className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-105"
+                        className="w-full h-full object-contain transition-transform duration-500 group-hover:scale-105"
                     />
                 </div>
 

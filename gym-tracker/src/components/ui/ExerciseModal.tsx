@@ -99,20 +99,27 @@ export const ExerciseModal = ({
                             <div className="w-12 h-1.5 bg-gray-200 rounded-full" />
                         </div>
 
-                        <div className="flex justify-between items-start mb-6">
-                            <div className="flex gap-4 items-center">
+                        <div className="flex justify-between items-start mb-4">
+                            <div className="flex gap-3 items-center">
                                 {exercise.image && (
-                                    <div className="w-16 h-16 bg-ios-blue/10 rounded-2xl overflow-hidden border border-ios-blue/10 shrink-0">
+                                    <div className="w-12 h-12 bg-ios-blue/10 rounded-xl overflow-hidden border border-ios-blue/10 shrink-0">
                                         <img
                                             src={`/images/exercises/${exercise.image}`}
                                             alt={exercise.name}
-                                            className="w-full h-full object-cover"
+                                            className="w-full h-full object-contain"
                                         />
                                     </div>
                                 )}
-                                <div>
-                                    <h2 className="text-2xl font-black tracking-tight text-black leading-tight uppercase">{exercise.name}</h2>
-                                    <p className="text-ios-gray font-bold text-sm uppercase tracking-wide">{exercise.prescribedSeries}</p>
+                                <div className="flex-1 min-w-0">
+                                    <div className="flex items-baseline gap-2 flex-wrap">
+                                        <h2 className="text-xl font-black tracking-tight text-black uppercase truncate">{exercise.name}</h2>
+                                        {pr && (
+                                            <span className="text-[10px] font-black text-ios-blue uppercase tracking-widest whitespace-nowrap">
+                                                PR: {pr.weight}kg x {pr.reps}
+                                            </span>
+                                        )}
+                                    </div>
+                                    <p className="text-ios-gray font-bold text-[10px] uppercase tracking-wide">{exercise.prescribedSeries}</p>
                                 </div>
                             </div>
                             <button
@@ -120,29 +127,20 @@ export const ExerciseModal = ({
                                     onSave(sets);
                                     onClose();
                                 }}
-                                className="w-10 h-10 bg-gray-100 rounded-full flex items-center justify-center text-gray-500 active:scale-90 transition-transform"
+                                className="w-8 h-8 bg-gray-100 rounded-full flex items-center justify-center text-gray-500 active:scale-90 transition-transform shrink-0"
                             >
-                                <X size={20} />
+                                <X size={16} />
                             </button>
                         </div>
 
-                        {pr && (
-                            <div className="bg-ios-blue/5 rounded-2xl p-4 mb-6 border border-ios-blue/10">
-                                <div className="flex justify-between items-center">
-                                    <span className="text-[10px] font-black text-ios-blue uppercase tracking-widest leading-none">Record Personal</span>
-                                    <span className="text-xl font-black text-ios-blue leading-none">{pr.weight}kg x {pr.reps}</span>
-                                </div>
-                            </div>
-                        )}
-
                         {/* Set Selector Tabs */}
-                        <div className="flex gap-2 mb-8 overflow-x-auto no-scrollbar pb-2">
+                        <div className="flex gap-2 mb-6 overflow-x-auto no-scrollbar pb-1">
                             {sets.map((_, idx) => (
                                 <button
                                     key={idx}
                                     onClick={() => handleTabClick(idx)}
                                     className={`
-                                        flex-1 min-w-[85px] py-3 rounded-2xl font-black text-[10px] uppercase tracking-wider transition-all relative flex items-center justify-center gap-1.5
+                                        flex-1 min-w-[75px] py-2.5 rounded-xl font-black text-[9px] uppercase tracking-wider transition-all relative flex items-center justify-center gap-1
                                         ${activeSetIndex === idx
                                             ? "bg-black text-white shadow-lg shadow-black/20"
                                             : completedSets[idx]
@@ -150,26 +148,26 @@ export const ExerciseModal = ({
                                                 : "bg-gray-100 text-gray-400"}
                                     `}
                                 >
-                                    {completedSets[idx] && <Check size={12} strokeWidth={3} className={activeSetIndex === idx ? "text-white" : "text-ios-green"} />}
+                                    {completedSets[idx] && <Check size={10} strokeWidth={3} className={activeSetIndex === idx ? "text-white" : "text-ios-green"} />}
                                     Serie {idx + 1}
                                 </button>
                             ))}
                             {sets.length < 4 && (
                                 <button
                                     onClick={addSet}
-                                    className="w-12 h-10 flex items-center justify-center bg-ios-blue/10 text-ios-blue rounded-2xl active:scale-95 transition-transform shrink-0"
+                                    className="w-10 h-8 flex items-center justify-center bg-ios-blue/10 text-ios-blue rounded-xl active:scale-95 transition-transform shrink-0"
                                 >
-                                    <Plus size={20} />
+                                    <Plus size={18} />
                                 </button>
                             )}
                         </div>
 
-                        <div className="mb-10">
-                            <div className="flex justify-around mb-2 px-4">
-                                <span className="text-[10px] font-black text-gray-300 uppercase tracking-[0.2em]">Peso (kg)</span>
-                                <span className="text-[10px] font-black text-gray-300 uppercase tracking-[0.2em]">Reps</span>
+                        <div className="mb-6">
+                            <div className="flex justify-around mb-1 px-4">
+                                <span className="text-[9px] font-black text-gray-300 uppercase tracking-[0.2em]">Peso (kg)</span>
+                                <span className="text-[9px] font-black text-gray-300 uppercase tracking-[0.2em]">Reps</span>
                             </div>
-                            <div className={`relative h-[200px] bg-gray-50 rounded-[24px] overflow-hidden border border-black/5 transition-all ${completedSets[activeSetIndex] && !isEditing ? "opacity-30 grayscale pointer-events-none scale-95" : "opacity-100 scale-100"}`}>
+                            <div className={`relative h-[180px] bg-gray-50 rounded-[24px] overflow-hidden border border-black/5 transition-all ${completedSets[activeSetIndex] && !isEditing ? "opacity-30 grayscale pointer-events-none scale-95" : "opacity-100 scale-100"}`}>
                                 <IOSPicker
                                     key={activeSetIndex} // Reset picker on set change
                                     value={{
@@ -186,28 +184,28 @@ export const ExerciseModal = ({
                                         reps: reps,
                                     }}
                                 />
-                                <div className="absolute inset-x-0 top-1/2 -translate-y-1/2 h-12 border-y border-black/5 pointer-events-none" />
+                                <div className="absolute inset-x-0 top-1/2 -translate-y-1/2 h-10 border-y border-black/5 pointer-events-none" />
                             </div>
                         </div>
 
-                        <div className="flex flex-col gap-3">
+                        <div className="flex flex-col gap-2">
                             {completedSets[activeSetIndex] && !isEditing ? (
                                 <button
                                     onClick={() => setIsEditing(true)}
-                                    className="w-full py-5 rounded-[24px] font-black text-sm uppercase tracking-[0.2em] bg-gray-100 text-black active:scale-[0.98] transition-all flex items-center justify-center gap-3 border border-black/5"
+                                    className="w-full py-4 rounded-[20px] font-black text-xs uppercase tracking-[0.15em] bg-gray-100 text-black active:scale-[0.98] transition-all flex items-center justify-center gap-2 border border-black/5"
                                 >
                                     Editar Serie {activeSetIndex + 1}
                                 </button>
                             ) : (
                                 <button
                                     onClick={handleRegistration}
-                                    className={`w-full py-6 rounded-[24px] font-black text-sm uppercase tracking-[0.2em] shadow-xl active:scale-[0.98] transition-all flex items-center justify-center gap-3
+                                    className={`w-full py-5 rounded-[20px] font-black text-xs uppercase tracking-[0.15em] shadow-xl active:scale-[0.98] transition-all flex items-center justify-center gap-2
                                         ${isEditing ? "bg-black text-white shadow-black/20" : "bg-ios-blue text-white shadow-ios-blue/20"}
                                     `}
                                 >
                                     {isEditing ? (
                                         <>
-                                            <Check size={18} strokeWidth={3} />
+                                            <Check size={16} strokeWidth={3} />
                                             Guardar Cambios
                                         </>
                                     ) : (
@@ -216,10 +214,6 @@ export const ExerciseModal = ({
                                 </button>
                             )}
                         </div>
-
-                        <p className="text-center text-ios-gray/40 text-[9px] font-black uppercase tracking-[0.2em] mt-8">
-                            Desliza hacia abajo para cerrar y finalizar
-                        </p>
                     </motion.div>
                 </>
             )}

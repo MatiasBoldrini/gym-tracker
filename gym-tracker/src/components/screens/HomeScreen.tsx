@@ -120,12 +120,9 @@ export function HomeScreen() {
                     <button
                         key={day.id}
                         onClick={() => setCurrentDayIndex(idx)}
-                        className={`flex flex-col items-center min-w-[70px] transition-all ${idx === currentDayIndex ? "scale-105" : "opacity-40"
+                        className={`flex flex-col items-center min-w-[60px] transition-all ${idx === currentDayIndex ? "scale-105" : "opacity-40"
                             }`}
                     >
-                        <span className={`text-[10px] font-bold uppercase mb-1 ${idx === currentDayIndex ? "text-ios-blue" : "text-gray-500"}`}>
-                            Día {day.id}
-                        </span>
                         <div className={`w-12 h-12 rounded-2xl flex items-center justify-center font-bold text-lg ${idx === currentDayIndex ? "bg-ios-blue text-white shadow-lg shadow-ios-blue/30" : "bg-white text-gray-400"
                             }`}>
                             {day.id}
@@ -135,19 +132,16 @@ export function HomeScreen() {
             </div>
 
             {/* Active Day Content */}
-            <div className="flex-1 flex flex-col items-center justify-center -mt-6">
+            <div className="flex-1 flex flex-col items-center justify-center -mt-8">
                 {currentDay ? (
                     <div className="w-full max-w-sm">
-                        <div className="flex justify-between items-center mb-6 px-4">
-                            <h2 className="text-xl font-bold">
+                        <div className="flex justify-center items-center mb-4 px-4">
+                            <h2 className="text-xl font-bold uppercase tracking-tight">
                                 {currentDay.name}
                             </h2>
-                            <div className="text-[10px] bg-black text-white px-2 py-1 rounded-full font-bold uppercase tracking-wider">
-                                {currentDay.exercises.length} Ejercicios
-                            </div>
                         </div>
 
-                        <div className="h-[420px] w-full">
+                        <div className="h-[400px] w-full">
                             <Stack
                                 cards={exerciseCards}
                                 sensitivity={150}
