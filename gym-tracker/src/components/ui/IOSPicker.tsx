@@ -87,14 +87,9 @@ export const IOSPicker = ({ value, onChange, selections }: IOSPickerProps) => {
                             }}
                             className="h-[200px] overflow-y-scroll no-scrollbar"
                             style={{
+                                // Solo lo esencial para inercia máxima en iOS
                                 WebkitOverflowScrolling: "touch",
-                                // Usar "proximity" permite inercia natural - solo hace snap cuando está cerca
-                                scrollSnapType: "y proximity",
-                                scrollPaddingTop: pad,
-                                scrollPaddingBottom: pad,
-                                touchAction: "pan-y",
-                                // Scroll suave para mejor inercia
-                                scrollBehavior: "smooth",
+                                overscrollBehavior: "contain",
                             }}
                             onTouchStart={() => {
                                 isScrolling.current[key] = true;
@@ -114,21 +109,17 @@ export const IOSPicker = ({ value, onChange, selections }: IOSPickerProps) => {
                                 const prev = scrollEndTimers.current[key];
                                 if (prev) window.clearTimeout(prev);
 
-                                // Delay más corto para detectar fin de scroll con inercia
+                                // Delay más largo para dejar que la inercia corra libremente
                                 scrollEndTimers.current[key] = window.setTimeout(() => {
                                     const idx = normalizeIndex(computeIndexFromScrollTop(el.scrollTop), options.length);
                                     const nextVal = options[idx];
-                                    // Solo hacer snap suave si es necesario
-                                    const currentScrollIdx = computeIndexFromScrollTop(el.scrollTop);
-                                    const diff = Math.abs(currentScrollIdx - idx);
-                                    if (diff > 0.1) {
-                                        scrollToIndex(key, idx, "smooth");
-                                    }
+                                    // Snap rápido al terminar
+                                    scrollToIndex(key, idx, "smooth");
                                     if (nextVal !== undefined) {
                                         onChange({ ...value, [key]: nextVal });
                                     }
                                     isScrolling.current[key] = false;
-                                }, 50);
+                                }, 70);
                             }}
                         >
                             {/* Padding superior para centrar el item seleccionado */}
@@ -138,8 +129,7 @@ export const IOSPicker = ({ value, onChange, selections }: IOSPickerProps) => {
                                 return (
                                     <div
                                         key={String(option)}
-                                        className={`flex items-center justify-center h-[40px] transition-all duration-100 select-none ${selected ? 'text-black font-black text-2xl scale-110' : 'text-gray-300 font-medium text-lg'}`}
-                                        style={{ scrollSnapAlign: "center" }}
+                                        className={`flex items-center justify-center h-[40px] transition-all duration-75 select-none ${selected ? 'text-black font-black text-2xl scale-110' : 'text-gray-300 font-medium text-lg'}`}
                                     >
                                         {option}
                                     </div>

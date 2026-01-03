@@ -1,8 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { X, ExternalLink, Check, Loader2, Copy, Link } from "lucide-react";
+import { X, ExternalLink, Check, Loader2, Copy, Link, ArrowLeftRight } from "lucide-react";
 
 interface SetupModalProps {
     isOpen: boolean;
@@ -32,6 +32,32 @@ export function SetupModal({
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [success, setSuccess] = useState(false);
+    const [manualStep, setManualStep] = useState<1 | 2 | 3 | null>(null);
+
+    // URL sugerida del sheet actual (si existe). Útil para “Cambiar link”.
+    const currentSpreadsheetEditUrl = useMemo(() => {
+        if (!currentSpreadsheetId) return "";
+        return `https://docs.google.com/spreadsheets/d/${currentSpreadsheetId}/edit`;
+    }, [currentSpreadsheetId]);
+
+    // Resetear estado al abrir/cerrar el modal para evitar que quede “pegado” en un step.
+    useEffect(() => {
+        if (!isOpen) {
+            setSpreadsheetUrl("");
+            setIsSubmitting(false);
+            setError(null);
+            setSuccess(false);
+            setManualStep(null);
+            return;
+        }
+
+        // Al abrir, arrancar en el step “natural” de la cuenta
+        setSpreadsheetUrl("");
+        setIsSubmitting(false);
+        setError(null);
+        setSuccess(false);
+        setManualStep(null);
+    }, [isOpen]);
 
     const handleConnectGoogle = () => {
         window.location.href = "/api/auth/google/start";
@@ -74,7 +100,9 @@ export function SetupModal({
         }
     };
 
-    const currentStep = !isAuthenticated ? 1 : !hasSpreadsheet ? 2 : 3;
+    const baseStep = !isAuthenticated ? 1 : !hasSpreadsheet ? 2 : 3;
+    const currentStep = manualStep ?? baseStep;
+    const canGoBackToSummary = baseStep === 3 && currentStep === 2;
 
     return (
         <AnimatePresence>
@@ -164,6 +192,21 @@ export function SetupModal({
                         {/* Step 2: Set up Spreadsheet */}
                         {currentStep === 2 && (
                             <div className="space-y-4">
+                                {canGoBackToSummary && (
+                                    <button
+                                        type="button"
+                                        onClick={() => {
+                                            setManualStep(3);
+                                            setError(null);
+                                            setSuccess(false);
+                                            setSpreadsheetUrl("");
+                                        }}
+                                        className="inline-flex items-center gap-2 text-xs font-black text-gray-500 active:opacity-60"
+                                    >
+                                        <ArrowLeftRight size={14} />
+                                        Volver a configuración
+                                    </button>
+                                )}
                                 <div className="text-center mb-4">
                                     <h3 className="font-bold text-lg mb-2">Configurá tu Spreadsheet</h3>
                                     <p className="text-gray-500 text-sm">
@@ -249,6 +292,20 @@ export function SetupModal({
                                         <ExternalLink size={12} />
                                     </a>
                                 )}
+                                <button
+                                    type="button"
+                                    onClick={() => {
+                                        setManualStep(2);
+                                        setError(null);
+                                        setSuccess(false);
+                                        // Pre-cargar el link actual para que sea fácil corregirlo.
+                                        setSpreadsheetUrl(currentSpreadsheetEditUrl);
+                                    }}
+                                    className="w-full py-3 mb-3 bg-gray-100 text-black rounded-2xl font-bold flex items-center justify-center gap-2"
+                                >
+                                    <ArrowLeftRight size={16} />
+                                    Cambiar link del Google Sheet
+                                </button>
                                 <button
                                     onClick={onClose}
                                     className="w-full py-4 bg-ios-blue text-white rounded-2xl font-bold"
