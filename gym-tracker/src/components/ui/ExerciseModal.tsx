@@ -140,6 +140,7 @@ export const ExerciseModal = ({
                             }
                         }}
                         className="fixed bottom-0 left-0 right-0 bg-white rounded-t-[32px] z-50 px-6 pt-6 pb-32 shadow-2xl"
+                        style={{ touchAction: "none" }}
                     >
                         {/* Handle */}
                         <div className="absolute top-3 left-1/2 -translate-x-1/2 w-12 h-1.5 bg-gray-200 rounded-full" />
