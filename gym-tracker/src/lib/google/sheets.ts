@@ -100,10 +100,10 @@ export async function readExerciseSets(params: {
         const reps = Number.parseFloat(repsRaw);
         const weight = Number.parseFloat(weightRaw);
 
-        sets.push({
-            reps: Number.isFinite(reps) ? reps : 0,
-            weight: Number.isFinite(weight) ? weight : 0,
-        });
+        const repsOk = Number.isFinite(reps) && reps > 0 && reps <= 30;
+        const weightOk = Number.isFinite(weight) && weight >= 0 && weight <= 200;
+        // Si está incompleto (p.ej. peso sin reps), lo tratamos como vacío.
+        sets.push(repsOk && weightOk ? { reps, weight } : { reps: 0, weight: 0 });
     }
 
     return sets;

@@ -56,19 +56,16 @@ export const ExerciseModal = ({
         if (!isOpen) return;
         const initialSets = buildInitialSets();
         setSets(initialSets);
-        setDraft(
-            Array.from({ length: targetSetCount }, (_, idx) => {
-                const s = initialSets[idx];
-                const hasSaved = s && s.weight !== null && s.reps !== null;
-                if (hasSaved) {
-                    return { weight: s.weight as number, reps: s.reps as number };
-                }
-                if (pr) {
-                    return { weight: pr.weight ?? 0, reps: pr.reps ?? 0 };
-                }
-                return { weight: 0, reps: 0 };
-            })
-        );
+        const nextDraft = Array.from({ length: targetSetCount }, (_, idx) => {
+            const s = initialSets[idx];
+            const hasSaved = s && s.weight !== null && s.reps !== null;
+            if (hasSaved) return { weight: s.weight as number, reps: s.reps as number };
+            // Serie 1: por defecto al PR si existe
+            if (idx === 0 && pr) return { weight: pr.weight ?? 0, reps: pr.reps ?? 0 };
+            // El resto arranca vacío; al cambiar de tab se hereda de la anterior (local, instantáneo).
+            return { weight: 0, reps: 0 };
+        });
+        setDraft(nextDraft);
         // Marcar como "cargados" los sets que ya existen (p.ej. si se cargaron desde Sheets).
         setCompletedSets(
             initialSets.map((s) => {
@@ -78,7 +75,19 @@ export const ExerciseModal = ({
                 return r !== null && r !== undefined && r > 0 && w !== null && w !== undefined && w >= 0;
             })
         );
-        setActiveSetIndex(0);
+        // Abrir en la última serie no vacía; si no hay ninguna, abrir en la última.
+        const lastFilledIdx = (() => {
+            for (let i = Math.min(targetSetCount, initialSets.length) - 1; i >= 0; i--) {
+                const s = initialSets[i];
+                const w = s?.weight;
+                const r = s?.reps;
+                if (r !== null && r !== undefined && r > 0 && w !== null && w !== undefined && w >= 0) {
+                    return i;
+                }
+            }
+            return -1;
+        })();
+        setActiveSetIndex(lastFilledIdx >= 0 ? lastFilledIdx : Math.max(0, targetSetCount - 1));
         setIsEditing(false);
     }, [isOpen, buildInitialSets, targetSetCount, pr]);
 
@@ -109,7 +118,25 @@ export const ExerciseModal = ({
             setIsEditing(false);
         } else if (newCompleted[activeSetIndex] && activeSetIndex < sets.length - 1) {
             // Auto-advance
-            setTimeout(() => setActiveSetIndex(activeSetIndex + 1), 300);
+            const nextIdx = activeSetIndex + 1;
+            setTimeout(() => {
+                // Si la próxima serie está vacía y aún no se tocó, hereda el draft actual.
+                setDraft((prev) => {
+                    const next = [...prev];
+                    const nextSet = newSets[nextIdx];
+                    const isNextEmpty =
+                        !nextSet ||
+                        nextSet.weight === null ||
+                        nextSet.reps === null ||
+                        (nextSet.weight === 0 && nextSet.reps === 0);
+                    const isNextDraftUntouched = (prev[nextIdx]?.weight ?? 0) === 0 && (prev[nextIdx]?.reps ?? 0) === 0;
+                    if (isNextEmpty && isNextDraftUntouched) {
+                        next[nextIdx] = { weight: nextWeight, reps: nextReps };
+                    }
+                    return next;
+                });
+                setActiveSetIndex(nextIdx);
+            }, 300);
         }
     };
 
@@ -122,6 +149,23 @@ export const ExerciseModal = ({
     };
 
     const handleTabClick = (idx: number) => {
+        // Si la serie destino está vacía y aún no se tocó, arrancar con los valores de la serie actual.
+        // (Local/instantáneo: copia solo el draft, no guarda nada.)
+        setDraft((prev) => {
+            const next = [...prev];
+            const destSet = sets[idx];
+            const isDestEmpty =
+                !destSet ||
+                destSet.weight === null ||
+                destSet.reps === null ||
+                (destSet.weight === 0 && destSet.reps === 0);
+            const isDestDraftUntouched = (prev[idx]?.weight ?? 0) === 0 && (prev[idx]?.reps ?? 0) === 0;
+            if (isDestEmpty && isDestDraftUntouched) {
+                const src = prev[activeSetIndex] || { weight: 0, reps: 0 };
+                next[idx] = { weight: Number(src.weight ?? 0), reps: Number(src.reps ?? 0) };
+            }
+            return next;
+        });
         setActiveSetIndex(idx);
         setIsEditing(false);
     };

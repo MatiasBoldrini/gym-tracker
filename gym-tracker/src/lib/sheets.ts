@@ -68,7 +68,8 @@ export function parseWeekData(data: any[][], weekId: number, exerciseMapping: Re
 
                 // Solo consideramos "set" si hay reps y peso numéricos.
                 // (La UI solo permite reps 0..30 y peso 0..200; valores fuera suelen ser ruido de plantilla.)
-                const repsOk = Number.isFinite(reps) && reps >= 0 && reps <= 30;
+                // Nota: reps=0 lo tratamos como "vacío" (evita falsos positivos/plantillas).
+                const repsOk = Number.isFinite(reps) && reps > 0 && reps <= 30;
                 const weightOk = Number.isFinite(weight) && weight >= 0 && weight <= 200;
                 if (repsOk && weightOk) {
                     exercise.sets.push({

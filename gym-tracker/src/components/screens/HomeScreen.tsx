@@ -128,6 +128,25 @@ export function HomeScreen({ initialWeek, initialPrs }: HomeScreenProps) {
                             reps: (s.weight === 0 && s.reps === 0) ? null : (s.reps ?? null),
                         }));
 
+                                const hasFetchedFilled = normalizedSets.some((s) =>
+                                    s.weight !== null && s.weight !== undefined && s.weight >= 0 &&
+                                    s.reps !== null && s.reps !== undefined && s.reps > 0
+                                );
+                                const hasExistingFilled = (exercise.sets || []).some((s) =>
+                                    s.weight !== null && s.weight !== undefined && s.weight >= 0 &&
+                                    s.reps !== null && s.reps !== undefined && s.reps > 0
+                                );
+
+                                // Evitar “pisar” datos locales con un fetch vacío (suele ser ruido/rango incompleto).
+                                if (!hasFetchedFilled && hasExistingFilled) {
+                                    console.warn("fetchExerciseSets devolvió vacío; se mantiene el estado local:", {
+                                        weekId: week.id,
+                                        dayId: currentDay.id,
+                                        exerciseName: exercise.name,
+                                    });
+                                    return;
+                                }
+
                         setWeek((prev) => {
                             const updated = { ...prev };
                             const dayIdx = updated.days.findIndex((d) => d.id === currentDay.id);

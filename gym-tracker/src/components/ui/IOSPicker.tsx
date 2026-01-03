@@ -27,9 +27,22 @@ export const IOSPicker = ({ value, onChange, selections }: IOSPickerProps) => {
                     background: 'linear-gradient(to bottom, rgba(255,255,255,1) 0%, rgba(255,255,255,0) 30%, rgba(255,255,255,0) 70%, rgba(255,255,255,1) 100%)'
                 }}
             />
-            <Picker value={value} onChange={onChange} wheelMode="normal">
+            <Picker
+                value={value}
+                onChange={onChange}
+                // Alinear con nuestros items (h-[40px]) para que el snap se sienta más natural.
+                height={200}
+                itemHeight={40}
+                // Wheel scrolling (desktop) + sensación más “natural” al usar rueda/trackpad.
+                wheelMode="natural"
+            >
                 {Object.keys(selections).map((key) => (
-                    <Picker.Column key={key} name={key}>
+                    <Picker.Column
+                        key={key}
+                        name={key}
+                        // Curva de easing más “iOS-like” para el snap (no afecta durante el drag).
+                        style={{ transitionTimingFunction: "cubic-bezier(0.16, 1, 0.3, 1)" }}
+                    >
                         {selections[key].map((option) => (
                             <Picker.Item key={option} value={option}>
                                 {({ selected }) => (
