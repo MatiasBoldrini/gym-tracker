@@ -88,7 +88,22 @@ export const ExerciseModal = ({
             }
             return -1;
         })();
-        setActiveSetIndex(lastFilledIdx >= 0 ? lastFilledIdx : Math.max(0, targetSetCount - 1));
+        // Abrir en la primera serie VACÍA (la próxima a cargar). Si están todas cargadas, abrir en la última cargada.
+        const firstEmptyIdx = (() => {
+            for (let i = 0; i < Math.min(targetSetCount, initialSets.length); i++) {
+                const s = initialSets[i];
+                const w = s?.weight;
+                const r = s?.reps;
+                const filled = r !== null && r !== undefined && r > 0 && w !== null && w !== undefined && w >= 0;
+                if (!filled) return i;
+            }
+            return -1;
+        })();
+        setActiveSetIndex(
+            firstEmptyIdx >= 0
+                ? firstEmptyIdx
+                : (lastFilledIdx >= 0 ? lastFilledIdx : 0)
+        );
         setIsEditing(false);
     }, [isOpen, buildInitialSets, targetSetCount, pr]);
 
@@ -203,6 +218,8 @@ export const ExerciseModal = ({
                             const target = e.target as HTMLElement;
                             // Only start drag if we are NOT clicking inside the ios picker
                             if (!target.closest('.ios-picker-container')) {
+                                // Evita que el gesto “contamine” scroll/pinch; mejora la sensación de drag y deja scroll libre en el picker.
+                                e.preventDefault();
                                 dragControls.start(e);
                             }
                         }}
@@ -214,7 +231,8 @@ export const ExerciseModal = ({
                             }
                         }}
                         className="fixed bottom-0 left-0 right-0 bg-white rounded-t-[32px] z-50 px-6 pt-6 pb-32 shadow-2xl"
-                        style={{ touchAction: "none" }}
+                        // Permite scroll nativo con inercia dentro del picker.
+                        style={{ touchAction: "pan-y", overscrollBehavior: "contain" }}
                     >
                         {/* Handle */}
                         <div className="absolute top-3 left-1/2 -translate-x-1/2 w-12 h-1.5 bg-gray-200 rounded-full" />
