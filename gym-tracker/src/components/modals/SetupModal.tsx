@@ -13,7 +13,12 @@ interface SetupModalProps {
     currentSpreadsheetId?: string | null;
 }
 
-const TEMPLATE_ID = process.env.NEXT_PUBLIC_SHEETS_TEMPLATE_ID || "";
+// Fallback público: permite mostrar el link de "hacer una copia" aunque no exista env var.
+const TEMPLATE_ID =
+    process.env.NEXT_PUBLIC_SHEETS_TEMPLATE_ID ||
+    "1XMFq-Twxtoa_Fs2_6kOWjB65mMqEgzFJ8ujzyZN7iCo";
+const TEMPLATE_VIEW_URL = `https://docs.google.com/spreadsheets/d/${TEMPLATE_ID}/edit?usp=sharing`;
+const TEMPLATE_COPY_URL = `https://docs.google.com/spreadsheets/d/${TEMPLATE_ID}/copy`;
 
 export function SetupModal({
     isOpen,
@@ -33,12 +38,7 @@ export function SetupModal({
     };
 
     const handleCopyTemplate = () => {
-        if (TEMPLATE_ID) {
-            window.open(
-                `https://docs.google.com/spreadsheets/d/${TEMPLATE_ID}/copy`,
-                "_blank"
-            );
-        }
+        window.open(TEMPLATE_COPY_URL, "_blank");
     };
 
     const handleSubmitSpreadsheet = async () => {
@@ -167,21 +167,27 @@ export function SetupModal({
                                 <div className="text-center mb-4">
                                     <h3 className="font-bold text-lg mb-2">Configurá tu Spreadsheet</h3>
                                     <p className="text-gray-500 text-sm">
-                                        Copiá nuestra plantilla y pegá el link acá
+                                        Hacé una copia de nuestra plantilla y pegá la URL acá.{" "}
+                                        <a
+                                            href={TEMPLATE_VIEW_URL}
+                                            target="_blank"
+                                            rel="noreferrer"
+                                            className="text-ios-blue font-semibold underline underline-offset-2"
+                                        >
+                                            Abrir plantilla
+                                        </a>
                                     </p>
                                 </div>
 
                                 {/* Copy Template Button */}
-                                {TEMPLATE_ID && (
-                                    <button
-                                        onClick={handleCopyTemplate}
-                                        className="w-full py-3 bg-ios-blue/10 text-ios-blue rounded-xl font-bold flex items-center justify-center gap-2 text-sm"
-                                    >
-                                        <Copy size={16} />
-                                        Copiar plantilla de Google Sheets
-                                        <ExternalLink size={14} />
-                                    </button>
-                                )}
+                                <button
+                                    onClick={handleCopyTemplate}
+                                    className="w-full py-3 bg-ios-blue/10 text-ios-blue rounded-xl font-bold flex items-center justify-center gap-2 text-sm"
+                                >
+                                    <Copy size={16} />
+                                    Hacer una copia de la plantilla
+                                    <ExternalLink size={14} />
+                                </button>
 
                                 <div className="relative">
                                     <div className="absolute left-4 top-1/2 -translate-y-1/2 text-gray-400">
@@ -233,9 +239,15 @@ export function SetupModal({
                                     Tu cuenta está configurada. Los entrenamientos se guardarán automáticamente.
                                 </p>
                                 {currentSpreadsheetId && (
-                                    <p className="text-xs text-gray-400 mb-4 break-all">
-                                        ID: {currentSpreadsheetId}
-                                    </p>
+                                    <a
+                                        href={`https://docs.google.com/spreadsheets/d/${currentSpreadsheetId}/edit`}
+                                        target="_blank"
+                                        rel="noreferrer"
+                                        className="inline-flex items-center justify-center gap-2 text-xs text-ios-blue font-semibold mb-4 break-all"
+                                    >
+                                        {`https://docs.google.com/spreadsheets/d/${currentSpreadsheetId}/edit`}
+                                        <ExternalLink size={12} />
+                                    </a>
                                 )}
                                 <button
                                     onClick={onClose}

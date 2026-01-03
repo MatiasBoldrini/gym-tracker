@@ -57,6 +57,11 @@
 
 ### 1.5 Obtener el ID de tu plantilla de Google Sheets (opcional)
 
+Plantilla oficial (para usar como base):
+
+- Ver plantilla: https://docs.google.com/spreadsheets/d/1XMFq-Twxtoa_Fs2_6kOWjB65mMqEgzFJ8ujzyZN7iCo/edit?usp=sharing
+- Hacer una copia directa: https://docs.google.com/spreadsheets/d/1XMFq-Twxtoa_Fs2_6kOWjB65mMqEgzFJ8ujzyZN7iCo/copy
+
 1. Abrí tu Google Sheet de plantilla
 2. En la URL, buscá el ID entre `/d/` y `/edit`:
    ```
@@ -102,6 +107,7 @@ Ejemplo: openssl rand -base64 32
 
 NEXT_PUBLIC_SHEETS_TEMPLATE_ID
 Valor: [el ID de tu plantilla de Google Sheets, ej: 1XMFq-Twxtoa...]
+(Si no lo definís, por defecto se usa la plantilla oficial.)
 ```
 
 3. Para cada variable, seleccioná los **entornos** donde aplica:
