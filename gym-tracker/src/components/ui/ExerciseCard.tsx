@@ -46,12 +46,6 @@ export function ExerciseCard({ exercise, pr, isStacked = false }: ExerciseCardPr
                 {/* Detail Overlay */}
                 <div className="absolute inset-0 bg-gradient-to-t from-black/5 to-transparent pointer-events-none" />
             </div>
-
-            <div className="flex justify-between items-center text-[10px] font-black uppercase tracking-[0.2em] text-gray-300">
-                <span>Sesión de hoy</span>
-                <span className="w-8 h-[1px] bg-gray-200" />
-                <span>Gym Tracker v1</span>
-            </div>
         </div>
     );
 }
