@@ -50,7 +50,8 @@ export const ExerciseModal = ({
 
     // Generate options for the picker
     const weights = Array.from({ length: 401 }, (_, i) => i * 0.5); // 0 to 200kg in 0.5 steps
-    const reps = Array.from({ length: 31 }, (_, i) => i); // 0 to 30 reps
+    // Permitir rangos altos (p.ej. zancadas 20-25 y a veces más); además soporta valores ya cargados desde Sheets.
+    const reps = Array.from({ length: 201 }, (_, i) => i); // 0..200 reps
 
     React.useEffect(() => {
         if (!isOpen) return;

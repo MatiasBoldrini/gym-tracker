@@ -100,8 +100,10 @@ export async function readExerciseSets(params: {
         const reps = Number.parseFloat(repsRaw);
         const weight = Number.parseFloat(weightRaw);
 
-        const repsOk = Number.isFinite(reps) && reps > 0 && reps <= 30;
-        const weightOk = Number.isFinite(weight) && weight >= 0 && weight <= 200;
+        // No “capear” reps a 30: hay ejercicios con rangos más altos (p.ej. zancadas).
+        // Igual mantenemos límites razonables para evitar ruido de plantilla/formulas.
+        const repsOk = Number.isFinite(reps) && reps > 0 && reps <= 500;
+        const weightOk = Number.isFinite(weight) && weight >= 0 && weight <= 500;
         // Si está incompleto (p.ej. peso sin reps), lo tratamos como vacío.
         sets.push(repsOk && weightOk ? { reps, weight } : { reps: 0, weight: 0 });
     }

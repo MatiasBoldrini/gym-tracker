@@ -70,6 +70,7 @@ interface StackProps {
     pauseOnHover?: boolean;
     mobileClickOnly?: boolean;
     mobileBreakpoint?: number;
+    disabled?: boolean;
 }
 
 export default function Stack({
@@ -82,7 +83,8 @@ export default function Stack({
     autoplayDelay = 3000,
     pauseOnHover = false,
     mobileClickOnly = false,
-    mobileBreakpoint = 768
+    mobileBreakpoint = 768,
+    disabled = false,
 }: StackProps) {
     const [isMobile, setIsMobile] = useState(false);
     const [isPaused, setIsPaused] = useState(false);
@@ -97,8 +99,8 @@ export default function Stack({
         return () => window.removeEventListener('resize', checkMobile);
     }, [mobileBreakpoint]);
 
-    const shouldDisableDrag = mobileClickOnly && isMobile;
-    const shouldEnableClick = sendToBackOnClick || shouldDisableDrag;
+    const shouldDisableDrag = (mobileClickOnly && isMobile) || disabled;
+    const shouldEnableClick = !disabled && (sendToBackOnClick || shouldDisableDrag);
 
     const [stack, setStack] = useState<{ id: number; content: React.ReactNode }[]>(() => {
         if (cards.length) {
@@ -159,7 +161,7 @@ export default function Stack({
 
     return (
         <div
-            className="relative w-full h-full"
+            className={`relative w-full h-full ${disabled ? "pointer-events-none" : ""}`}
             style={{
                 perspective: 600
             }}

@@ -459,6 +459,7 @@ export function HomeScreen({ initialWeek, initialPrs }: HomeScreenProps) {
                                 sensitivity={150}
                                 randomRotation={true}
                                 animationConfig={{ stiffness: 300, damping: 25 }}
+                                disabled={isModalOpen}
                             />
                         </div>
                     </div>
