@@ -42,7 +42,7 @@ export const IOSPicker = ({ value, onChange, selections }: IOSPickerProps) => {
         el.scrollTo({ top: idx * itemHeight, behavior, left: 0 }); // Asegurar que left siempre sea 0
         window.setTimeout(() => {
             isProgrammaticScroll.current[key] = false;
-        }, behavior === "smooth" ? 80 : 0); // Reducir también este tiempo
+        }, behavior === "smooth" ? 120 : 0); // Reducir también este tiempo
     }, [itemHeight]);
 
     const computeIndexFromScrollTop = React.useCallback((scrollTop: number) => {
@@ -121,7 +121,7 @@ export const IOSPicker = ({ value, onChange, selections }: IOSPickerProps) => {
                                         onChange({ ...value, [key]: nextVal });
                                     }
                                     isScrolling.current[key] = false;
-                                }, 30);
+                                }, 50);
                             }}
                         >
                             {/* Padding superior para centrar el item seleccionado */}
