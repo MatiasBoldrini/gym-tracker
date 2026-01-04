@@ -105,7 +105,7 @@ export default function PerfilPage() {
 
             await navigator.clipboard.writeText(text);
             setCopyState("success");
-            setCopyMessage("Rutina copiada en formato toon");
+            setCopyMessage("Rutina copiada ");
         } catch (error) {
             console.error("Error copiando rutina:", error);
             setCopyState("error");
@@ -194,11 +194,7 @@ export default function PerfilPage() {
                     </div>
                 )}
 
-                {routinePreview && (
-                    <div className="rounded-2xl bg-gray-50 border border-black/5 p-3 text-[11px] leading-relaxed text-gray-700 whitespace-pre-wrap">
-                        {routinePreview}
-                    </div>
-                )}
+                
             </div>
         </div>
     );

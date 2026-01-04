@@ -15,6 +15,19 @@ function parseWeekFromTitle(title: string): number | null {
     return Math.trunc(id);
 }
 
+async function readPrSheet(accessToken: string, spreadsheetId: string) {
+    const sheetNames = ["RM A,B,C", "RM"];
+    for (const name of sheetNames) {
+        try {
+            const values = await readSheetValues(accessToken, spreadsheetId, `'${name}'!A:E`);
+            if (Array.isArray(values) && values.length > 0) return values;
+        } catch {
+            // Intentamos la siguiente opción si falla
+        }
+    }
+    return [];
+}
+
 async function getHomeData(): Promise<{ week: Week; prs: any[] }> {
     const store = await getUserStore();
 
@@ -37,7 +50,7 @@ async function getHomeData(): Promise<{ week: Week; prs: any[] }> {
 
     const [weekValues, prValues, mappingValues] = await Promise.all([
         readSheetValues(accessToken, spreadsheetId, `'Semana ${weekId}'!A:N`),
-        readSheetValues(accessToken, spreadsheetId, `'RM'!A:E`).catch(() => []),
+        readPrSheet(accessToken, spreadsheetId),
         readSheetValues(accessToken, spreadsheetId, `'Ejercicios'!A:D`).catch(() => []),
     ]);
 
