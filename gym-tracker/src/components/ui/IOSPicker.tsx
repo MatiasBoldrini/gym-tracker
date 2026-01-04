@@ -32,7 +32,25 @@ export const IOSPicker = ({ value, onChange, selections }: IOSPickerProps) => {
         if (exact >= 0) return exact;
         // Fallback: comparar por string (por si vienen números como strings desde afuera)
         const asString = String(v);
-        return Math.max(0, options.findIndex((o) => String(o) === asString));
+        const stringIdx = options.findIndex((o) => String(o) === asString);
+        if (stringIdx >= 0) return stringIdx;
+        // Ajuste para valores antiguos (p. ej. decimales) buscando el más cercano
+        const asNumber = Number(v);
+        if (!Number.isNaN(asNumber) && options.length > 0) {
+            let closestIdx = 0;
+            let smallestDiff = Number.POSITIVE_INFINITY;
+            options.forEach((o, idx) => {
+                const num = Number(o);
+                if (Number.isNaN(num)) return;
+                const diff = Math.abs(num - asNumber);
+                if (diff < smallestDiff) {
+                    smallestDiff = diff;
+                    closestIdx = idx;
+                }
+            });
+            return closestIdx;
+        }
+        return 0;
     }, []);
 
     const scrollToIndex = React.useCallback((key: string, idx: number, behavior: ScrollBehavior) => {

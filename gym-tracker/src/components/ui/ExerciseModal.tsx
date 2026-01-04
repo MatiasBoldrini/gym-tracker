@@ -56,7 +56,7 @@ export const ExerciseModal = ({
     }, [completedSets]);
 
     // Generate options for the picker
-    const weights = Array.from({ length: 401 }, (_, i) => i * 0.5); // 0 to 200kg in 0.5 steps
+    const weights = Array.from({ length: 301 }, (_, i) => i); // 0 a 300 kg en enteros
     // Permitir rangos altos (p.ej. zancadas 20-25 y a veces más); además soporta valores ya cargados desde Sheets.
     const reps = Array.from({ length: 201 }, (_, i) => i); // 0..200 reps
 

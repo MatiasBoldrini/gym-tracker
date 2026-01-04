@@ -28,8 +28,10 @@ export function ExerciseCard({ exercise, pr, isStacked = false, priority = false
 
     return (
         <div className={`
-            bg-white rounded-[32px] p-6 h-full flex flex-col 
-            ${isStacked ? "shadow-2xl border border-black/5" : "ios-card"}
+            bg-white rounded-[32px] p-6 h-full flex flex-col
+            ${isStacked
+                ? "border border-black/5 shadow-[0_10px_30px_-14px_rgba(0,0,0,0.28)]"
+                : "ios-card"}
         `}>
             <div className="mb-6">
                 <div className="flex justify-between items-start mb-1">
