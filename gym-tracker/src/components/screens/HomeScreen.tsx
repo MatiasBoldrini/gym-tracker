@@ -9,7 +9,7 @@ import { ExerciseModal } from "@/components/ui/ExerciseModal";
 import { DaySelector } from "@/components/ui/DaySelector";
 import { SetupModal } from "@/components/modals/SetupModal";
 import { useAuth } from "@/lib/hooks/useAuth";
-import { Info, Loader2, Settings } from "lucide-react";
+import { Loader2, Settings } from "lucide-react";
 import { normalizeExerciseKey } from "@/lib/normalize";
 
 type HomeScreenProps = {
@@ -129,6 +129,15 @@ export function HomeScreen({ initialWeek, initialPrs }: HomeScreenProps) {
             };
         });
     }, [currentDay]);
+
+    // Calcular porcentaje total de la rutina del día
+    const routinePercentage = useMemo(() => {
+        if (routineProgress.length === 0) return 0;
+        const totalCompleted = routineProgress.reduce((sum, item) => sum + item.completed, 0);
+        const totalTarget = routineProgress.reduce((sum, item) => sum + item.target, 0);
+        if (totalTarget === 0) return 0;
+        return Math.round((totalCompleted / totalTarget) * 100);
+    }, [routineProgress]);
 
     useEffect(() => {
         if (!showInfoPopover) return;
@@ -384,61 +393,104 @@ export function HomeScreen({ initialWeek, initialPrs }: HomeScreenProps) {
                                 setShowInfoPopover((v) => !v);
                                 setShowWeekPicker(false);
                             }}
-                            className="w-10 h-10 bg-white rounded-full shadow-sm border border-black/5 flex items-center justify-center text-gray-500 active:scale-95 transition-transform"
+                            className="w-10 h-10 relative flex items-center justify-center active:scale-95 transition-transform"
                             aria-label="Info de rutina de hoy"
                             aria-expanded={showInfoPopover}
                         >
-                            <Info size={18} />
+                            {/* Circular progress ring */}
+                            <svg className="absolute inset-0 w-full h-full -rotate-90" viewBox="0 0 40 40">
+                                {/* Background circle */}
+                                <circle
+                                    cx="20"
+                                    cy="20"
+                                    r="18"
+                                    fill="white"
+                                    stroke="#E5E5EA"
+                                    strokeWidth="2.5"
+                                />
+                                {/* Progress circle */}
+                                <circle
+                                    cx="20"
+                                    cy="20"
+                                    r="18"
+                                    fill="none"
+                                    stroke={routinePercentage === 100 ? "#34C759" : "#007AFF"}
+                                    strokeWidth="2.5"
+                                    strokeLinecap="round"
+                                    strokeDasharray={`${(routinePercentage / 100) * 113.1} 113.1`}
+                                    className="transition-all duration-500"
+                                />
+                            </svg>
+                            {/* Percentage text */}
+                            <span className={`relative z-10 text-[10px] font-black tabular-nums ${routinePercentage === 100 ? "text-ios-green" : "text-black"}`}>
+                                {routinePercentage}%
+                            </span>
                         </button>
-
-                        {showInfoPopover && (
-                            <div className="absolute right-0 top-full mt-2 w-72 bg-white/90 backdrop-blur-xl rounded-2xl shadow-xl border border-black/5 overflow-hidden origin-top-right animate-in fade-in zoom-in-95 duration-200">
-                                <div className="px-4 py-3 border-b border-black/5 flex items-center justify-between">
-                                    <div className="flex flex-col">
-                                        <span className="text-[10px] uppercase font-black tracking-wider text-gray-400">
-                                            Rutina de hoy
-                                        </span>
-                                        <span className="text-sm font-black text-black">
-                                            {currentDay ? `Día ${currentDay.id}` : "Sin rutina"}
-                                        </span>
-                                    </div>
-                                    {isRefreshingInfo && (
-                                        <div className="text-gray-400">
-                                            <Loader2 size={16} className="animate-spin" />
-                                        </div>
-                                    )}
-                                </div>
-
-                                {!currentDay ? (
-                                    <div className="px-4 py-4 text-sm font-bold text-gray-400">
-                                        No hay rutina programada para hoy.
-                                    </div>
-                                ) : routineProgress.length === 0 ? (
-                                    <div className="px-4 py-4 text-sm font-bold text-gray-400">
-                                        No hay ejercicios para este día.
-                                    </div>
-                                ) : (
-                                    <ul className="max-h-80 overflow-auto">
-                                        {routineProgress.map((item) => (
-                                            <li
-                                                key={item.name}
-                                                className="px-4 py-3 flex items-center justify-between gap-3 border-b border-black/5 last:border-0"
-                                            >
-                                                <span className="text-sm font-black text-black truncate">
-                                                    {item.name}
-                                                </span>
-                                                <span className={`text-sm font-black tabular-nums ${item.isComplete ? "text-ios-green" : "text-black"}`}>
-                                                    {item.completed}/{item.target}
-                                                </span>
-                                            </li>
-                                        ))}
-                                    </ul>
-                                )}
-                            </div>
-                        )}
                     </div>
                 </div>
             </header>
+
+            {/* Routine Info Modal Backdrop with Blur */}
+            {showInfoPopover && (
+                <div 
+                    className="fixed inset-0 z-40 bg-black/20 backdrop-blur-md"
+                    onClick={() => setShowInfoPopover(false)}
+                />
+            )}
+
+            {/* Routine Info Modal */}
+            {showInfoPopover && (
+                <div 
+                    className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-50 w-[calc(100%-3rem)] max-w-sm bg-white/95 backdrop-blur-xl rounded-3xl shadow-2xl border border-black/5 overflow-hidden animate-in fade-in zoom-in-95 duration-200"
+                >
+                    <div className="px-5 py-4 border-b border-black/5 flex items-center justify-between">
+                        <div className="flex flex-col">
+                            <span className="text-[10px] uppercase font-black tracking-wider text-gray-400">
+                                Rutina de hoy
+                            </span>
+                            <span className="text-lg font-black text-black">
+                                {currentDay ? `Día ${currentDay.id}` : "Sin rutina"}
+                            </span>
+                        </div>
+                        <div className="flex items-center gap-3">
+                            {isRefreshingInfo && (
+                                <div className="text-gray-400">
+                                    <Loader2 size={16} className="animate-spin" />
+                                </div>
+                            )}
+                            <div className={`text-xl font-black tabular-nums ${routinePercentage === 100 ? "text-ios-green" : "text-ios-blue"}`}>
+                                {routinePercentage}%
+                            </div>
+                        </div>
+                    </div>
+
+                    {!currentDay ? (
+                        <div className="px-5 py-6 text-sm font-bold text-gray-400 text-center">
+                            No hay rutina programada para hoy.
+                        </div>
+                    ) : routineProgress.length === 0 ? (
+                        <div className="px-5 py-6 text-sm font-bold text-gray-400 text-center">
+                            No hay ejercicios para este día.
+                        </div>
+                    ) : (
+                        <ul className="max-h-80 overflow-auto">
+                            {routineProgress.map((item) => (
+                                <li
+                                    key={item.name}
+                                    className="px-5 py-3.5 flex items-center justify-between gap-3 border-b border-black/5 last:border-0"
+                                >
+                                    <span className="text-sm font-bold text-black truncate">
+                                        {item.name}
+                                    </span>
+                                    <span className={`text-sm font-black tabular-nums ${item.isComplete ? "text-ios-green" : "text-gray-400"}`}>
+                                        {item.completed}/{item.target}
+                                    </span>
+                                </li>
+                            ))}
+                        </ul>
+                    )}
+                </div>
+            )}
 
             {/* Day Selector */}
             <div className="px-6 pb-2 shrink-0 z-20">
