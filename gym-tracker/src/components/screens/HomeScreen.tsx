@@ -9,7 +9,7 @@ import { ExerciseModal } from "@/components/ui/ExerciseModal";
 import { DaySelector } from "@/components/ui/DaySelector";
 import { SetupModal } from "@/components/modals/SetupModal";
 import { useAuth } from "@/lib/hooks/useAuth";
-import { Loader2, Settings } from "lucide-react";
+import { EyeOff, Loader2, Settings, Sparkles } from "lucide-react";
 import { normalizeExerciseKey } from "@/lib/normalize";
 
 type HomeScreenProps = {
@@ -37,6 +37,11 @@ export function HomeScreen({ initialWeek, initialPrs }: HomeScreenProps) {
     const [showInfoPopover, setShowInfoPopover] = useState(false);
     const [isRefreshingInfo, setIsRefreshingInfo] = useState(false);
     const infoPopoverRef = useRef<HTMLDivElement>(null);
+
+    // Ocultar ejercicios completados + toast
+    const [hideCompleted, setHideCompleted] = useState(false);
+    const [toastMessage, setToastMessage] = useState<string | null>(null);
+    const toastTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
     // Show setup modal if not fully configured (after initial load)
     useEffect(() => {
@@ -107,6 +112,25 @@ export function HomeScreen({ initialWeek, initialPrs }: HomeScreenProps) {
     }, [prs]);
 
     const currentDay = week.days[currentDayIndex];
+
+    const isExerciseComplete = (exercise: Exercise) => {
+        const targetSetCount = Math.max(
+            1,
+            parseInt(exercise.prescribedSeries?.toString().split(/[\sxX]+/)[0]) || 3
+        );
+        const completedSetsCount = exercise.sets?.slice(0, targetSetCount).filter(s =>
+            s.weight !== null && s.weight !== undefined && s.weight >= 0 &&
+            s.reps !== null && s.reps !== undefined && s.reps > 0
+        ).length || 0;
+
+        return completedSetsCount >= targetSetCount;
+    };
+
+    const visibleExercises = useMemo(() => {
+        if (!currentDay) return [];
+        if (!hideCompleted) return currentDay.exercises;
+        return currentDay.exercises.filter((exercise) => !isExerciseComplete(exercise));
+    }, [currentDay, hideCompleted]);
 
     const routineProgress = useMemo(() => {
         if (!currentDay) return [];
@@ -231,7 +255,19 @@ export function HomeScreen({ initialWeek, initialPrs }: HomeScreenProps) {
         // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [showInfoPopover, auth.isLoading, auth.isSetupComplete, week.id, currentDayIndex]);
 
-    const exerciseCards = currentDay?.exercises.map((exercise, idx) => {
+    useEffect(() => {
+        return () => {
+            if (toastTimeoutRef.current) clearTimeout(toastTimeoutRef.current);
+        };
+    }, []);
+
+    const showToast = (message: string) => {
+        if (toastTimeoutRef.current) clearTimeout(toastTimeoutRef.current);
+        setToastMessage(message);
+        toastTimeoutRef.current = setTimeout(() => setToastMessage(null), 1800);
+    };
+
+    const exerciseCards = visibleExercises.map((exercise, idx) => {
         const pr = prByExercise.get(normalizeExerciseKey(exercise.name));
         return (
             <div
@@ -303,11 +339,45 @@ export function HomeScreen({ initialWeek, initialPrs }: HomeScreenProps) {
                     exercise={exercise}
                     pr={pr}
                     isStacked
-                    priority={idx === (currentDay.exercises.length - 1)}
+                    priority={idx === (visibleExercises.length - 1)}
                 />
             </div>
         );
     }) || [];
+
+    const shouldShowCompletionCard =
+        hideCompleted &&
+        !!currentDay &&
+        currentDay.exercises.length > 0 &&
+        visibleExercises.length === 0;
+
+    const completionCard = (
+        <div className="bg-white rounded-[32px] p-6 h-full flex flex-col border border-black/5 shadow-[0_10px_30px_-14px_rgba(0,0,0,0.28)]">
+            <div className="flex-1 flex flex-col items-center justify-center gap-3 text-center">
+                <div className="w-12 h-12 rounded-full bg-ios-green/15 text-ios-green flex items-center justify-center">
+                    <Sparkles size={22} />
+                </div>
+                <div className="text-xl font-black text-black">
+                    ¡Rutina completada!
+                </div>
+                <p className="text-sm font-bold text-gray-500">
+                    No quedan ejercicios pendientes hoy.
+                </p>
+            </div>
+        </div>
+    );
+
+    const cardsToRender = shouldShowCompletionCard ? [completionCard] : exerciseCards;
+
+    const handleToggleHideCompleted = () => {
+        setHideCompleted((prev) => {
+            const next = !prev;
+            showToast(next ? "Ejercicios completados ocultos" : "Ejercicios completados visibles");
+            return next;
+        });
+        setShowWeekPicker(false);
+        setShowInfoPopover(false);
+    };
 
     const handleSaveSeries = async (sets: Set[]) => {
         if (!selectedExercise || !week || !currentDay) return;
@@ -377,6 +447,18 @@ export function HomeScreen({ initialWeek, initialPrs }: HomeScreenProps) {
                 </div>
 
                 <div className="flex items-center gap-2">
+                    {/* Toggle ocultar completados */}
+                    <button
+                        onClick={handleToggleHideCompleted}
+                        aria-pressed={hideCompleted}
+                        className={`w-10 h-10 rounded-full shadow-sm border border-black/5 flex items-center justify-center active:scale-95 transition-all ${
+                            hideCompleted ? "bg-black text-white" : "bg-white text-gray-500"
+                        }`}
+                        aria-label={hideCompleted ? "Mostrar ejercicios completados" : "Ocultar ejercicios completados"}
+                    >
+                        <EyeOff size={18} />
+                    </button>
+
                     {/* Settings Button */}
                     <button
                         onClick={() => setShowSetupModal(true)}
@@ -508,11 +590,11 @@ export function HomeScreen({ initialWeek, initialPrs }: HomeScreenProps) {
                         {/* Card Stack Container */}
                         <div className="w-full h-[420px] relative flex items-center justify-center px-4">
                             <Stack
-                                cards={exerciseCards}
+                                cards={cardsToRender}
                                 sensitivity={150}
                                 randomRotation={true}
                                 animationConfig={{ stiffness: 300, damping: 25 }}
-                                disabled={isModalOpen}
+                                disabled={isModalOpen || shouldShowCompletionCard}
                             />
                         </div>
                     </div>
@@ -546,6 +628,15 @@ export function HomeScreen({ initialWeek, initialPrs }: HomeScreenProps) {
                 hasSpreadsheet={auth.hasSpreadsheet}
                 currentSpreadsheetId={auth.spreadsheetId}
             />
+
+            {/* Toast inferior */}
+            {toastMessage && (
+                <div className="fixed bottom-[calc(var(--bottom-nav-base)+env(safe-area-inset-bottom)+1rem)] left-1/2 -translate-x-1/2 z-50">
+                    <div className="bg-black text-white px-4 py-3 rounded-full shadow-lg text-sm font-semibold">
+                        {toastMessage}
+                    </div>
+                </div>
+            )}
         </div>
     );
 }
