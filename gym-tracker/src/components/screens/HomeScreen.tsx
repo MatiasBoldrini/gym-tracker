@@ -10,6 +10,7 @@ import { DaySelector } from "@/components/ui/DaySelector";
 import { SetupModal } from "@/components/modals/SetupModal";
 import { useAuth } from "@/lib/hooks/useAuth";
 import { Info, Loader2, Settings } from "lucide-react";
+import { normalizeExerciseKey } from "@/lib/normalize";
 
 type HomeScreenProps = {
     initialWeek: Week;
@@ -101,7 +102,7 @@ export function HomeScreen({ initialWeek, initialPrs }: HomeScreenProps) {
 
     const prByExercise = useMemo(() => {
         const map = new Map<string, PersonalRecord>();
-        for (const pr of prs) map.set(pr.exercise.toLowerCase(), pr);
+        for (const pr of prs) map.set(normalizeExerciseKey(pr.exercise), pr);
         return map;
     }, [prs]);
 
@@ -222,7 +223,7 @@ export function HomeScreen({ initialWeek, initialPrs }: HomeScreenProps) {
     }, [showInfoPopover, auth.isLoading, auth.isSetupComplete, week.id, currentDayIndex]);
 
     const exerciseCards = currentDay?.exercises.map((exercise, idx) => {
-        const pr = prByExercise.get(exercise.name.toLowerCase());
+        const pr = prByExercise.get(normalizeExerciseKey(exercise.name));
         return (
             <div
                 key={idx}
@@ -474,7 +475,7 @@ export function HomeScreen({ initialWeek, initialPrs }: HomeScreenProps) {
             {selectedExercise && (
                 <ExerciseModal
                     exercise={selectedExercise}
-                    pr={prByExercise.get(selectedExercise.name.toLowerCase())}
+                    pr={prByExercise.get(normalizeExerciseKey(selectedExercise.name))}
                     isOpen={isModalOpen}
                     onClose={() => setIsModalOpen(false)}
                     onSave={handleSaveSeries}

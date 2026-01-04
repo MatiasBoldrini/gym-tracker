@@ -1,5 +1,6 @@
 import Papa from "papaparse";
 import { PersonalRecord, Week, Day, Exercise, Set } from "@/types";
+import { normalizeExerciseKey } from "@/lib/normalize";
 
 /**
  * OJO: Export CSV por gid es frágil (el gid cambia por copia) y no sirve para modo multi-usuario.
@@ -46,13 +47,16 @@ export function parseWeekData(data: any[][], weekId: number, exerciseMapping: Re
                 exercises: [],
             };
         } else if (currentDay && row[0] && row[0] !== "Ejercicio" && row[0] !== "DIA") {
+            const rawName = String(row[0] ?? "");
+            const trimmedName = rawName.trim();
             const exercise: Exercise = {
-                name: row[0],
+                // Evitar que espacios al final/incipientes rompan matching (PR / Sheets read/save).
+                name: trimmedName,
                 prescribedSeries: row[1] || "",
                 notes: row[3] || "",
                 sets: [],
                 muscleGroup: row[13] || "",
-                image: exerciseMapping[row[0].toLowerCase()] || undefined,
+                image: exerciseMapping[normalizeExerciseKey(trimmedName)] || undefined,
             };
 
             // Extract up to 4 sets (Columns F, G, H, I, J, K, L, M)
@@ -99,7 +103,7 @@ export function parsePRData(data: any[][]): PersonalRecord[] {
     // Assuming RM sheet has headers in the first row
     // Col A: Exercise, B: Weight PR, C: Reps, D: Date, E: 1RM Estimado
     return data.slice(1).map(row => ({
-        exercise: row[0] || "",
+        exercise: String(row[0] ?? "").trim(),
         weight: parseFloat(row[1]) || 0,
         reps: parseFloat(row[2]) || 0,
         date: row[3] || "",
@@ -115,7 +119,7 @@ export function parseExerciseMapping(data: any[][]): Record<string, string> {
         const name = row[0]?.toString().trim();
         const image = row[3]?.toString().trim(); // Column D is index 3
         if (name && image) {
-            mapping[name.toLowerCase()] = image;
+            mapping[normalizeExerciseKey(name)] = image;
         }
     });
     return mapping;

@@ -1,5 +1,6 @@
 import { google } from "googleapis";
 import { getAuthenticatedClient } from "./oauth";
+import { normalizeExerciseKey } from "@/lib/normalize";
 
 export interface SetData {
     weight: number;
@@ -75,12 +76,12 @@ export async function readExerciseSets(params: {
     let targetRow: any[] | null = null;
 
     for (let i = 0; i < rows.length; i++) {
-        const cellValue = rows[i]?.[0]?.toString().toUpperCase() || "";
+        const cellValue = rows[i]?.[0]?.toString().trim().toUpperCase() || "";
 
         if (cellValue.startsWith("DIA ")) {
             const currentDayId = parseInt(cellValue.replace("DIA ", ""));
             inCorrectDay = currentDayId === dayId;
-        } else if (inCorrectDay && rows[i]?.[0]?.toString().toLowerCase() === exerciseName.toLowerCase()) {
+        } else if (inCorrectDay && normalizeExerciseKey(rows[i]?.[0]) === normalizeExerciseKey(exerciseName)) {
             targetRow = rows[i];
             break;
         }
@@ -141,12 +142,12 @@ export async function saveExerciseSets(params: SaveExerciseParams): Promise<void
     let exerciseRowIndex = -1;
 
     for (let i = 0; i < rows.length; i++) {
-        const cellValue = rows[i][0]?.toString().toUpperCase() || "";
+        const cellValue = rows[i][0]?.toString().trim().toUpperCase() || "";
 
         if (cellValue.startsWith("DIA ")) {
             const currentDayId = parseInt(cellValue.replace("DIA ", ""));
             inCorrectDay = currentDayId === dayId;
-        } else if (inCorrectDay && rows[i][0]?.toString().toLowerCase() === exerciseName.toLowerCase()) {
+        } else if (inCorrectDay && normalizeExerciseKey(rows[i][0]) === normalizeExerciseKey(exerciseName)) {
             exerciseRowIndex = i + 1; // 1-indexed for Sheets API
             break;
         }
