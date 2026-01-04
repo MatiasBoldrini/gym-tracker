@@ -48,6 +48,13 @@ export const ExerciseModal = ({
     const [completedSets, setCompletedSets] = useState<boolean[]>(new Array(targetSetCount).fill(false));
     const [isEditing, setIsEditing] = useState(false);
 
+    // Bloquear navegación “adelantada”: solo se puede ir hasta la primera serie incompleta.
+    // Ej: si la serie 2 no está completada, no se puede cargar la 3.
+    const firstIncompleteIdx = React.useMemo(() => {
+        const idx = completedSets.findIndex((c) => !c);
+        return idx < 0 ? null : idx;
+    }, [completedSets]);
+
     // Generate options for the picker
     const weights = Array.from({ length: 401 }, (_, i) => i * 0.5); // 0 to 200kg in 0.5 steps
     // Permitir rangos altos (p.ej. zancadas 20-25 y a veces más); además soporta valores ya cargados desde Sheets.
@@ -169,6 +176,9 @@ export const ExerciseModal = ({
     };
 
     const handleTabClick = (idx: number) => {
+        // No permitir seleccionar una serie más allá de la primera incompleta.
+        // Permite volver a series anteriores para editar, y permite cargar solo la “próxima” pendiente.
+        if (firstIncompleteIdx !== null && idx > firstIncompleteIdx) return;
         // Si la serie destino está vacía y aún no se tocó, arrancar con los valores de la serie actual.
         // (Local/instantáneo: copia solo el draft, no guarda nada.)
         setDraft((prev) => {
@@ -283,9 +293,13 @@ export const ExerciseModal = ({
                         {/* Set Selector Tabs */}
                         <div className="flex gap-2 mb-8 overflow-x-auto no-scrollbar p-4 touch-pan-x">
                             {sets.map((_, idx) => (
+                                (() => {
+                                    const isTabDisabled = firstIncompleteIdx !== null && idx > firstIncompleteIdx;
+                                    return (
                                 <button
                                     key={idx}
                                     onClick={() => handleTabClick(idx)}
+                                    disabled={isTabDisabled}
                                     className={`
                                         flex-none min-w-[60px] h-12 rounded-2xl font-black text-xs transition-all relative flex items-center justify-center gap-1.5 px-4
                                         ${activeSetIndex === idx
@@ -293,6 +307,7 @@ export const ExerciseModal = ({
                                             : completedSets[idx]
                                                 ? "bg-ios-green text-white shadow-md shadow-ios-green/20"
                                                 : "bg-[#F2F2F7] text-gray-400"}
+                                        ${isTabDisabled ? "opacity-40 cursor-not-allowed pointer-events-none" : ""}
                                     `}
                                 >
                                     {completedSets[idx] && activeSetIndex !== idx && <Check size={12} strokeWidth={4} />}
@@ -302,6 +317,8 @@ export const ExerciseModal = ({
                                         idx + 1
                                     )}
                                 </button>
+                                    );
+                                })()
                             ))}
                         </div>
 
