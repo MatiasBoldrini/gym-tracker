@@ -186,7 +186,7 @@ export default function Stack({
                         disableDrag={shouldDisableDrag}
                     >
                         <motion.div
-                            className="rounded-2xl overflow-hidden w-full h-full will-change-transform"
+                            className="rounded-2xl w-full h-full will-change-transform"
                             onClick={() => shouldEnableClick && sendToBack(card.id)}
                             animate={{
                                 rotateZ: isTop ? 0 : (stack.length - index - 1) * 3 + randomRotate,
