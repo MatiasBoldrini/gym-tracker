@@ -141,6 +141,16 @@ export const ExerciseModal = ({
         // Always save to sync state
         onSave(newSets);
 
+        // Cerrar automáticamente si todas las series quedaron completas.
+        const allCompleted = newCompleted.every(Boolean);
+        if (allCompleted) {
+            // Pequeño delay para dejar que el estado suba y la animación de botón termine.
+            setTimeout(() => {
+                onClose();
+            }, 150);
+            return;
+        }
+
         if (isEditing) {
             setIsEditing(false);
         } else if (newCompleted[activeSetIndex] && activeSetIndex < sets.length - 1) {

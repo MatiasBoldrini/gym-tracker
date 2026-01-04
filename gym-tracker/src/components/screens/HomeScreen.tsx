@@ -400,6 +400,15 @@ export function HomeScreen({ initialWeek, initialPrs }: HomeScreenProps) {
             if (dayIdx >= 0 && exIdx >= 0) {
                 updatedWeek.days[dayIdx].exercises[exIdx].sets = sets;
                 setWeek(updatedWeek);
+
+                // Mantener el ejercicio seleccionado sincronizado.
+                setSelectedExercise((prev) => (prev && prev.name === selectedExercise.name ? { ...prev, sets } : prev));
+
+                // Si el ejercicio quedó completo, cerrar el modal automáticamente.
+                const completedNow = isExerciseComplete({ ...selectedExercise, sets });
+                if (completedNow) {
+                    setIsModalOpen(false);
+                }
             }
         } catch (error) {
             console.error("Failed to save series:", error);
