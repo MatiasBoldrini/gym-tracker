@@ -576,9 +576,18 @@ export function HomeScreen({ initialWeek, initialPrs }: HomeScreenProps) {
                             <span className="text-[10px] uppercase font-black tracking-wider text-gray-400">
                                 Rutina de hoy
                             </span>
-                            <span className="text-lg font-black text-black">
-                                {currentDay ? `Día ${currentDay.id}` : "Sin rutina"}
-                            </span>
+                            <div className="flex items-center gap-2">
+                                <span className="text-lg font-black text-black">
+                                    {currentDay ? `Día ${currentDay.id}` : "Sin rutina"}
+                                </span>
+                                {currentDay?.stars !== undefined && (
+                                    <span className="text-base" style={{ color: '#FFCC00' }}>
+                                        {currentDay.stars === 1 && "★☆☆"}
+                                        {currentDay.stars === 2 && "★★☆"}
+                                        {currentDay.stars === 3 && "★★★"}
+                                    </span>
+                                )}
+                            </div>
                         </div>
                         <div className="flex items-center gap-3">
                             {isRefreshingInfo && (

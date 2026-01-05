@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Star } from "lucide-react";
 
@@ -17,12 +17,24 @@ export function SessionRatingModal({
     onSave,
     dayName,
 }: SessionRatingModalProps) {
-    const [hoveredStar, setHoveredStar] = useState<number | null>(null);
+    const [selectedStars, setSelectedStars] = useState<number | null>(null);
+
+    // Reset selection when modal opens/closes
+    useEffect(() => {
+        if (!isOpen) {
+            setSelectedStars(null);
+        }
+    }, [isOpen]);
 
     const handleStarClick = (starIndex: number) => {
         // starIndex is 0-based, so add 1 for the actual star count
-        const stars = starIndex + 1;
-        onSave(stars);
+        setSelectedStars(starIndex + 1);
+    };
+
+    const handleConfirm = () => {
+        if (selectedStars !== null) {
+            onSave(selectedStars);
+        }
     };
 
     return (
@@ -61,18 +73,14 @@ export function SessionRatingModal({
                             {/* Stars */}
                             <div className="flex justify-center gap-4 mb-6">
                                 {[0, 1, 2].map((index) => {
-                                    const isFilled = hoveredStar !== null 
-                                        ? index <= hoveredStar 
+                                    const isFilled = selectedStars !== null 
+                                        ? index < selectedStars 
                                         : false;
                                     
                                     return (
                                         <button
                                             key={index}
                                             onClick={() => handleStarClick(index)}
-                                            onMouseEnter={() => setHoveredStar(index)}
-                                            onMouseLeave={() => setHoveredStar(null)}
-                                            onTouchStart={() => setHoveredStar(index)}
-                                            onTouchEnd={() => setHoveredStar(null)}
                                             className="w-16 h-16 flex items-center justify-center rounded-2xl transition-all active:scale-90"
                                             style={{
                                                 backgroundColor: isFilled ? 'rgba(255, 204, 0, 0.15)' : 'rgba(0, 0, 0, 0.03)',
@@ -90,10 +98,18 @@ export function SessionRatingModal({
                                 })}
                             </div>
 
-                            {/* Helper text */}
-                            <p className="text-xs font-bold text-gray-400 mb-4">
-                                Tocá una estrella para calificar tu sesión
-                            </p>
+                            {/* Confirm button */}
+                            <button
+                                onClick={handleConfirm}
+                                disabled={selectedStars === null}
+                                className={`w-full py-4 rounded-2xl font-bold text-sm mb-3 transition-all ${
+                                    selectedStars !== null
+                                        ? "bg-black text-white active:scale-[0.98]"
+                                        : "bg-gray-100 text-gray-400 cursor-not-allowed"
+                                }`}
+                            >
+                                Guardar calificación
+                            </button>
 
                             {/* Skip button */}
                             <button
