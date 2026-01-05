@@ -87,3 +87,46 @@ export async function fetchExerciseSets(params: {
     }
     return (await response.json()) as { sets: { weight: number; reps: number }[] };
 }
+
+/**
+ * Save session rating (stars) for a specific day.
+ * @param weekId - The week number (e.g., 1 for "Semana 1")
+ * @param dayId - The day number (1-5)
+ * @param stars - The rating (1, 2, or 3)
+ */
+export async function saveSessionRating(
+    weekId: number,
+    dayId: number,
+    stars: number
+): Promise<SaveResult> {
+    try {
+        const response = await fetch("/api/sheets/rating", {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+                weekId,
+                dayId,
+                stars,
+            }),
+        });
+
+        const data = await response.json();
+
+        if (!response.ok) {
+            return {
+                ok: false,
+                error: data.error || `Error ${response.status}`,
+            };
+        }
+
+        return { ok: true };
+    } catch (error: any) {
+        console.error("Error saving rating to Sheets:", error);
+        return {
+            ok: false,
+            error: error.message || "Network error",
+        };
+    }
+}

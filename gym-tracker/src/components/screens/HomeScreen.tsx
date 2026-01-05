@@ -1,13 +1,14 @@
 "use client";
 
 import { useMemo, useState, useEffect, useRef } from "react";
-import { saveExerciseSets, fetchExerciseSets, fetchWeekData, fetchWeeksList, WeekListItem } from "@/lib/sheets-client";
+import { saveExerciseSets, fetchExerciseSets, fetchWeekData, fetchWeeksList, WeekListItem, saveSessionRating } from "@/lib/sheets-client";
 import { Week, PersonalRecord, Exercise, Set } from "@/types";
 import { ExerciseCard } from "@/components/ui/ExerciseCard";
 import Stack from "@/components/ui/Stack";
 import { ExerciseModal } from "@/components/ui/ExerciseModal";
 import { DaySelector } from "@/components/ui/DaySelector";
 import { SetupModal } from "@/components/modals/SetupModal";
+import { SessionRatingModal } from "@/components/ui/SessionRatingModal";
 import { useAuth } from "@/lib/hooks/useAuth";
 import { EyeOff, Loader2, Settings, Sparkles } from "lucide-react";
 import { normalizeExerciseKey } from "@/lib/normalize";
@@ -42,6 +43,9 @@ export function HomeScreen({ initialWeek, initialPrs }: HomeScreenProps) {
     const [hideCompleted, setHideCompleted] = useState(false);
     const [toastMessage, setToastMessage] = useState<string | null>(null);
     const toastTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+    // Session rating modal
+    const [showRatingModal, setShowRatingModal] = useState(false);
 
     // Show setup modal if not fully configured (after initial load)
     useEffect(() => {
@@ -409,9 +413,42 @@ export function HomeScreen({ initialWeek, initialPrs }: HomeScreenProps) {
                 if (completedNow) {
                     setIsModalOpen(false);
                 }
+
+                // Check if we should show rating modal (if no rating exists for this day)
+                if (validSets.length > 0 && updatedWeek.days[dayIdx].stars === undefined) {
+                    // Small delay to let the exercise modal close first
+                    setTimeout(() => {
+                        setShowRatingModal(true);
+                    }, 200);
+                }
             }
         } catch (error) {
             console.error("Failed to save series:", error);
+        }
+    };
+
+    const handleSaveRating = async (stars: number) => {
+        if (!week || !currentDay) return;
+
+        setShowRatingModal(false);
+
+        try {
+            await saveSessionRating(week.id, currentDay.id, stars);
+
+            // Update local state immediately
+            setWeek((prev) => {
+                const updated = { ...prev };
+                const dayIdx = updated.days.findIndex((d) => d.id === currentDay.id);
+                if (dayIdx < 0) return prev;
+                updated.days = [...updated.days];
+                updated.days[dayIdx] = { ...updated.days[dayIdx], stars };
+                return updated;
+            });
+
+            showToast("Calificación guardada");
+        } catch (error) {
+            console.error("Failed to save rating:", error);
+            showToast("Error al guardar calificación");
         }
     };
 
@@ -636,6 +673,14 @@ export function HomeScreen({ initialWeek, initialPrs }: HomeScreenProps) {
                 isAuthenticated={auth.isAuthenticated}
                 hasSpreadsheet={auth.hasSpreadsheet}
                 currentSpreadsheetId={auth.spreadsheetId}
+            />
+
+            {/* Session Rating Modal */}
+            <SessionRatingModal
+                isOpen={showRatingModal}
+                onClose={() => setShowRatingModal(false)}
+                onSave={handleSaveRating}
+                dayName={currentDay ? `Día ${currentDay.id}` : undefined}
             />
 
             {/* Toast inferior */}

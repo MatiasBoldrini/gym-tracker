@@ -31,20 +31,43 @@ export async function fetchSheetCSV(params: {
     });
 }
 
+/**
+ * Parse stars from a rating string (e.g., "★★☆" -> 2)
+ */
+function parseStarsFromString(starsText: string): number {
+    return (starsText.match(/★/g) || []).length;
+}
+
 // Helper to parse "Semana X" sheets
 export function parseWeekData(data: any[][], weekId: number, exerciseMapping: Record<string, string> = {}): Week {
     const days: Day[] = [];
     let currentDay: Day | null = null;
+
+    // Pre-parse session ratings from rows F10, F20, F30, F40, F50
+    // Row index is 0-based, so F10 is data[9], F20 is data[19], etc.
+    const ratingsByDayId: Record<number, number> = {};
+    for (let dayId = 1; dayId <= 5; dayId++) {
+        const ratingRowIndex = dayId * 10 - 1; // 0-based: day 1 -> row 9, day 2 -> row 19, etc.
+        if (data[ratingRowIndex]) {
+            const ratingValue = data[ratingRowIndex][5]; // Column F is index 5
+            if (ratingValue && typeof ratingValue === "string" && ratingValue.includes("★")) {
+                ratingsByDayId[dayId] = parseStarsFromString(ratingValue);
+            }
+        }
+    }
 
     data.forEach((row, index) => {
         const firstCol = row[0]?.toString().toUpperCase() || "";
 
         if (firstCol.startsWith("DIA ")) {
             if (currentDay) days.push(currentDay);
+            const dayId = parseInt(firstCol.replace("DIA ", ""));
             currentDay = {
-                id: parseInt(firstCol.replace("DIA ", "")),
+                id: dayId,
                 name: firstCol,
                 exercises: [],
+                // Assign pre-parsed rating if exists
+                stars: ratingsByDayId[dayId],
             };
         } else if (currentDay && row[0] && row[0] !== "Ejercicio" && row[0] !== "DIA") {
             const rawName = String(row[0] ?? "");
@@ -85,12 +108,6 @@ export function parseWeekData(data: any[][], weekId: number, exerciseMapping: Re
             }
 
             currentDay.exercises.push(exercise);
-        }
-
-        // Check for stars at the end of the day or intensity
-        if (currentDay && row[5]?.toString().includes("★")) {
-            const starsText = row[5].toString();
-            currentDay.stars = (starsText.match(/★/g) || []).length;
         }
     });
 

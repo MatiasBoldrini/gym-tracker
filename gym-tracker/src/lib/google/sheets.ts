@@ -182,6 +182,56 @@ export async function saveExerciseSets(params: SaveExerciseParams): Promise<void
     });
 }
 
+export interface SaveSessionRatingParams {
+    accessToken: string;
+    spreadsheetId: string;
+    weekId: number;
+    dayId: number;
+    stars: number; // 1, 2, or 3
+}
+
+/**
+ * Converts a star count (1-3) to the string format used in the spreadsheet.
+ */
+function starsToString(stars: number): string {
+    switch (stars) {
+        case 1:
+            return "★☆☆";
+        case 2:
+            return "★★☆";
+        case 3:
+            return "★★★";
+        default:
+            return "★☆☆";
+    }
+}
+
+/**
+ * Save session rating (stars) to the spreadsheet.
+ * The rating is stored in cell F10, F20, F30, etc. based on dayId.
+ * Formula: ratingRow = dayId * 10
+ */
+export async function saveSessionRating(params: SaveSessionRatingParams): Promise<void> {
+    const { accessToken, spreadsheetId, weekId, dayId, stars } = params;
+
+    const auth = getAuthenticatedClient(accessToken);
+    const sheets = google.sheets({ version: "v4", auth });
+
+    const sheetName = `Semana ${weekId}`;
+    const ratingRow = dayId * 10;
+    const range = `'${sheetName}'!F${ratingRow}`;
+    const ratingValue = starsToString(stars);
+
+    await sheets.spreadsheets.values.update({
+        spreadsheetId,
+        range,
+        valueInputOption: "USER_ENTERED",
+        requestBody: {
+            values: [[ratingValue]],
+        },
+    });
+}
+
 /**
  * Test connection to the spreadsheet by reading sheet names
  */

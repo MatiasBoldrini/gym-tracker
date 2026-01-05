@@ -11,69 +11,75 @@
  * @return {Array} Tabla con columnas: Ejercicio, Peso PR, Reps, Fecha, 1RM Estimado
  * @customfunction
  */
-function TABLA_PRS() {
-    const ss = SpreadsheetApp.getActiveSpreadsheet();
-    const hojas = ss.getSheets().filter((h) => h.getName().startsWith("Semana"));
+function TABLA_PRS(tick) {
+    // `tick` existe solo para que la fórmula tenga una dependencia y se recalcule
+    // cuando el script actualiza el named range `TABLA_PRS_TICK`.
 
+    // Camino rápido: si existe la hoja cache, devolverla (mucho más rápido que re-escanear todas las semanas).
+    const ss = SpreadsheetApp.getActiveSpreadsheet();
+    const cache = ss.getSheetByName("Tabla PRs");
+    if (cache) {
+        const lastRow = cache.getLastRow();
+        const lastCol = Math.min(cache.getLastColumn(), 5);
+        if (lastRow >= 1 && lastCol >= 1) {
+            return cache.getRange(1, 1, lastRow, lastCol).getValues();
+        }
+    }
+
+    // Fallback (sin cache): cálculo optimizado leyendo solo A:M y solo pares reps/peso (F-G, H-I, J-K, L-M).
+    const hojas = ss.getSheets().filter((h) => /^Semana\s*\d+$/i.test(h.getName()));
     const prs = {};
 
     hojas.forEach((hoja) => {
         const nombreHoja = hoja.getName();
-        // Extraer número de semana (ej: "Semana 1" -> 1)
         const matchSemana = nombreHoja.match(/Semana\s*(\d+)/i);
-        const numSemana = matchSemana ? parseInt(matchSemana[1]) : 0;
+        const numSemana = matchSemana ? parseInt(matchSemana[1], 10) : 0;
 
-        const datos = hoja.getDataRange().getValues();
-        if (datos.length < 2) return;
+        const lastRow = hoja.getLastRow();
+        if (lastRow < 2) return;
 
+        const datos = hoja.getRange(1, 1, lastRow, 13).getValues(); // A:M
         let diaActual = 0;
 
-        datos.forEach((fila, rowIndex) => {
-            const ejercicio = fila[0];
+        datos.forEach((fila) => {
+            const colA = fila[0];
+            const ejercicioRaw = colA ? colA.toString() : "";
 
-            // Detectar cambio de día
-            if (ejercicio && typeof ejercicio === "string" && ejercicio.toUpperCase().includes("DIA")) {
-                diaActual++;
+            if (ejercicioRaw && ejercicioRaw.toUpperCase().includes("DIA")) {
+                const m = ejercicioRaw.match(/\d+/);
+                diaActual = m ? parseInt(m[0], 10) : diaActual + 1;
                 return;
             }
 
-            if (
-                !ejercicio ||
-                typeof ejercicio !== "string" ||
-                ejercicio.toLowerCase().includes("series") ||
-                ejercicio.toLowerCase().includes("notas") ||
-                ejercicio.trim() === ""
-            ) {
-                return;
-            }
+            const ejercicio = ejercicioRaw.trim();
+            if (!ejercicio) return;
+            const ejercicioLc = ejercicio.toLowerCase();
+            if (ejercicioLc.includes("series") || ejercicioLc.includes("notas")) return;
+            if (diaActual <= 0) return;
 
-            for (let col = 1; col < fila.length - 1; col++) {
-                const valor1 = fila[col];
-                const valor2 = fila[col + 1];
-
+            for (let setIdx = 0; setIdx < 4; setIdx++) {
+                const reps = fila[5 + setIdx * 2]; // F, H, J, L (0-based)
+                const peso = fila[6 + setIdx * 2]; // G, I, K, M
                 if (
-                    typeof valor1 === "number" &&
-                    typeof valor2 === "number" &&
-                    valor1 > 0 &&
-                    valor2 > 0 &&
-                    valor1 <= 30
+                    typeof reps !== "number" ||
+                    typeof peso !== "number" ||
+                    reps <= 0 ||
+                    peso <= 0 ||
+                    reps > 30
                 ) {
-                    const reps = valor1;
-                    const peso = valor2;
-                    const rm1 = reps === 1 ? peso : peso / (1.0278 - 0.0278 * reps);
+                    continue;
+                }
 
-                    if (!prs[ejercicio] || rm1 > prs[ejercicio].rm1) {
-                        // Guardar fecha en formato S1D2
-                        const fecha = `S${numSemana}D${diaActual}`;
-                        prs[ejercicio] = { peso: peso, reps: reps, rm1: rm1, fecha: fecha };
-                    }
+                const rm1 = reps === 1 ? peso : peso / (1.0278 - 0.0278 * reps);
+                if (!prs[ejercicio] || rm1 > prs[ejercicio].rm1) {
+                    const fecha = `S${numSemana}D${diaActual}`;
+                    prs[ejercicio] = { peso: peso, reps: reps, rm1: rm1, fecha: fecha };
                 }
             }
         });
     });
 
     const resultado = [["Ejercicio", "Peso PR", "Reps", "Fecha", "1RM Estimado"]];
-
     Object.keys(prs)
         .sort((a, b) => prs[b].rm1 - prs[a].rm1)
         .forEach((ejercicio) => {
