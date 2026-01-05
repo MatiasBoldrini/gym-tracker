@@ -161,15 +161,31 @@ export default function PerfilPage() {
                     Copiar rutina para ChatGPT
                 </button>
 
-                <a
-                    href={ROUTINE_BUILDER_URL}
-                    target="_blank"
-                    rel="noreferrer"
+                <button
+                    type="button"
+                    onClick={() => {
+                        const url = ROUTINE_BUILDER_URL;
+                        const isAndroid = /Android/i.test(navigator.userAgent);
+                        const isIOS = /iPhone|iPad|iPod/i.test(navigator.userAgent);
+
+                        if (isAndroid) {
+                            // Intent para Android: intenta abrir en la app, si no está instalada usa el navegador
+                            const intentUrl = `intent://gemini.google.com/gem/1h78boD42OJHWVL_adZzOtrEEs-uwERAn?usp=sharing&hl=es_419#Intent;scheme=https;package=com.google.android.apps.bard;end`;
+                            window.location.href = intentUrl;
+                        } else if (isIOS) {
+                            // En iOS, los Universal Links funcionan automáticamente sin target="_blank"
+                            // Usamos window.open sin target para permitir que iOS intercepte el enlace
+                            window.open(url, '_self');
+                        } else {
+                            // Desktop: abrimos en la misma ventana
+                            window.location.href = url;
+                        }
+                    }}
                     className="w-full py-3 rounded-2xl font-bold flex items-center justify-center gap-2 text-sm border border-black/10 text-black bg-white hover:bg-black/[0.02] active:translate-y-px transition"
                 >
                     Armador de rutinas
                     <ExternalLink size={16} />
-                </a>
+                </button>
 
                 {copyMessage && (
                     <div
