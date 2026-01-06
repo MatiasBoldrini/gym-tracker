@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import "./globals.css";
 import { BottomNav } from "@/components/navigation/BottomNav";
+import { PwaRegister } from "@/components/PwaRegister";
 
 export const metadata: Metadata = {
     title: "Gym Tracker",
@@ -37,6 +38,7 @@ export default function RootLayout({
     return (
         <html lang="es">
             <body className="bg-ios-background text-black min-h-[100dvh] overflow-x-hidden pb-[calc(var(--bottom-nav-base)+env(safe-area-inset-bottom))]">
+                <PwaRegister />
                 <main className="max-w-md mx-auto">
                     {children}
                 </main>

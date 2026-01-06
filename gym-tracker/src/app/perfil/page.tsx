@@ -5,6 +5,7 @@ import { ExternalLink, Copy, Check, Loader2, AlertCircle } from "lucide-react";
 import { fetchWeekData } from "@/lib/sheets-client";
 import { Week } from "@/types";
 import { useAuth } from "@/lib/hooks/useAuth";
+import Link from "next/link";
 
 const ROUTINE_BUILDER_URL =
     "https://gemini.google.com/gem/1h78boD42OJHWVL_adZzOtrEEs-uwERAn?usp=sharing&hl=es_419";
@@ -210,6 +211,15 @@ export default function PerfilPage() {
                     </div>
                 )}
 
+                <div className="pt-2">
+                    <Link
+                        href="/pwa-debug"
+                        className="text-xs font-bold text-ios-gray underline underline-offset-4"
+                    >
+                        Debug PWA
+                    </Link>
+                </div>
+                
                 
             </div>
         </div>
