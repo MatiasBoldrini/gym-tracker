@@ -11,6 +11,11 @@ interface SetupModalProps {
     isAuthenticated: boolean;
     hasSpreadsheet: boolean;
     currentSpreadsheetId?: string | null;
+    /**
+     * Error externo (por ejemplo, la app no pudo acceder al Sheet por permisos/ID mal pegado).
+     * Se muestra dentro del modal para guiar al usuario a corregirlo.
+     */
+    externalError?: string | null;
 }
 
 // Fallback público: permite mostrar el link de "hacer una copia" aunque no exista env var.
@@ -27,6 +32,7 @@ export function SetupModal({
     isAuthenticated,
     hasSpreadsheet,
     currentSpreadsheetId,
+    externalError,
 }: SetupModalProps) {
     const [spreadsheetUrl, setSpreadsheetUrl] = useState("");
     const [isSubmitting, setIsSubmitting] = useState(false);
@@ -222,6 +228,12 @@ export function SetupModal({
                                     </p>
                                 </div>
 
+                                {externalError && (
+                                    <div className="rounded-2xl bg-ios-red/10 border border-ios-red/20 px-4 py-3 text-sm text-ios-red font-semibold text-center">
+                                        {externalError}
+                                    </div>
+                                )}
+
                                 {/* Copy Template Button */}
                                 <button
                                     onClick={handleCopyTemplate}
@@ -281,6 +293,14 @@ export function SetupModal({
                                 <p className="text-gray-500 text-sm mb-6">
                                     Tu cuenta está configurada. Los entrenamientos se guardarán automáticamente.
                                 </p>
+                                {externalError && (
+                                    <div className="mb-4 rounded-2xl bg-ios-red/10 border border-ios-red/20 px-4 py-3 text-sm text-ios-red font-semibold text-center">
+                                        {externalError}
+                                        <div className="mt-2 text-[12px] font-bold text-ios-red/80">
+                                            Tip: tocá “Cambiar link del Google Sheet” o revisá que tengas permisos de edición.
+                                        </div>
+                                    </div>
+                                )}
                                 {currentSpreadsheetId && (
                                     <a
                                         href={`https://docs.google.com/spreadsheets/d/${currentSpreadsheetId}/edit`}

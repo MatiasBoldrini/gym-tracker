@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getUserStore, isUserAuthenticated } from "@/lib/user-store";
 import { refreshAccessToken } from "@/lib/google/oauth";
 import { saveSessionRating } from "@/lib/google/sheets";
+import { normalizeSheetsError } from "@/lib/google/sheets-errors";
 
 interface RatingRequestBody {
     weekId: number;
@@ -25,7 +26,7 @@ export async function POST(request: NextRequest) {
         // 1. Validate auth (cookie store)
         const store = await getUserStore();
         if (!isUserAuthenticated(store)) {
-            return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
+            return NextResponse.json({ error: "No autenticado" }, { status: 401 });
         }
 
         // 2. Parse and validate body
@@ -48,12 +49,15 @@ export async function POST(request: NextRequest) {
         const spreadsheetId = store.spreadsheetId;
 
         if (!refreshToken) {
-            return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
+            return NextResponse.json({ error: "No autenticado" }, { status: 401 });
         }
 
         if (!spreadsheetId) {
             return NextResponse.json(
-                { error: "No spreadsheet configured. Please set your spreadsheet URL." },
+                {
+                    error: "No hay un Google Sheet configurado. Abrí Configuración y pegá el link de tu copia.",
+                    code: "NO_SPREADSHEET",
+                },
                 { status: 403 }
             );
         }
@@ -73,17 +77,10 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ ok: true });
     } catch (error: any) {
         console.error("Error saving rating to Sheets:", error);
-
-        if (error.code === 403 || error.message?.includes("permission")) {
-            return NextResponse.json(
-                { error: "Permission denied. Make sure your Google account has access to the spreadsheet." },
-                { status: 403 }
-            );
-        }
-
+        const normalized = normalizeSheetsError(error);
         return NextResponse.json(
-            { error: "Failed to save rating. Please try again." },
-            { status: 500 }
+            { error: normalized.message, code: normalized.code },
+            { status: normalized.status }
         );
     }
 }

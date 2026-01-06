@@ -1,35 +1,10 @@
-import Papa from "papaparse";
-import { PersonalRecord, Week, Day, Exercise, Set } from "@/types";
+import { PersonalRecord, Week, Day, Exercise } from "@/types";
 import { normalizeExerciseKey } from "@/lib/normalize";
 
 /**
- * OJO: Export CSV por gid es frágil (el gid cambia por copia) y no sirve para modo multi-usuario.
- * Se mantiene solo para debug/demo. El modo real usa Sheets API con OAuth.
+ * Helpers de parseo para datos leídos desde Google Sheets (Sheets API).
+ * Nota: no incluye export/import por CSV (eso se eliminó a propósito).
  */
-export async function fetchSheetCSV(params: {
-    spreadsheetId: string;
-    gid: string;
-    fetchOptions?: RequestInit;
-}): Promise<any[]> {
-    const { spreadsheetId, gid, fetchOptions } = params;
-    const url = `https://docs.google.com/spreadsheets/d/${spreadsheetId}/export?format=csv&gid=${gid}`;
-    const response = await fetch(url, fetchOptions);
-
-    if (!response.ok) {
-        throw new Error(`Failed to fetch sheet (GID: ${gid}): ${response.status} ${response.statusText}`);
-    }
-
-    const csvText = await response.text();
-
-    return new Promise((resolve, reject) => {
-        Papa.parse(csvText, {
-            header: false,
-            skipEmptyLines: true,
-            complete: (results) => resolve(results.data as any[][]),
-            error: (error: any) => reject(error),
-        });
-    });
-}
 
 /**
  * Parse stars from a rating string (e.g., "★★☆" -> 2)
@@ -56,7 +31,7 @@ export function parseWeekData(data: any[][], weekId: number, exerciseMapping: Re
         }
     }
 
-    data.forEach((row, index) => {
+    data.forEach((row) => {
         const firstCol = row[0]?.toString().toUpperCase() || "";
 
         if (firstCol.startsWith("DIA ")) {
@@ -93,12 +68,12 @@ export function parseWeekData(data: any[][], weekId: number, exerciseMapping: Re
                 const reps = parseFloat(row[repCol]);
                 const weight = parseFloat(row[weightCol]);
 
-            // Solo consideramos "set" si hay reps y peso numéricos.
-            // Importante: no limitamos reps a 30 porque hay ejercicios con rangos más altos.
-            // Igual mantenemos límites razonables para evitar ruido de plantilla/formulas.
-            // Nota: reps=0 lo tratamos como "vacío" (evita falsos positivos/plantillas).
-            const repsOk = Number.isFinite(reps) && reps > 0 && reps <= 500;
-            const weightOk = Number.isFinite(weight) && weight >= 0 && weight <= 500;
+                // Solo consideramos "set" si hay reps y peso numéricos.
+                // Importante: no limitamos reps a 30 porque hay ejercicios con rangos más altos.
+                // Igual mantenemos límites razonables para evitar ruido de plantilla/formulas.
+                // Nota: reps=0 lo tratamos como "vacío" (evita falsos positivos/plantillas).
+                const repsOk = Number.isFinite(reps) && reps > 0 && reps <= 500;
+                const weightOk = Number.isFinite(weight) && weight >= 0 && weight <= 500;
                 if (repsOk && weightOk) {
                     exercise.sets.push({
                         reps,
@@ -119,13 +94,16 @@ export function parseWeekData(data: any[][], weekId: number, exerciseMapping: Re
 export function parsePRData(data: any[][]): PersonalRecord[] {
     // Assuming RM sheet has headers in the first row
     // Col A: Exercise, B: Weight PR, C: Reps, D: Date, E: 1RM Estimado
-    return data.slice(1).map(row => ({
-        exercise: String(row[0] ?? "").trim(),
-        weight: parseFloat(row[1]) || 0,
-        reps: parseFloat(row[2]) || 0,
-        date: row[3] || "",
-        estimated1RM: parseFloat(row[4]) || 0,
-    })).filter(pr => pr.exercise);
+    return data
+        .slice(1)
+        .map((row) => ({
+            exercise: String(row[0] ?? "").trim(),
+            weight: parseFloat(row[1]) || 0,
+            reps: parseFloat(row[2]) || 0,
+            date: row[3] || "",
+            estimated1RM: parseFloat(row[4]) || 0,
+        }))
+        .filter((pr) => pr.exercise);
 }
 
 export function parseExerciseMapping(data: any[][]): Record<string, string> {
@@ -142,6 +120,4 @@ export function parseExerciseMapping(data: any[][]): Record<string, string> {
     return mapping;
 }
 
-// Nota: exportar CSV por `gid` sirve solo para debug/demo.
-// No lo uses como “DB” en producción porque el `gid` cambia al copiar la plantilla.
-// En modo real se usan nombres de pestañas + Google Sheets API (OAuth).
+

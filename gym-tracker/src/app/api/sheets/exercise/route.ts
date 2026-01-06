@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { getUserStore, isUserAuthenticated } from "@/lib/user-store";
 import { refreshAccessToken } from "@/lib/google/oauth";
 import { readExerciseSets } from "@/lib/google/sheets";
+import { normalizeSheetsError } from "@/lib/google/sheets-errors";
 
 function parsePositiveInt(val: string | null): number | null {
     const n = Number(val);
@@ -24,16 +25,22 @@ export async function GET(request: NextRequest) {
 
         const store = await getUserStore();
         if (!isUserAuthenticated(store)) {
-            return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
+            return NextResponse.json({ error: "No autenticado" }, { status: 401 });
         }
 
         const refreshToken = store.refreshToken;
         const spreadsheetId = store.spreadsheetId;
         if (!refreshToken) {
-            return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
+            return NextResponse.json({ error: "No autenticado" }, { status: 401 });
         }
         if (!spreadsheetId) {
-            return NextResponse.json({ error: "No spreadsheet configured" }, { status: 403 });
+            return NextResponse.json(
+                {
+                    error: "No hay un Google Sheet configurado. Abrí Configuración y pegá el link de tu copia.",
+                    code: "NO_SPREADSHEET",
+                },
+                { status: 403 }
+            );
         }
 
         const accessToken = await refreshAccessToken(refreshToken);
@@ -48,11 +55,11 @@ export async function GET(request: NextRequest) {
         return NextResponse.json({ sets });
     } catch (error: any) {
         console.error("Error reading exercise sets:", error);
-        const msg = typeof error?.message === "string" ? error.message : "";
-        if (msg.includes("not found")) {
-            return NextResponse.json({ error: msg }, { status: 404 });
-        }
-        return NextResponse.json({ error: "Failed to read exercise sets" }, { status: 500 });
+        const normalized = normalizeSheetsError(error);
+        return NextResponse.json(
+            { error: normalized.message, code: normalized.code },
+            { status: normalized.status }
+        );
     }
 }
 

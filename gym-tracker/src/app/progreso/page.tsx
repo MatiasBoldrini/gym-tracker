@@ -1,7 +1,7 @@
 import { ProgresoScreen } from "@/components/screens/ProgresoScreen";
 import { refreshAccessToken } from "@/lib/google/oauth";
 import { readSheetValues } from "@/lib/google/sheets";
-import { parsePRData } from "@/lib/sheets";
+import { parsePRData } from "@/lib/sheets-parse";
 import { getUserStore, isUserAuthenticated } from "@/lib/user-store";
 
 export const dynamic = "force-dynamic";

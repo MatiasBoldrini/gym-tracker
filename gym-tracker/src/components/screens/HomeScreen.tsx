@@ -17,9 +17,10 @@ import { cacheUrls } from "@/lib/pwa";
 type HomeScreenProps = {
     initialWeek: Week;
     initialPrs: PersonalRecord[];
+    initialSetupError?: { message: string; code?: string } | null;
 };
 
-export function HomeScreen({ initialWeek, initialPrs }: HomeScreenProps) {
+export function HomeScreen({ initialWeek, initialPrs, initialSetupError }: HomeScreenProps) {
     const [week, setWeek] = useState<Week>(initialWeek);
     const [prs] = useState<PersonalRecord[]>(initialPrs);
     const [currentDayIndex, setCurrentDayIndex] = useState(0);
@@ -34,6 +35,7 @@ export function HomeScreen({ initialWeek, initialPrs }: HomeScreenProps) {
     // Auth state
     const auth = useAuth();
     const [showSetupModal, setShowSetupModal] = useState(false);
+    const [setupBlockingError, setSetupBlockingError] = useState<string | null>(initialSetupError?.message ?? null);
 
     // Info popover (rutina + progreso)
     const [showInfoPopover, setShowInfoPopover] = useState(false);
@@ -55,6 +57,39 @@ export function HomeScreen({ initialWeek, initialPrs }: HomeScreenProps) {
         }
     }, [auth.isLoading, auth.isSetupComplete]);
 
+    // Si el server detectó un problema de acceso (403/404) lo mostramos y abrimos el setup.
+    useEffect(() => {
+        const msg = initialSetupError?.message;
+        if (!msg) return;
+        setSetupBlockingError(msg);
+        setShowSetupModal(true);
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [initialSetupError?.message]);
+
+    const handleSheetsSetupIssue = (err: any) => {
+        const code = err?.code as string | undefined;
+        const status = err?.status as number | undefined;
+        const message = typeof err?.message === "string" ? err.message : "";
+        const messageLower = message.toLowerCase();
+
+        const isBlocking =
+            code === "NO_SPREADSHEET" ||
+            code === "SHEETS_PERMISSION" ||
+            code === "SHEETS_NOT_FOUND" ||
+            code === "SHEETS_BAD_RANGE" ||
+            status === 403 ||
+            status === 404 ||
+            messageLower.includes("no tenés permiso") ||
+            messageLower.includes("permission") ||
+            messageLower.includes("no encontramos ese google sheet");
+
+        if (!isBlocking) return false;
+
+        setSetupBlockingError(message || "No pudimos acceder a tu Google Sheet. Revisá el link/permisos.");
+        setShowSetupModal(true);
+        return true;
+    };
+
     useEffect(() => {
         if (auth.isLoading) return;
         if (!auth.isSetupComplete) return;
@@ -62,19 +97,25 @@ export function HomeScreen({ initialWeek, initialPrs }: HomeScreenProps) {
         let cancelled = false;
 
         const loadWeeks = async () => {
-            const fetchedWeeks = await fetchWeeksList();
-            if (cancelled) return;
+            try {
+                const fetchedWeeks = await fetchWeeksList();
+                if (cancelled) return;
 
-            const sorted = fetchedWeeks.sort((a, b) => a.id - b.id);
-            setWeeks(sorted);
+                const sorted = fetchedWeeks.sort((a, b) => a.id - b.id);
+                setWeeks(sorted);
 
-            const resolvedWeekId =
-                sorted.some((w) => w.id === selectedWeekId)
-                    ? selectedWeekId
-                    : (sorted[0]?.id ?? 1);
+                const resolvedWeekId =
+                    sorted.some((w) => w.id === selectedWeekId)
+                        ? selectedWeekId
+                        : (sorted[0]?.id ?? 1);
 
-            setSelectedWeekId(resolvedWeekId);
-            setSelectedWeekName(`Semana ${resolvedWeekId}`);
+                setSelectedWeekId(resolvedWeekId);
+                setSelectedWeekName(`Semana ${resolvedWeekId}`);
+            } catch (e) {
+                if (!handleSheetsSetupIssue(e)) {
+                    console.error("Failed to load weeks:", e);
+                }
+            }
         };
 
         loadWeeks();
@@ -99,7 +140,9 @@ export function HomeScreen({ initialWeek, initialPrs }: HomeScreenProps) {
                 setCurrentDayIndex(0);
                 setSelectedWeekName(`Semana ${selectedWeekId}`);
             } catch (e) {
-                console.error("Failed to load week:", e);
+                if (!handleSheetsSetupIssue(e)) {
+                    console.error("Failed to load week:", e);
+                }
             }
         };
 
@@ -351,7 +394,9 @@ export function HomeScreen({ initialWeek, initialPrs }: HomeScreenProps) {
                         // Keep modal state in sync too.
                         setSelectedExercise((prev) => (prev && prev.name === exercise.name ? { ...prev, sets: normalizedSets } : prev));
                     } catch (e) {
-                        console.error("Failed to preload sets:", e);
+                        if (!handleSheetsSetupIssue(e)) {
+                            console.error("Failed to preload sets:", e);
+                        }
                     }
                 }}
             >
@@ -409,7 +454,13 @@ export function HomeScreen({ initialWeek, initialPrs }: HomeScreenProps) {
                 .map(s => ({ weight: s.weight!, reps: s.reps! }));
 
             if (validSets.length > 0) {
-                await saveExerciseSets(week.id, currentDay.id, selectedExercise.name, validSets);
+                const result = await saveExerciseSets(week.id, currentDay.id, selectedExercise.name, validSets);
+                if (!result.ok) {
+                    const err = new Error(result.error || "Error al guardar");
+                    (err as any).code = result.code;
+                    (err as any).status = result.status;
+                    throw err;
+                }
             }
 
             // Optionally update local state to show progress immediately
@@ -439,7 +490,10 @@ export function HomeScreen({ initialWeek, initialPrs }: HomeScreenProps) {
                 }
             }
         } catch (error) {
-            console.error("Failed to save series:", error);
+            if (!handleSheetsSetupIssue(error)) {
+                console.error("Failed to save series:", error);
+                showToast("Error al guardar");
+            }
         }
     };
 
@@ -449,7 +503,13 @@ export function HomeScreen({ initialWeek, initialPrs }: HomeScreenProps) {
         setShowRatingModal(false);
 
         try {
-            await saveSessionRating(week.id, currentDay.id, stars);
+            const result = await saveSessionRating(week.id, currentDay.id, stars);
+            if (!result.ok) {
+                const err = new Error(result.error || "Error al guardar calificación");
+                (err as any).code = result.code;
+                (err as any).status = result.status;
+                throw err;
+            }
 
             // Update local state immediately
             setWeek((prev) => {
@@ -463,8 +523,10 @@ export function HomeScreen({ initialWeek, initialPrs }: HomeScreenProps) {
 
             showToast("Calificación guardada");
         } catch (error) {
-            console.error("Failed to save rating:", error);
-            showToast("Error al guardar calificación");
+            if (!handleSheetsSetupIssue(error)) {
+                console.error("Failed to save rating:", error);
+                showToast("Error al guardar calificación");
+            }
         }
     };
 
@@ -690,14 +752,19 @@ export function HomeScreen({ initialWeek, initialPrs }: HomeScreenProps) {
             {/* Setup Modal */}
             <SetupModal
                 isOpen={showSetupModal}
-                onClose={() => setShowSetupModal(false)}
+                onClose={() => {
+                    setShowSetupModal(false);
+                    setSetupBlockingError(null);
+                }}
                 onComplete={() => {
                     auth.refresh();
                     setShowSetupModal(false);
+                    setSetupBlockingError(null);
                 }}
                 isAuthenticated={auth.isAuthenticated}
                 hasSpreadsheet={auth.hasSpreadsheet}
                 currentSpreadsheetId={auth.spreadsheetId}
+                externalError={setupBlockingError}
             />
 
             {/* Session Rating Modal */}

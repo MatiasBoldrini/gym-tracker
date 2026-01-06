@@ -3,6 +3,7 @@ import { getUserStore, isUserAuthenticated } from "@/lib/user-store";
 import { refreshAccessToken } from "@/lib/google/oauth";
 import { readSheetValues } from "@/lib/google/sheets";
 import { computeFatigaFromSheet } from "@/lib/fatiga";
+import { normalizeSheetsError } from "@/lib/google/sheets-errors";
 
 export async function GET() {
     try {
@@ -34,9 +35,10 @@ export async function GET() {
         });
     } catch (error) {
         console.error("Error in /api/fatiga:", error);
+        const normalized = normalizeSheetsError(error);
         return NextResponse.json(
-            { error: "Failed to load fatiga data" },
-            { status: 500 }
+            { error: normalized.message, code: normalized.code },
+            { status: normalized.status }
         );
     }
 }

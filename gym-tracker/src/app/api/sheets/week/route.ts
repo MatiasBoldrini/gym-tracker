@@ -2,7 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { getUserStore, isUserAuthenticated } from "@/lib/user-store";
 import { refreshAccessToken } from "@/lib/google/oauth";
 import { readSheetValues } from "@/lib/google/sheets";
-import { parseExerciseMapping, parseWeekData } from "@/lib/sheets";
+import { parseExerciseMapping, parseWeekData } from "@/lib/sheets-parse";
+import { normalizeSheetsError } from "@/lib/google/sheets-errors";
 
 function getWeekIdFromRequest(request: NextRequest): number | null {
     const weekIdRaw = request.nextUrl.searchParams.get("weekId");
@@ -20,16 +21,22 @@ export async function GET(request: NextRequest) {
 
         const store = await getUserStore();
         if (!isUserAuthenticated(store)) {
-            return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
+            return NextResponse.json({ error: "No autenticado" }, { status: 401 });
         }
 
         const refreshToken = store.refreshToken;
         const spreadsheetId = store.spreadsheetId;
         if (!refreshToken) {
-            return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
+            return NextResponse.json({ error: "No autenticado" }, { status: 401 });
         }
         if (!spreadsheetId) {
-            return NextResponse.json({ error: "No spreadsheet configured" }, { status: 403 });
+            return NextResponse.json(
+                {
+                    error: "No hay un Google Sheet configurado. Abrí Configuración y pegá el link de tu copia.",
+                    code: "NO_SPREADSHEET",
+                },
+                { status: 403 }
+            );
         }
 
         const accessToken = await refreshAccessToken(refreshToken);
@@ -49,11 +56,11 @@ export async function GET(request: NextRequest) {
         return NextResponse.json({ week });
     } catch (error: any) {
         console.error("Error loading week:", error);
-        const msg = typeof error?.message === "string" ? error.message : "";
-        if (msg.includes("Unable to parse range") || msg.includes("not found")) {
-            return NextResponse.json({ error: "Week sheet not found" }, { status: 404 });
-        }
-        return NextResponse.json({ error: "Failed to load week" }, { status: 500 });
+        const normalized = normalizeSheetsError(error);
+        return NextResponse.json(
+            { error: normalized.message, code: normalized.code },
+            { status: normalized.status }
+        );
     }
 }
 

@@ -1,5 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getUserStore, isUserAuthenticated, updateUserStore } from "@/lib/user-store";
+import { refreshAccessToken } from "@/lib/google/oauth";
+import { listSpreadsheetSheetTitles } from "@/lib/google/sheets";
+import { normalizeSheetsError } from "@/lib/google/sheets-errors";
 
 // Extract spreadsheet ID from various URL formats
 function extractSpreadsheetId(input: string): string | null {
@@ -20,7 +23,7 @@ export async function GET() {
     try {
         const store = await getUserStore();
         if (!isUserAuthenticated(store)) {
-            return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
+            return NextResponse.json({ error: "No autenticado" }, { status: 401 });
         }
 
         return NextResponse.json({ spreadsheetId: store.spreadsheetId || null });
@@ -34,7 +37,7 @@ export async function POST(request: NextRequest) {
     try {
         const store = await getUserStore();
         if (!isUserAuthenticated(store)) {
-            return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
+            return NextResponse.json({ error: "No autenticado" }, { status: 401 });
         }
 
         const body = await request.json();
@@ -42,7 +45,7 @@ export async function POST(request: NextRequest) {
 
         if (!spreadsheetUrl || typeof spreadsheetUrl !== "string") {
             return NextResponse.json(
-                { error: "spreadsheetUrl is required" },
+                { error: "Tenés que enviar `spreadsheetUrl`" },
                 { status: 400 }
             );
         }
@@ -50,8 +53,27 @@ export async function POST(request: NextRequest) {
         const spreadsheetId = extractSpreadsheetId(spreadsheetUrl);
         if (!spreadsheetId) {
             return NextResponse.json(
-                { error: "Invalid spreadsheet URL or ID" },
+                { error: "El link/ID del spreadsheet no es válido. Pegá la URL completa de Google Sheets." },
                 { status: 400 }
+            );
+        }
+
+        // Validar que el usuario realmente tenga acceso al Sheet ANTES de guardarlo,
+        // para no dejarlo “bloqueado” con una config inválida.
+        const refreshToken = store.refreshToken;
+        if (!refreshToken) {
+            return NextResponse.json({ error: "No autenticado" }, { status: 401 });
+        }
+
+        try {
+            const accessToken = await refreshAccessToken(refreshToken);
+            // Con listar pestañas alcanza como health check (permiso + existencia).
+            await listSpreadsheetSheetTitles(accessToken, spreadsheetId);
+        } catch (err: any) {
+            const normalized = normalizeSheetsError(err);
+            return NextResponse.json(
+                { error: normalized.message, code: normalized.code },
+                { status: normalized.status }
             );
         }
 

@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { getUserStore, isUserAuthenticated } from "@/lib/user-store";
 import { refreshAccessToken } from "@/lib/google/oauth";
 import { listSpreadsheetSheetTitles } from "@/lib/google/sheets";
+import { normalizeSheetsError } from "@/lib/google/sheets-errors";
 
 function parseWeekFromTitle(title: string): { id: number; name: string } | null {
     const match = title.trim().match(/^Semana\s+(\d+)$/i);
@@ -15,16 +16,22 @@ export async function GET() {
     try {
         const store = await getUserStore();
         if (!isUserAuthenticated(store)) {
-            return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
+            return NextResponse.json({ error: "No autenticado" }, { status: 401 });
         }
 
         const refreshToken = store.refreshToken;
         const spreadsheetId = store.spreadsheetId;
         if (!refreshToken) {
-            return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
+            return NextResponse.json({ error: "No autenticado" }, { status: 401 });
         }
         if (!spreadsheetId) {
-            return NextResponse.json({ error: "No spreadsheet configured" }, { status: 403 });
+            return NextResponse.json(
+                {
+                    error: "No hay un Google Sheet configurado. Abrí Configuración y pegá el link de tu copia.",
+                    code: "NO_SPREADSHEET",
+                },
+                { status: 403 }
+            );
         }
 
         const accessToken = await refreshAccessToken(refreshToken);
@@ -38,7 +45,11 @@ export async function GET() {
         return NextResponse.json({ weeks });
     } catch (error: any) {
         console.error("Error listing weeks:", error);
-        return NextResponse.json({ error: "Failed to list weeks" }, { status: 500 });
+        const normalized = normalizeSheetsError(error);
+        return NextResponse.json(
+            { error: normalized.message, code: normalized.code },
+            { status: normalized.status }
+        );
     }
 }
 

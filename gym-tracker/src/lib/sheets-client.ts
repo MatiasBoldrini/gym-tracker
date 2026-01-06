@@ -6,6 +6,8 @@
 export interface SaveResult {
     ok: boolean;
     error?: string;
+    code?: string;
+    status?: number;
 }
 
 export interface WeekListItem {
@@ -39,6 +41,8 @@ export async function saveExerciseSets(
             return {
                 ok: false,
                 error: data.error || `Error ${response.status}`,
+                code: data.code,
+                status: response.status,
             };
         }
 
@@ -52,13 +56,26 @@ export async function saveExerciseSets(
     }
 }
 
+function createApiError(params: { message: string; status: number; code?: string }) {
+    const err = new Error(params.message);
+    (err as any).status = params.status;
+    (err as any).code = params.code;
+    return err;
+}
+
 /**
  * Fetch list of weeks from the user's spreadsheet.
  */
 export async function fetchWeeksList(): Promise<WeekListItem[]> {
     const response = await fetch("/api/sheets/weeks", { method: "GET" });
-    if (!response.ok) return [];
-    const data = await response.json();
+    const data = await response.json().catch(() => ({} as any));
+    if (!response.ok) {
+        throw createApiError({
+            message: data?.error || `Error ${response.status}`,
+            status: response.status,
+            code: data?.code,
+        });
+    }
     return Array.isArray(data.weeks) ? (data.weeks as WeekListItem[]) : [];
 }
 
@@ -68,7 +85,11 @@ export async function fetchWeekData(weekId: number) {
     });
     if (!response.ok) {
         const data = await response.json().catch(() => ({}));
-        throw new Error(data?.error || `Error ${response.status}`);
+        throw createApiError({
+            message: data?.error || `Error ${response.status}`,
+            status: response.status,
+            code: (data as any)?.code,
+        });
     }
     return (await response.json()) as { week: any };
 }
@@ -83,7 +104,11 @@ export async function fetchExerciseSets(params: {
     const response = await fetch(url, { method: "GET" });
     if (!response.ok) {
         const data = await response.json().catch(() => ({}));
-        throw new Error(data?.error || `Error ${response.status}`);
+        throw createApiError({
+            message: data?.error || `Error ${response.status}`,
+            status: response.status,
+            code: (data as any)?.code,
+        });
     }
     return (await response.json()) as { sets: { weight: number; reps: number }[] };
 }
@@ -118,6 +143,8 @@ export async function saveSessionRating(
             return {
                 ok: false,
                 error: data.error || `Error ${response.status}`,
+                code: data.code,
+                status: response.status,
             };
         }
 
