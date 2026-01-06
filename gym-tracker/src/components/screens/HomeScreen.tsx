@@ -12,6 +12,7 @@ import { SessionRatingModal } from "@/components/ui/SessionRatingModal";
 import { useAuth } from "@/lib/hooks/useAuth";
 import { EyeOff, Loader2, Settings, Sparkles } from "lucide-react";
 import { normalizeExerciseKey } from "@/lib/normalize";
+import { cacheUrls } from "@/lib/pwa";
 
 type HomeScreenProps = {
     initialWeek: Week;
@@ -108,6 +109,21 @@ export function HomeScreen({ initialWeek, initialPrs }: HomeScreenProps) {
             cancelled = true;
         };
     }, [auth.isLoading, auth.isSetupComplete, selectedWeekId]);
+
+    // Cache selectivo: precachear SOLO las imágenes de la rutina cargada (toda la semana).
+    // Esto evita precache masivo (iOS) y deja offline más sólido para la rutina actual.
+    useEffect(() => {
+        if (!auth.isSetupComplete) return;
+        if (!week?.days?.length) return;
+
+        const urls = week.days
+            .flatMap((d) => d.exercises || [])
+            .map((e) => (e?.image ? `/images/exercises/${e.image}` : null))
+            .filter((u): u is string => !!u);
+
+        // Fire-and-forget: el SW cachea en background.
+        void cacheUrls(urls);
+    }, [auth.isSetupComplete, week]);
 
     const prByExercise = useMemo(() => {
         const map = new Map<string, PersonalRecord>();
