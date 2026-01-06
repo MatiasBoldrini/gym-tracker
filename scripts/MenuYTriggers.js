@@ -7,14 +7,6 @@ function onOpen() {
   SpreadsheetApp.getUi()
     .createMenu("🏋️ Gym Tools")
     .addItem("🔄 Actualizar datos", "actualizarPRs")
-    .addSubMenu(
-      SpreadsheetApp.getUi()
-        .createMenu("⚡ PRs (rápido)")
-        .addItem("🔄 Actualizar Tabla PRs (cache)", "actualizarTablaPRsCache")
-        .addItem("⚙️ Activar auto-actualización PRs", "crearTriggerTablaPRs")
-        .addItem("❌ Desactivar auto-actualización PRs", "eliminarTriggerTablaPRs")
-        .addItem("🛠️ Migrar fórmula TABLA_PRS()", "migrarFormulasTablaPRs")
-    )
     .addSeparator()
     .addSubMenu(
       SpreadsheetApp.getUi()

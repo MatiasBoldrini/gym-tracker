@@ -1,31 +1,52 @@
+"use client";
+
+import { useEffect, useState } from "react";
 import { FatigaScreen } from "@/components/screens/FatigaScreen";
-import { computeFatigaFromSheet } from "@/lib/fatiga";
-import { getUserStore, isUserAuthenticated } from "@/lib/user-store";
-import { refreshAccessToken } from "@/lib/google/oauth";
-import { readSheetValues } from "@/lib/google/sheets";
+import { Loader2 } from "lucide-react";
+import type { FatigaDaySummaryRow, FatigaMuscleRow } from "@/lib/fatiga";
 
-export const dynamic = "force-dynamic";
+interface FatigaData {
+    muscleRows: FatigaMuscleRow[];
+    daySummary: FatigaDaySummaryRow[];
+    calendarDays: string[];
+    intensityByGroupId: Record<string, number>;
+}
 
-export default async function FatigaPage() {
-    try {
-        const store = await getUserStore();
-        if (!isUserAuthenticated(store) || !store.spreadsheetId) {
-            return <FatigaScreen muscleRows={[]} daySummary={[]} calendarDays={[]} intensityByGroupId={{}} />;
+export default function FatigaPage() {
+    const [data, setData] = useState<FatigaData | null>(null);
+    const [isLoading, setIsLoading] = useState(true);
+    const [error, setError] = useState<string | null>(null);
+
+    useEffect(() => {
+        async function loadFatiga() {
+            try {
+                const response = await fetch("/api/fatiga");
+                if (!response.ok) {
+                    const errData = await response.json().catch(() => ({}));
+                    throw new Error(errData.error || `Error ${response.status}`);
+                }
+                const json: FatigaData = await response.json();
+                setData(json);
+            } catch (err: any) {
+                console.error("Error loading fatiga:", err);
+                setError(err.message || "Error al cargar datos");
+            } finally {
+                setIsLoading(false);
+            }
         }
 
-        const accessToken = await refreshAccessToken(store.refreshToken!);
-        const data = await readSheetValues(accessToken, store.spreadsheetId, `'Fatiga'!A:Z`);
-        const { muscleRows, daySummary, calendarDays, raw } = computeFatigaFromSheet(data);
+        loadFatiga();
+    }, []);
+
+    if (isLoading) {
         return (
-            <FatigaScreen
-                muscleRows={muscleRows}
-                daySummary={daySummary}
-                calendarDays={calendarDays}
-                intensityByGroupId={raw}
-            />
+            <div className="flex flex-col items-center justify-center min-h-[60vh] p-6">
+                <Loader2 className="w-8 h-8 animate-spin text-ios-gray" />
+            </div>
         );
-    } catch (error) {
-        console.error("Error loading Fatiga page:", error);
+    }
+
+    if (error) {
         return (
             <div className="flex flex-col items-center justify-center min-h-screen p-6 text-center">
                 <div className="mb-4 text-ios-red">
@@ -50,9 +71,18 @@ export default async function FatigaPage() {
                     No se pudo cargar la información de fatiga. Por favor verifica la conexión con Google Sheets.
                 </p>
                 <div className="text-xs bg-gray-100 p-3 rounded-lg text-left w-full max-w-sm overflow-auto">
-                    {String(error)}
+                    {error}
                 </div>
             </div>
         );
     }
+
+    return (
+        <FatigaScreen
+            muscleRows={data?.muscleRows ?? []}
+            daySummary={data?.daySummary ?? []}
+            calendarDays={data?.calendarDays ?? []}
+            intensityByGroupId={data?.intensityByGroupId ?? {}}
+        />
+    );
 }

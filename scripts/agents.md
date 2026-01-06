@@ -4,6 +4,96 @@ Este directorio contiene **código de Google Apps Script** (aunque ahora los arc
 
 > Guía de estilo/modularidad del repo: ver `scripts/CONVENCIONES.md` (incluye la regla de no superar ~900 líneas por archivo).
 
+---
+
+## Estructura del Google Sheets
+
+El spreadsheet **"Rutina Gym v3"** tiene las siguientes pestañas:
+
+### `Semana 1` (y `Semana 2`, `Semana 3`, etc.)
+
+Hojas de **registro de entrenamiento** organizadas por días. Se pueden crear múltiples semanas para un mesociclo.
+
+| Columna | Contenido               | Notas                                      |
+| ------- | ----------------------- | ------------------------------------------ |
+| A       | Nombre del ejercicio    | Encabezado "DIA N" marca inicio de bloque  |
+| B       | Series (ej: "3 x 8-12") | Dropdown desde hoja `Series`               |
+| D       | Notas                   | Campo libre para observaciones             |
+| F-G     | Serie 1: Reps / Peso    | Datos numéricos registrados por el usuario |
+| H-I     | Serie 2: Reps / Peso    |                                            |
+| J-K     | Serie 3: Reps / Peso    |                                            |
+| L-M     | Serie 4: Reps / Peso    |                                            |
+
+**Estructura por días:**
+
+- Cada bloque comienza con una fila "DIA N" en columna A (ej: fila 2 = "DIA 1", fila 12 = "DIA 2")
+- Debajo del encabezado: fila con headers "Series", "Notas", "Reps", "Peso" (×4 series)
+- Filas siguientes: ejercicios del día (hasta ~6-8 ejercicios por día)
+- Espacio en blanco entre días
+
+### `Fatiga`
+
+Dashboard de **análisis de volumen muscular** con visualización corporal.
+
+| Sección           | Ubicación   | Contenido                                                     |
+| ----------------- | ----------- | ------------------------------------------------------------- |
+| Tabla de músculos | Cols C-F    | Músculo, series totales (barra visual), conteo por frecuencia |
+| Calendario        | Cols H-N    | Distribución LUN-DOM de series por músculo                    |
+| Resumen por día   | Filas 17-22 | DIA 1-5: día de semana, promedio ★, total series              |
+| Body Map          | Derecha     | Imágenes SVG frontal/trasera coloreadas por fatiga muscular   |
+
+**Músculos rastreados**: Espalda, Glúteos, Bíceps, Hombro, Tríceps, Cuádriceps, Isquiotibiales, Pecho.
+
+### `RM`
+
+Tabla de **Personal Records (Récords Personales)** generada automáticamente.
+
+| Columna | Contenido                                          |
+| ------- | -------------------------------------------------- |
+| A       | Ejercicio                                          |
+| B       | Peso PR (mejor peso registrado)                    |
+| C       | Reps (repeticiones con ese peso)                   |
+| D       | Fecha (formato SxDy = Semana x, Día y)             |
+| E       | 1RM Estimado (cálculo Epley: peso × (1 + reps/30)) |
+
+> Esta hoja usa la fórmula `=TABLA_PRS()` en A1 (definida en `FormulasPersonalizadas.js`).
+
+### `Ejercicios`
+
+**Catálogo maestro** de todos los ejercicios disponibles.
+
+| Columna | Contenido                                      |
+| ------- | ---------------------------------------------- |
+| A       | Nombre del ejercicio                           |
+| B       | Grupo Muscular (Pecho, Espalda, Glúteos, etc.) |
+| C       | Categorías (para filtros/agrupación)           |
+| D       | Imagen (nombre archivo .webp)                  |
+| E       | Image names (archivos adicionales .webp)       |
+
+**Grupos musculares**: Pecho, Espalda, Glúteos, Cuádriceps, Isquiotibiales, Hombro, Bíceps, Tríceps, Aductores, Gemelos, Abdominales, Cuello, Antebrazos.
+
+### `Series`
+
+Lista de **rangos de series predefinidos** para usar como dropdown en las hojas de semana.
+
+Valores disponibles:
+
+- `3 x 10-12`, `3 x 10-15`, `3 x 6-10`, `3 x 5-8`
+- `3 x 8-10`, `3 x 8-12`, `2 x 10-15`, `2 x 6-10`
+- `4 x 20-25`, `2 x 8-12`
+
+### `Calificación`
+
+Lista de **opciones de calificación con estrellas** para evaluar rendimiento por serie.
+
+| Valor | Significado                          |
+| ----- | ------------------------------------ |
+| ★★★   | Excelente (RIR 0-1)                  |
+| ★★☆   | Bueno (RIR 2-3)                      |
+| ★☆☆   | Regular (RIR 4+, no llegué al fallo) |
+
+---
+
 ## Mapa rápido (qué se ejecuta y cuándo)
 
 - **Menú y triggers**: `MenuYTriggers.js`
@@ -23,6 +113,7 @@ Este directorio contiene **código de Google Apps Script** (aunque ahora los arc
 **Propósito**: agrega el menú “🏋️ Gym Tools” y conecta acciones del usuario con funciones del proyecto. Maneja un trigger horario para “refrescar” fórmulas personalizadas.
 
 **Puntos de entrada**:
+
 - `onOpen()`: crea el menú con:
   - “Actualizar datos” → `actualizarPRs()`
   - Submenú “Borrar día” → `borrarDia1..5()` (delegan en `borrarDatosDia(dia)` de `BorrarDatosDia.js`)
@@ -32,11 +123,13 @@ Este directorio contiene **código de Google Apps Script** (aunque ahora los arc
   - “Desactivar auto-actualización” → `eliminarTriggers()`
 
 **Funciones principales**:
+
 - `actualizarPRs()`: recorre hojas específicas (`Calculadora`, `RM`, `Fatiga`, `Calculos Aux.`) y, si encuentra fórmulas que incluyen `TABLA_PRS`, `PROMEDIO_ESTRELLAS` o `FRECUENCIA_MUSCULO`, las “reinserta” para forzar recálculo.
 - `crearTrigger()`: borra triggers previos y crea uno `timeBased().everyHours(1)` que llama a `actualizarPRs`.
 - `eliminarTriggers()`: elimina triggers cuyo handler sea `actualizarPRs`.
 
 **Dependencias**:
+
 - Llama a `borrarDatosDia(dia)` (en `BorrarDatosDia.js`).
 - Llama a `crearMesociclo()` / `borrarMesociclo()` (en `GestionMesociclos.js`).
 - Llama a `copiarRutinaComoPrompt()` / `pegarRutinaDesdeIA()` (en `IntegracionIA.js`).
@@ -48,6 +141,7 @@ Este directorio contiene **código de Google Apps Script** (aunque ahora los arc
 **Propósito**: borrar (con confirmación) los datos del **Día N** dentro de una hoja `Semana ...`.
 
 **Funciones principales**:
+
 - `borrarDatosDia(diaSeleccionado)`:
   - Valida que la hoja activa empiece con `"Semana"`.
   - Usa `detectarDias(hoja)` para ubicar rangos por día.
@@ -61,6 +155,7 @@ Este directorio contiene **código de Google Apps Script** (aunque ahora los arc
   - Devuelve un array con `{ numero, filaInicio, filaFin }` para cada día detectado.
 
 **Dependencias**:
+
 - No depende de otros archivos.
 - Es **dependencia** de `IntegracionIA.js` (para parsear la rutina por días) y de `MenuYTriggers.js` (acciones “Borrar Día”).
 
@@ -71,6 +166,7 @@ Este directorio contiene **código de Google Apps Script** (aunque ahora los arc
 **Propósito**: provee funciones `@customfunction` para usarse como fórmulas en Sheets.
 
 **Funciones**:
+
 - `TABLA_PRS()`:
   - Recorre todas las hojas cuyo nombre empieza con `"Semana"`.
   - Detecta series donde hay pares `(reps, peso)` en columnas contiguas.
@@ -84,6 +180,7 @@ Este directorio contiene **código de Google Apps Script** (aunque ahora los arc
   - Máximo 1 vez por día, usando un `Set` por día detectado con “DIA”.
 
 **Notas**:
+
 - Estas funciones se recalculan de forma “natural” por Sheets, pero `MenuYTriggers.js` además tiene un mecanismo para “forzar” recálculo reinser­tando la fórmula.
 
 ---
@@ -93,6 +190,7 @@ Este directorio contiene **código de Google Apps Script** (aunque ahora los arc
 **Propósito**: administrar hojas `Semana X` a partir de una plantilla `Semana 1`.
 
 **Funciones principales**:
+
 - `crearMesociclo()`:
   - Requiere que exista `Semana 1`.
   - Pregunta hasta qué semana crear (2..20).
@@ -104,6 +202,7 @@ Este directorio contiene **código de Google Apps Script** (aunque ahora los arc
   - Pide doble confirmación, incluyendo escribir `"BORRAR"`.
 
 **Dependencias**:
+
 - No depende de otros archivos.
 - Es llamado desde el menú en `MenuYTriggers.js`.
 
@@ -112,10 +211,12 @@ Este directorio contiene **código de Google Apps Script** (aunque ahora los arc
 ## `IntegracionIA.js` — Exportar rutina como prompt / Importar rutina desde IA
 
 **Propósito**: facilitar un flujo con IA:
-1) convertir la rutina actual a un prompt (texto) y copiarlo al portapapeles,
-2) pegar un JSON generado por IA y escribir ejercicios/series en la hoja.
+
+1. convertir la rutina actual a un prompt (texto) y copiarlo al portapapeles,
+2. pegar un JSON generado por IA y escribir ejercicios/series en la hoja.
 
 **Funciones principales**:
+
 - `copiarRutinaComoPrompt()`:
   - Si no estás en una hoja `Semana...`, usa `Semana 1` como origen.
   - Lee ejercicios por día usando `detectarDias(hoja)` (en `BorrarDatosDia.js`) y construye un prompt.
@@ -134,6 +235,7 @@ Este directorio contiene **código de Google Apps Script** (aunque ahora los arc
   - Escribe ejercicio en col A y series en col B, debajo del encabezado del día.
 
 **Dependencias**:
+
 - Usa `detectarDias()` (definida en `BorrarDatosDia.js`).
 - Es llamado desde el menú en `MenuYTriggers.js`.
 
@@ -144,13 +246,14 @@ Este directorio contiene **código de Google Apps Script** (aunque ahora los arc
 **Propósito**: manejar la persistencia de datos desde la web app externa (Next.js). Permite registrar series (peso/reps) en la hoja correcta.
 
 **Puntos de entrada**:
+
 - `doPost(e)`: recibe JSON con `weekId`, `dayId`, `exerciseName` y `sets`.
 
 **Funciones principales**:
+
 - `registrarSeries_(data)`: busca la hoja de la semana y el rango del día para escribir las series.
 - `buscarFilaEjercicio_(sheet, diaInfo, nombreEjercicio)`: helper para ubicar la fila exacta del ejercicio dentro de un día.
 
 **Dependencias**:
+
 - Usa `detectarDias()` (definida en `BorrarDatosDia.js`) para segmentar las semanas por días.
-
-
