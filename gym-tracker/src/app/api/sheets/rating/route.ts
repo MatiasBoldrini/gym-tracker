@@ -71,7 +71,10 @@ export async function POST(request: NextRequest) {
             stars: body.stars,
         });
 
-        return NextResponse.json({ ok: true });
+        return NextResponse.json({
+            ok: true,
+            spreadsheetId,
+        });
     } catch (error: any) {
         console.error("Error saving rating to Sheets:", error);
         const normalized = normalizeSheetsError(error);

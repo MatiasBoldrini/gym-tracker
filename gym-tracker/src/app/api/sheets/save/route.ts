@@ -79,7 +79,10 @@ export async function POST(request: NextRequest) {
             sets: body.sets,
         });
 
-        return NextResponse.json({ ok: true });
+        return NextResponse.json({
+            ok: true,
+            spreadsheetId,
+        });
     } catch (error: any) {
         console.error("Error saving to Sheets:", error);
         const normalized = normalizeSheetsError(error);
