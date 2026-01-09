@@ -10,6 +10,7 @@ import { DaySelector } from "@/components/ui/DaySelector";
 import { SessionRatingModal } from "@/components/ui/SessionRatingModal";
 import { useAuth } from "@/lib/hooks/useAuth";
 import { EyeOff, Loader2, Sparkles } from "lucide-react";
+import { OnboardingLoader } from "@/components/ui/OnboardingLoader";
 import { normalizeExerciseKey } from "@/lib/normalize";
 import { cacheUrls } from "@/lib/pwa";
 
@@ -47,6 +48,24 @@ export function HomeScreen({ initialWeek, initialPrs, initialSetupError }: HomeS
 
     // Session rating modal
     const [showRatingModal, setShowRatingModal] = useState(false);
+
+    // Onboarding loader for new users
+    const [showOnboardingLoader, setShowOnboardingLoader] = useState(false);
+
+    // Check for new user flag in URL
+    useEffect(() => {
+        if (typeof window === "undefined") return;
+        
+        const urlParams = new URLSearchParams(window.location.search);
+        const isNewUser = urlParams.get("is_new_user") === "true";
+        
+        if (isNewUser) {
+            setShowOnboardingLoader(true);
+            // Clean URL without reloading
+            const newUrl = window.location.pathname;
+            window.history.replaceState({}, "", newUrl);
+        }
+    }, []);
 
     // Si el server detectó un problema de acceso (403/404) lo mostramos
     useEffect(() => {
@@ -559,8 +578,18 @@ export function HomeScreen({ initialWeek, initialPrs, initialSetupError }: HomeS
         );
     }
 
+    const handleOnboardingComplete = () => {
+        setShowOnboardingLoader(false);
+    };
+
     return (
         <div className="min-h-[calc(100dvh-(var(--bottom-nav-base)+env(safe-area-inset-bottom)))] w-full flex flex-col bg-[#F2F2F7] overflow-x-hidden">
+            {/* Onboarding loader for new users */}
+            <OnboardingLoader 
+                loading={showOnboardingLoader} 
+                onComplete={handleOnboardingComplete} 
+            />
+
             {/* Error banner */}
             {errorMessage && (
                 <div className="px-4 py-3 bg-red-50 border-b border-red-200">

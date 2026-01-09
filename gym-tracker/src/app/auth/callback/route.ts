@@ -121,7 +121,9 @@ export async function GET(request: NextRequest) {
             return NextResponse.redirect(`${origin}/?auth_error=db_error`);
         }
 
-        return NextResponse.redirect(`${origin}/?auth_success=true`);
+        // Pass is_new_user flag if this was a new user (no previous spreadsheet)
+        const isNewUser = !existingIntegration?.spreadsheet_id;
+        return NextResponse.redirect(`${origin}/?auth_success=true${isNewUser ? '&is_new_user=true' : ''}`);
     } catch (error) {
         console.error("Error in auth callback:", error);
         return NextResponse.redirect(`${origin}/?auth_error=callback_failed`);

@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { ExternalLink, Copy, Check, Loader2, AlertCircle } from "lucide-react";
+import { ExternalLink, Copy, Check, Loader2, AlertCircle, LogOut, FileSpreadsheet } from "lucide-react";
 import { fetchWeekData } from "@/lib/sheets-client";
 import { Week } from "@/types";
 import { useAuth } from "@/lib/hooks/useAuth";
@@ -232,6 +232,54 @@ export default function PerfilPage() {
                     </Link>
                 </div>
             </div>
+
+            {/* Sección Cuenta */}
+            {isReady && (
+                <div className="ios-card p-5 bg-white space-y-4 mt-4">
+                    <div className="space-y-1">
+                        <div className="text-sm font-black text-black">Cuenta</div>
+                        <p className="text-xs text-ios-gray">
+                            {auth.email && (
+                                <span>Conectado como <span className="font-semibold">{auth.email}</span></span>
+                            )}
+                        </p>
+                    </div>
+
+                    {auth.spreadsheetId && (
+                        <button
+                            type="button"
+                            onClick={() => {
+                                const url = `https://docs.google.com/spreadsheets/d/${auth.spreadsheetId}`;
+                                window.open(url, "_blank");
+                            }}
+                            className="w-full py-3 rounded-2xl font-bold flex items-center justify-center gap-2 text-sm bg-black text-white hover:bg-black/90 active:translate-y-px transition"
+                        >
+                            <FileSpreadsheet size={16} />
+                            Ver mi rutina en Sheets
+                        </button>
+                    )}
+
+                    <button
+                        type="button"
+                        onClick={async () => {
+                            // Borrar todas las cookies del dominio
+                            document.cookie.split(";").forEach((c) => {
+                                document.cookie = c
+                                    .replace(/^ +/, "")
+                                    .replace(/=.*/, "=;expires=" + new Date().toUTCString() + ";path=/");
+                            });
+                            // Llamar logout
+                            await auth.logout();
+                            // Refresh para limpiar estado
+                            window.location.href = "/";
+                        }}
+                        className="w-full py-3 rounded-2xl font-bold flex items-center justify-center gap-2 text-sm border border-red-200 text-red-600 bg-red-50 hover:bg-red-100 active:translate-y-px transition"
+                    >
+                        <LogOut size={16} />
+                        Cerrar sesión
+                    </button>
+                </div>
+            )}
         </div>
     );
 }
