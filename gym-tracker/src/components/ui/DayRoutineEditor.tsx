@@ -43,16 +43,25 @@ function ExerciseItem({
             exit={{ opacity: 0, y: -10, transition: { duration: 0.15 } }}
             transition={{
                 type: "spring",
-                stiffness: 400,
-                damping: 30,
+                stiffness: 500,
+                damping: 35,
+                mass: 0.5,
             }}
-            layout
+            layout="position"
+            layoutId={`exercise-${exercise.name}`}
+            dragElastic={1}
+            dragMomentum={false}
+            whileDrag={{ 
+                scale: 1.03, 
+                zIndex: 50,
+                boxShadow: "0 20px 50px -15px rgba(0,0,0,0.25)",
+            }}
             className={`
                 flex items-center gap-3 p-3 bg-white rounded-2xl border border-black/5
                 ${isDragging ? "z-50 relative" : ""}
             `}
             style={{ 
-                touchAction: "pan-x",
+                touchAction: "none",
             }}
         >
             {/* Drag Handle - Solo este elemento inicia el drag */}
@@ -145,7 +154,6 @@ export function DayRoutineEditor({
                         values={exercises}
                         onReorder={onExercisesChange}
                         className="space-y-2"
-                        layoutScroll
                     >
                         {exercises.map((exercise, index) => (
                             <ExerciseItem
