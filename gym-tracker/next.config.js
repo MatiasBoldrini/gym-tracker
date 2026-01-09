@@ -47,6 +47,7 @@ const withPWA = require("next-pwa")({
             },
         },
         // API: Sheets data (GET only) - StaleWhileRevalidate
+        // Only cache successful responses (status 200) to avoid caching 401 errors
         {
             urlPattern: ({ request, url }) => {
                 return (
@@ -60,6 +61,9 @@ const withPWA = require("next-pwa")({
                 expiration: {
                     maxEntries: 50,
                     maxAgeSeconds: 60 * 60 * 24 * 7, // 7 days
+                },
+                cacheableResponse: {
+                    statuses: [200],
                 },
             },
         },
@@ -78,6 +82,9 @@ const withPWA = require("next-pwa")({
                     maxEntries: 10,
                     maxAgeSeconds: 60 * 60 * 24 * 7, // 7 days
                 },
+                cacheableResponse: {
+                    statuses: [200],
+                },
             },
         },
         // API: Bodymap endpoint (GET only) - StaleWhileRevalidate
@@ -94,6 +101,9 @@ const withPWA = require("next-pwa")({
                 expiration: {
                     maxEntries: 10,
                     maxAgeSeconds: 60 * 60 * 24 * 7, // 7 days
+                },
+                cacheableResponse: {
+                    statuses: [200],
                 },
             },
         },

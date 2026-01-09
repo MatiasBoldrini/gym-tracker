@@ -113,6 +113,7 @@ export function RutinaEditorScreen() {
         const loadDayRoutine = async () => {
             setIsLoadingDay(true);
             setHasChanges(false);
+            setErrorMessage(null); // Clear previous error when starting new load
             try {
                 const exercises = await fetchDayRoutine(selectedDayId);
                 if (cancelled) return;
@@ -126,6 +127,8 @@ export function RutinaEditorScreen() {
 
                 setDayExercises(enriched);
             } catch (error: any) {
+                // Don't show error if the request was cancelled (user switched days quickly)
+                if (cancelled) return;
                 console.error("Error loading day routine:", error);
                 setErrorMessage(error.message || "Error al cargar la rutina del día");
                 setDayExercises([]);
