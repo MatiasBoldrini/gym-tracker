@@ -25,7 +25,6 @@ export function ExerciseSearchModal({
 }: ExerciseSearchModalProps) {
     const [searchQuery, setSearchQuery] = useState("");
     const [selectedMuscle, setSelectedMuscle] = useState<string>("");
-    const [selectedCategory, setSelectedCategory] = useState<string>("");
     const [selectedExercise, setSelectedExercise] = useState<ExerciseItem | null>(null);
     const [selectedSeries, setSelectedSeries] = useState<string>("");
     const [customSeries, setCustomSeries] = useState("");
@@ -37,20 +36,6 @@ export function ExerciseSearchModal({
         const set = new Set<string>();
         exercises.forEach((e) => {
             if (e.muscle) set.add(e.muscle);
-        });
-        return Array.from(set).sort();
-    }, [exercises]);
-
-    const categories = useMemo(() => {
-        const set = new Set<string>();
-        exercises.forEach((e) => {
-            if (e.categories) {
-                // Categories might be comma-separated
-                e.categories.split(",").forEach((c) => {
-                    const trimmed = c.trim();
-                    if (trimmed) set.add(trimmed);
-                });
-            }
         });
         return Array.from(set).sort();
     }, [exercises]);
@@ -71,19 +56,9 @@ export function ExerciseSearchModal({
                 return false;
             }
 
-            // Category filter
-            if (selectedCategory) {
-                const exerciseCategories = exercise.categories
-                    .split(",")
-                    .map((c) => c.trim().toLowerCase());
-                if (!exerciseCategories.includes(selectedCategory.toLowerCase())) {
-                    return false;
-                }
-            }
-
             return true;
         });
-    }, [exercises, searchQuery, selectedMuscle, selectedCategory]);
+    }, [exercises, searchQuery, selectedMuscle]);
 
     // Cache images when filtered exercises change
     useEffect(() => {
@@ -117,7 +92,6 @@ export function ExerciseSearchModal({
         if (!isOpen) {
             setSearchQuery("");
             setSelectedMuscle("");
-            setSelectedCategory("");
             setSelectedExercise(null);
             setSelectedSeries("");
             setCustomSeries("");
@@ -156,7 +130,7 @@ export function ExerciseSearchModal({
     if (!isOpen) return null;
 
     return (
-        <div className="fixed inset-0 z-50 flex items-end justify-center">
+        <div className="fixed inset-0 z-[110] flex items-end justify-center">
             {/* Backdrop */}
             <div
                 className="absolute inset-0 bg-black/40 backdrop-blur-sm"
@@ -209,26 +183,11 @@ export function ExerciseSearchModal({
                         ))}
                     </select>
 
-                    {/* Category Filter */}
-                    <select
-                        value={selectedCategory}
-                        onChange={(e) => setSelectedCategory(e.target.value)}
-                        className="px-3 py-2 bg-gray-100 rounded-xl text-sm font-bold focus:outline-none focus:ring-2 focus:ring-ios-blue/30 appearance-none pr-8 bg-[url('data:image/svg+xml;charset=US-ASCII,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%2212%22%20height%3D%2212%22%20viewBox%3D%220%200%2012%2012%22%3E%3Cpath%20fill%3D%22%23666%22%20d%3D%22M2.5%204.5L6%208l3.5-3.5%22%2F%3E%3C%2Fsvg%3E')] bg-no-repeat bg-[right_0.5rem_center]"
-                    >
-                        <option value="">Categoría</option>
-                        {categories.map((cat) => (
-                            <option key={cat} value={cat}>
-                                {cat}
-                            </option>
-                        ))}
-                    </select>
-
                     {/* Clear Filters */}
-                    {(selectedMuscle || selectedCategory) && (
+                    {selectedMuscle && (
                         <button
                             onClick={() => {
                                 setSelectedMuscle("");
-                                setSelectedCategory("");
                             }}
                             className="px-3 py-2 bg-ios-blue/10 text-ios-blue rounded-xl text-sm font-bold whitespace-nowrap"
                         >
