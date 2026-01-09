@@ -66,6 +66,7 @@
 ## 📋 Paso 3: Preparar la plantilla de Google Sheets
 
 1. Usá la plantilla oficial o creá la tuya:
+
    - **Plantilla oficial**: `1XMFq-Twxtoa_Fs2_6kOWjB65mMqEgzFJ8ujzyZN7iCo`
    - [Ver plantilla](https://docs.google.com/spreadsheets/d/1XMFq-Twxtoa_Fs2_6kOWjB65mMqEgzFJ8ujzyZN7iCo/edit?usp=sharing)
 
@@ -90,7 +91,7 @@
 NEXT_PUBLIC_SUPABASE_URL
 Valor: [tu Project URL de Supabase, ej: https://xxxx.supabase.co]
 
-NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY
+NEXT_PUBLIC_SUPABASE_PUBLISHABLE_DEFAULT_KEY
 Valor: [tu Publishable key de Supabase, ej: eyJ...]
 
 GOOGLE_CLIENT_ID
@@ -117,7 +118,7 @@ Creá un archivo `.env.local` en la raíz del proyecto:
 ```bash
 # Supabase
 NEXT_PUBLIC_SUPABASE_URL=https://tu-project.supabase.co
-NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=eyJ...tu_publishable_key
+NEXT_PUBLIC_SUPABASE_PUBLISHABLE_DEFAULT_KEY=eyJ...tu_publishable_key
 
 # Google OAuth (para refresh de tokens)
 GOOGLE_CLIENT_ID=tu_client_id.apps.googleusercontent.com
@@ -137,6 +138,7 @@ SHEETS_TEMPLATE_ID=1XMFq-Twxtoa_Fs2_6kOWjB65mMqEgzFJ8ujzyZN7iCo
 ### 5.1 Probar localmente
 
 1. Reiniciá tu servidor de desarrollo:
+
    ```bash
    npm run dev
    ```
@@ -160,18 +162,22 @@ SHEETS_TEMPLATE_ID=1XMFq-Twxtoa_Fs2_6kOWjB65mMqEgzFJ8ujzyZN7iCo
 ## ⚠️ Troubleshooting
 
 ### Error: "redirect_uri_mismatch"
+
 - Verificá que en Google Cloud Console tengas configurado el redirect URI correcto:
   `https://TU_PROJECT_ID.supabase.co/auth/v1/callback`
 
 ### Error: "No provider_refresh_token received"
+
 - Asegurate de que los scopes de Drive/Sheets estén configurados en tu app
 - Verificá que `access_type: offline` y `prompt: consent` estén seteados
 
 ### Error: "Failed to create spreadsheet"
+
 - Verificá que la plantilla esté compartida con "Cualquiera con el link puede ver"
 - Verificá que habilitaste las APIs de Drive y Sheets en Google Cloud
 
 ### El usuario no ve su spreadsheet en otro dispositivo
+
 - Eso no debería pasar más: el `spreadsheetId` se guarda en Supabase y se reutiliza
 - Si pasa, verificá que la tabla `user_integrations` tenga el dato
 
@@ -198,6 +204,7 @@ Usuario → "Conectar con Google" → Supabase OAuth → Google consent
 ### Modelo de datos
 
 Tabla `user_integrations` en Supabase:
+
 - `user_id`: UUID (PK, referencia a auth.users)
 - `email`: texto
 - `spreadsheet_id`: ID del Google Sheet del usuario
@@ -238,6 +245,7 @@ Una vez completados estos pasos, tu app debería estar funcionando con:
 ### Nombres de pestañas esperados
 
 La app lee los datos por **título de pestaña**. Asegurate de que la plantilla tenga:
+
 - `Semana 1`, `Semana 2`, ... (las que existan)
 - `RM` o `RM A,B,C` (PRs)
 - `Ejercicios` (mapeo nombre→imagen)
