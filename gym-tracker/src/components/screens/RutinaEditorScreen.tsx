@@ -156,17 +156,46 @@ export function RutinaEditorScreen() {
         setSaveSuccess(false);
     };
 
-    const handleAddExercise = (exercise: { name: string; prescribedSeries: string; image: string }) => {
+    const handleAddExercise = async (exercise: { name: string; prescribedSeries: string; image: string }) => {
         const newExercise: ExerciseWithImage = {
             name: exercise.name,
             prescribedSeries: exercise.prescribedSeries,
             image: exercise.image || undefined,
         };
-        setDayExercises((prev) => [...prev, newExercise]);
-        setHasChanges(true);
-        setSaveSuccess(false);
+        
+        const updatedExercises = [...dayExercises, newExercise];
+        setDayExercises(updatedExercises);
         setIsSearchModalOpen(false);
-        showToast(`${exercise.name} agregado`);
+        
+        // Guardado automático
+        setIsSaving(true);
+        setErrorMessage(null);
+        
+        try {
+            const result = await saveRoutine(
+                selectedDayId,
+                updatedExercises.map((e) => ({
+                    name: e.name,
+                    prescribedSeries: e.prescribedSeries,
+                }))
+            );
+
+            if (!result.ok) {
+                throw new Error(result.error || "Error al guardar");
+            }
+
+            setHasChanges(false);
+            setSaveSuccess(true);
+            showToast(`${exercise.name} agregado y guardado`);
+            setTimeout(() => setSaveSuccess(false), 2000);
+        } catch (error: any) {
+            console.error("Error saving routine:", error);
+            setErrorMessage(error.message || "Error al guardar la rutina");
+            setHasChanges(true);
+            showToast(`${exercise.name} agregado (sin guardar)`);
+        } finally {
+            setIsSaving(false);
+        }
     };
 
     const handleSave = async () => {
@@ -235,7 +264,7 @@ export function RutinaEditorScreen() {
     }
 
     return (
-        <div className="min-h-[calc(100dvh-(var(--bottom-nav-base)+env(safe-area-inset-bottom)))] w-full flex flex-col bg-[#F2F2F7]">
+        <div className="h-[calc(100dvh-(var(--bottom-nav-base)+env(safe-area-inset-bottom)))] w-full flex flex-col bg-[#F2F2F7] overflow-hidden">
             {/* Header */}
             <header className="px-6 pt-[calc(env(safe-area-inset-top)+2.5rem)] pb-4 shrink-0">
                 <div className="flex items-center justify-between">
@@ -295,7 +324,7 @@ export function RutinaEditorScreen() {
             </div>
 
             {/* Exercise List */}
-            <div className="flex-1 px-6 pb-6 overflow-y-auto">
+            <div className="flex-1 px-6 pb-8 overflow-y-auto min-h-0">
                 {isLoadingDay ? (
                     <div className="flex items-center justify-center py-12">
                         <Loader2 className="w-6 h-6 animate-spin text-ios-blue" />
