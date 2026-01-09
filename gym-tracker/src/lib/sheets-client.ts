@@ -157,3 +157,109 @@ export async function saveSessionRating(
         };
     }
 }
+
+// ============================================================================
+// Routine Editor API functions
+// ============================================================================
+
+export interface ExerciseItem {
+    name: string;
+    muscle: string;
+    categories: string;
+    image: string;
+}
+
+export interface RoutineExercise {
+    name: string;
+    prescribedSeries: string;
+}
+
+/**
+ * Fetch available exercises from the Ejercicios sheet.
+ */
+export async function fetchExercisesList(): Promise<ExerciseItem[]> {
+    const response = await fetch("/api/sheets/exercises", { method: "GET" });
+    const data = await response.json().catch(() => ({} as any));
+    if (!response.ok) {
+        throw createApiError({
+            message: data?.error || `Error ${response.status}`,
+            status: response.status,
+            code: data?.code,
+        });
+    }
+    return Array.isArray(data.exercises) ? data.exercises : [];
+}
+
+/**
+ * Fetch available series options from the Series sheet.
+ */
+export async function fetchSeriesOptions(): Promise<string[]> {
+    const response = await fetch("/api/sheets/series", { method: "GET" });
+    const data = await response.json().catch(() => ({} as any));
+    if (!response.ok) {
+        throw createApiError({
+            message: data?.error || `Error ${response.status}`,
+            status: response.status,
+            code: data?.code,
+        });
+    }
+    return Array.isArray(data.series) ? data.series : [];
+}
+
+/**
+ * Fetch current routine exercises for a specific day.
+ */
+export async function fetchDayRoutine(dayId: number): Promise<RoutineExercise[]> {
+    const response = await fetch(`/api/sheets/routine?dayId=${encodeURIComponent(String(dayId))}`, {
+        method: "GET",
+    });
+    const data = await response.json().catch(() => ({} as any));
+    if (!response.ok) {
+        throw createApiError({
+            message: data?.error || `Error ${response.status}`,
+            status: response.status,
+            code: data?.code,
+        });
+    }
+    return Array.isArray(data.exercises) ? data.exercises : [];
+}
+
+/**
+ * Save routine exercises for a specific day in Semana 1.
+ */
+export async function saveRoutine(
+    dayId: number,
+    exercises: RoutineExercise[]
+): Promise<SaveResult> {
+    try {
+        const response = await fetch("/api/sheets/routine", {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+                dayId,
+                exercises,
+            }),
+        });
+
+        const data = await response.json();
+
+        if (!response.ok) {
+            return {
+                ok: false,
+                error: data.error || `Error ${response.status}`,
+                code: data.code,
+                status: response.status,
+            };
+        }
+
+        return { ok: true };
+    } catch (error: any) {
+        console.error("Error saving routine to Sheets:", error);
+        return {
+            ok: false,
+            error: error.message || "Network error",
+        };
+    }
+}
