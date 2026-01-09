@@ -3,6 +3,7 @@ import { getUserStore, isUserAuthenticated } from "@/lib/user-store";
 import { refreshAccessToken } from "@/lib/google/oauth";
 import { readExerciseSets } from "@/lib/google/sheets";
 import { normalizeSheetsError } from "@/lib/google/sheets-errors";
+import { ensureSpreadsheetForUser } from "@/lib/google/drive";
 
 function parsePositiveInt(val: string | null): number | null {
     const n = Number(val);
@@ -29,18 +30,14 @@ export async function GET(request: NextRequest) {
         }
 
         const refreshToken = store.refreshToken;
-        const spreadsheetId = store.spreadsheetId;
         if (!refreshToken) {
             return NextResponse.json({ error: "No autenticado" }, { status: 401 });
         }
+
+        // Auto-bootstrap: if spreadsheetId is missing, find or create it
+        let spreadsheetId = store.spreadsheetId;
         if (!spreadsheetId) {
-            return NextResponse.json(
-                {
-                    error: "No hay un Google Sheet configurado. Abrí Configuración y pegá el link de tu copia.",
-                    code: "NO_SPREADSHEET",
-                },
-                { status: 403 }
-            );
+            spreadsheetId = await ensureSpreadsheetForUser(refreshToken);
         }
 
         const accessToken = await refreshAccessToken(refreshToken);
@@ -62,13 +59,3 @@ export async function GET(request: NextRequest) {
         );
     }
 }
-
-
-
-
-
-
-
-
-
-

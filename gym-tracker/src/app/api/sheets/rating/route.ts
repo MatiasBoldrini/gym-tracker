@@ -3,6 +3,7 @@ import { getUserStore, isUserAuthenticated } from "@/lib/user-store";
 import { refreshAccessToken } from "@/lib/google/oauth";
 import { saveSessionRating } from "@/lib/google/sheets";
 import { normalizeSheetsError } from "@/lib/google/sheets-errors";
+import { ensureSpreadsheetForUser } from "@/lib/google/drive";
 
 interface RatingRequestBody {
     weekId: number;
@@ -46,20 +47,15 @@ export async function POST(request: NextRequest) {
 
         // 3. Get user's refresh token and spreadsheet ID from cookie store
         const refreshToken = store.refreshToken;
-        const spreadsheetId = store.spreadsheetId;
 
         if (!refreshToken) {
             return NextResponse.json({ error: "No autenticado" }, { status: 401 });
         }
 
+        // Auto-bootstrap: if spreadsheetId is missing, find or create it
+        let spreadsheetId = store.spreadsheetId;
         if (!spreadsheetId) {
-            return NextResponse.json(
-                {
-                    error: "No hay un Google Sheet configurado. Abrí Configuración y pegá el link de tu copia.",
-                    code: "NO_SPREADSHEET",
-                },
-                { status: 403 }
-            );
+            spreadsheetId = await ensureSpreadsheetForUser(refreshToken);
         }
 
         // 4. Get fresh access token
@@ -84,9 +80,3 @@ export async function POST(request: NextRequest) {
         );
     }
 }
-
-
-
-
-
-

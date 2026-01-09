@@ -10,12 +10,14 @@
 4. Nombre: `gym-tracker` (o el que prefieras)
 5. Click **"Crear"** y esperá unos segundos
 
-### 1.2 Habilitar Google Sheets API
+### 1.2 Habilitar APIs necesarias
 
 1. En el menú lateral izquierdo, buscá **"APIs y servicios"** → **"Biblioteca"**
-2. Buscá **"Google Sheets API"**
-3. Click en el resultado y luego en **"Habilitar"**
-4. Esperá a que se habilite (aparece un check verde)
+2. Buscá y habilitá las siguientes APIs:
+   - **Google Sheets API** - para leer/escribir datos
+   - **Google Drive API** - para crear automáticamente la copia de la plantilla
+3. Click en cada resultado y luego en **"Habilitar"**
+4. Esperá a que se habiliten (aparece un check verde)
 
 ### 1.3 Configurar pantalla de consentimiento OAuth
 
@@ -31,7 +33,10 @@
 5. Click **"Guardar y continuar"**
 6. En **"Scopes"**:
    - Click **"Agregar o quitar scopes"**
-   - Buscá y seleccioná: `https://www.googleapis.com/auth/spreadsheets`
+   - Buscá y seleccioná estos scopes:
+     - `https://www.googleapis.com/auth/spreadsheets` - lectura/escritura de Sheets
+     - `https://www.googleapis.com/auth/drive.readonly` - leer Drive para buscar copias existentes
+     - `https://www.googleapis.com/auth/drive.file` - crear/modificar archivos creados por la app
    - Click **"Actualizar"** → **"Guardar y continuar"**
 7. En **"Usuarios de prueba"** (si elegiste "Externo"):
    - Agregá tu email (y los emails de quienes quieras que prueben sin verificación)
@@ -55,26 +60,31 @@
    - **Secreto de cliente**: algo como `GOCSPX-xxxxxxxxxxxxx`
    - ⚠️ El secreto solo se muestra UNA VEZ. Si lo perdés, tenés que crear otra credencial.
 
-### 1.5 Obtener el ID de tu plantilla de Google Sheets (opcional)
+### 1.5 Preparar la plantilla de Google Sheets
 
-Plantilla oficial (para usar como base):
+La app crea automáticamente una copia de la plantilla en el Drive del usuario cuando conecta su cuenta. Para esto:
 
-- Ver plantilla: https://docs.google.com/spreadsheets/d/1XMFq-Twxtoa_Fs2_6kOWjB65mMqEgzFJ8ujzyZN7iCo/edit?usp=sharing
-- Hacer una copia directa: https://docs.google.com/spreadsheets/d/1XMFq-Twxtoa_Fs2_6kOWjB65mMqEgzFJ8ujzyZN7iCo/copy
+1. Usá la plantilla oficial o creá la tuya:
 
-1. Abrí tu Google Sheet de plantilla
-2. En la URL, buscá el ID entre `/d/` y `/edit`:
+   - **Plantilla oficial**: `1XMFq-Twxtoa_Fs2_6kOWjB65mMqEgzFJ8ujzyZN7iCo`
+   - [Ver plantilla](https://docs.google.com/spreadsheets/d/1XMFq-Twxtoa_Fs2_6kOWjB65mMqEgzFJ8ujzyZN7iCo/edit?usp=sharing)
+
+2. **Importante**: La plantilla debe estar compartida con permisos de **"Cualquiera con el link puede ver"** para que los usuarios puedan copiarla.
+
+3. En la URL de tu plantilla, buscá el ID entre `/d/` y `/edit`:
    ```
    https://docs.google.com/spreadsheets/d/1XMFq-Twxtoa_Fs2_6kOWjB65mMqEgzFJ8ujzyZN7iCo/edit
                                                       ↑ Este es el ID ↑
    ```
-3. Copiá ese ID (lo vas a usar como `NEXT_PUBLIC_SHEETS_TEMPLATE_ID`)
+4. Copiá ese ID (lo vas a usar como `SHEETS_TEMPLATE_ID`)
 
 ---
 
 ## 📋 Paso 2: Storage / DB
 
 Esta versión del proyecto **NO usa KV/Redis/DB**. Guardamos el `refresh_token` y el `spreadsheetId` en una **cookie HttpOnly cifrada**, así que no necesitás configurar Storage en Vercel.
+
+Además, usamos **Drive como "fuente de verdad"**: cuando un usuario conecta su cuenta desde otro dispositivo, la app busca automáticamente en su Drive una copia existente (identificada por `appProperties`). Si no la encuentra, crea una nueva.
 
 ---
 
@@ -105,7 +115,7 @@ TOKEN_ENCRYPTION_KEY
 Valor: [otro string random de 32+ caracteres, diferente al anterior]
 Ejemplo: openssl rand -base64 32
 
-NEXT_PUBLIC_SHEETS_TEMPLATE_ID
+SHEETS_TEMPLATE_ID
 Valor: [el ID de tu plantilla de Google Sheets, ej: 1XMFq-Twxtoa...]
 (Si no lo definís, por defecto se usa la plantilla oficial.)
 ```
@@ -133,8 +143,8 @@ GOOGLE_REDIRECT_URI=http://localhost:3000/api/auth/google/callback
 SESSION_SECRET=tu_session_secret_32_chars_minimo
 TOKEN_ENCRYPTION_KEY=tu_encryption_key_32_chars_minimo
 
-# Template (opcional)
-NEXT_PUBLIC_SHEETS_TEMPLATE_ID=tu_template_id_aqui
+# Template (server-only, no usar NEXT_PUBLIC_)
+SHEETS_TEMPLATE_ID=1XMFq-Twxtoa_Fs2_6kOWjB65mMqEgzFJ8ujzyZN7iCo
 ```
 
 3. Guardá el archivo
@@ -173,10 +183,13 @@ openssl rand -base64 32
    ```
 
 2. Abrí `http://localhost:3000`
-3. Deberías ver el modal de setup
+3. Deberías ver la pantalla de bienvenida con el botón "Conectar con Google"
 4. Click en **"Conectar con Google"**
-5. Deberías ser redirigido a Google para autorizar
-6. Después de autorizar, deberías volver a la app
+5. Deberías ser redirigido a Google para autorizar (vas a ver los permisos de Sheets + Drive)
+6. Después de autorizar, la app automáticamente:
+   - Busca si ya tenés una copia de la plantilla en tu Drive
+   - Si no la encuentra, crea una nueva copia llamada "Rutina Gym - Gym Tracker"
+7. Serás redirigido a la app ya funcionando
 
 ### 5.2 Probar en Vercel
 
@@ -200,6 +213,7 @@ openssl rand -base64 32
 - Esto es normal si elegiste "Externo" en la pantalla de consentimiento
 - Podés continuar igual (click en "Avanzar")
 - Para quitarlo, necesitás verificar la app con Google (proceso más largo)
+- **Nota**: Como ahora pedimos permisos de Drive, Google puede requerir verificación para producción
 
 ### Error: "Not authenticated" / "No Google account linked"
 
@@ -210,17 +224,29 @@ openssl rand -base64 32
 - Asegurate de que tus secrets tengan al menos 32 caracteres
 - Generá nuevos con `openssl rand -base64 32`
 
+### Error al crear la copia de la plantilla
+
+- Verificá que la plantilla esté compartida con "Cualquiera con el link puede ver"
+- Verificá que habilitaste la Google Drive API en tu proyecto de Google Cloud
+
+### El usuario ya tiene una copia pero se crea otra
+
+- Esto puede pasar si la copia anterior fue creada sin `appProperties` (versión anterior de la app)
+- El usuario puede borrar la copia duplicada manualmente desde su Drive
+
 ---
 
 ## 📝 Checklist final
 
 - [ ] Proyecto creado en Google Cloud Console
 - [ ] Google Sheets API habilitada
-- [ ] Pantalla de consentimiento OAuth configurada
+- [ ] Google Drive API habilitada
+- [ ] Pantalla de consentimiento OAuth configurada con los 3 scopes
 - [ ] Credenciales OAuth creadas (Client ID + Secret)
 - [ ] Variables de entorno configuradas en Vercel
 - [ ] Archivo `.env.local` creado localmente
 - [ ] Secrets generados (SESSION_SECRET, TOKEN_ENCRYPTION_KEY)
+- [ ] Plantilla compartida con "Cualquiera con el link puede ver"
 - [ ] Probar flujo completo de autenticación
 
 ---
@@ -230,13 +256,14 @@ openssl rand -base64 32
 Una vez completados estos pasos, tu app debería estar funcionando con:
 
 - ✅ Autenticación OAuth con Google
+- ✅ Creación automática de copia de la plantilla (sin modal de setup)
+- ✅ Detección de copia existente en otro dispositivo (1 copia por usuario)
 - ✅ Escritura a Google Sheets sin CORS
 - ✅ Persistencia multi-usuario vía cookie HttpOnly cifrada (sin DB)
-- ✅ Onboarding user-friendly
 
 ### Nombres de pestañas esperados (importante)
 
-La app lee los datos por **título de pestaña** (no por gid). Asegurate de tener:
+La app lee los datos por **título de pestaña** (no por gid). Asegurate de que la plantilla tenga:
 
 - `Semana 1`, `Semana 2`, ... (solo aparecen en el selector las que existan)
 - `RM` (PRs)

@@ -7,10 +7,9 @@ import { ExerciseCard } from "@/components/ui/ExerciseCard";
 import Stack from "@/components/ui/Stack";
 import { ExerciseModal } from "@/components/ui/ExerciseModal";
 import { DaySelector } from "@/components/ui/DaySelector";
-import { SetupModal } from "@/components/modals/SetupModal";
 import { SessionRatingModal } from "@/components/ui/SessionRatingModal";
 import { useAuth } from "@/lib/hooks/useAuth";
-import { EyeOff, Loader2, Settings, Sparkles } from "lucide-react";
+import { EyeOff, Loader2, Sparkles } from "lucide-react";
 import { normalizeExerciseKey } from "@/lib/normalize";
 import { cacheUrls } from "@/lib/pwa";
 
@@ -34,8 +33,7 @@ export function HomeScreen({ initialWeek, initialPrs, initialSetupError }: HomeS
 
     // Auth state
     const auth = useAuth();
-    const [showSetupModal, setShowSetupModal] = useState(false);
-    const [setupBlockingError, setSetupBlockingError] = useState<string | null>(initialSetupError?.message ?? null);
+    const [errorMessage, setErrorMessage] = useState<string | null>(initialSetupError?.message ?? null);
 
     // Info popover (rutina + progreso)
     const [showInfoPopover, setShowInfoPopover] = useState(false);
@@ -50,30 +48,20 @@ export function HomeScreen({ initialWeek, initialPrs, initialSetupError }: HomeS
     // Session rating modal
     const [showRatingModal, setShowRatingModal] = useState(false);
 
-    // Show setup modal if not fully configured (after initial load)
-    useEffect(() => {
-        if (!auth.isLoading && !auth.isSetupComplete) {
-            setShowSetupModal(true);
-        }
-    }, [auth.isLoading, auth.isSetupComplete]);
-
-    // Si el server detectó un problema de acceso (403/404) lo mostramos y abrimos el setup.
+    // Si el server detectó un problema de acceso (403/404) lo mostramos
     useEffect(() => {
         const msg = initialSetupError?.message;
         if (!msg) return;
-        setSetupBlockingError(msg);
-        setShowSetupModal(true);
-        // eslint-disable-next-line react-hooks/exhaustive-deps
+        setErrorMessage(msg);
     }, [initialSetupError?.message]);
 
-    const handleSheetsSetupIssue = (err: any) => {
+    const handleSheetsError = (err: any) => {
         const code = err?.code as string | undefined;
         const status = err?.status as number | undefined;
         const message = typeof err?.message === "string" ? err.message : "";
         const messageLower = message.toLowerCase();
 
         const isBlocking =
-            code === "NO_SPREADSHEET" ||
             code === "SHEETS_PERMISSION" ||
             code === "SHEETS_NOT_FOUND" ||
             code === "SHEETS_BAD_RANGE" ||
@@ -85,14 +73,13 @@ export function HomeScreen({ initialWeek, initialPrs, initialSetupError }: HomeS
 
         if (!isBlocking) return false;
 
-        setSetupBlockingError(message || "No pudimos acceder a tu Google Sheet. Revisá el link/permisos.");
-        setShowSetupModal(true);
+        setErrorMessage(message || "No pudimos acceder a tu Google Sheet. Probá desloguearte y volver a conectar.");
         return true;
     };
 
     useEffect(() => {
         if (auth.isLoading) return;
-        if (!auth.isSetupComplete) return;
+        if (!auth.isAuthenticated) return;
 
         let cancelled = false;
 
@@ -112,7 +99,7 @@ export function HomeScreen({ initialWeek, initialPrs, initialSetupError }: HomeS
                 setSelectedWeekId(resolvedWeekId);
                 setSelectedWeekName(`Semana ${resolvedWeekId}`);
             } catch (e) {
-                if (!handleSheetsSetupIssue(e)) {
+                if (!handleSheetsError(e)) {
                     console.error("Failed to load weeks:", e);
                 }
             }
@@ -124,11 +111,11 @@ export function HomeScreen({ initialWeek, initialPrs, initialSetupError }: HomeS
             cancelled = true;
         };
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [auth.isLoading, auth.isSetupComplete]);
+    }, [auth.isLoading, auth.isAuthenticated]);
 
     useEffect(() => {
         if (auth.isLoading) return;
-        if (!auth.isSetupComplete) return;
+        if (!auth.isAuthenticated) return;
 
         let cancelled = false;
 
@@ -140,7 +127,7 @@ export function HomeScreen({ initialWeek, initialPrs, initialSetupError }: HomeS
                 setCurrentDayIndex(0);
                 setSelectedWeekName(`Semana ${selectedWeekId}`);
             } catch (e) {
-                if (!handleSheetsSetupIssue(e)) {
+                if (!handleSheetsError(e)) {
                     console.error("Failed to load week:", e);
                 }
             }
@@ -151,12 +138,11 @@ export function HomeScreen({ initialWeek, initialPrs, initialSetupError }: HomeS
         return () => {
             cancelled = true;
         };
-    }, [auth.isLoading, auth.isSetupComplete, selectedWeekId]);
+    }, [auth.isLoading, auth.isAuthenticated, selectedWeekId]);
 
     // Cache selectivo: precachear SOLO las imágenes de la rutina cargada (toda la semana).
-    // Esto evita precache masivo (iOS) y deja offline más sólido para la rutina actual.
     useEffect(() => {
-        if (!auth.isSetupComplete) return;
+        if (!auth.isAuthenticated) return;
         if (!week?.days?.length) return;
 
         const urls = week.days
@@ -166,7 +152,7 @@ export function HomeScreen({ initialWeek, initialPrs, initialSetupError }: HomeS
 
         // Fire-and-forget: el SW cachea en background.
         void cacheUrls(urls);
-    }, [auth.isSetupComplete, week]);
+    }, [auth.isAuthenticated, week]);
 
     const prByExercise = useMemo(() => {
         const map = new Map<string, PersonalRecord>();
@@ -254,7 +240,7 @@ export function HomeScreen({ initialWeek, initialPrs, initialSetupError }: HomeS
     useEffect(() => {
         if (!showInfoPopover) return;
         if (auth.isLoading) return;
-        if (!auth.isSetupComplete) return;
+        if (!auth.isAuthenticated) return;
         if (!currentDay) return;
 
         const weekId = week.id;
@@ -271,7 +257,6 @@ export function HomeScreen({ initialWeek, initialPrs, initialSetupError }: HomeS
                         try {
                             const { sets } = await fetchExerciseSets({ weekId, dayId, exerciseName });
                             const normalized: Set[] = (sets || []).map((s) => ({
-                                // 0x0 = vacío; peso 0 con reps>0 es válido.
                                 weight: (s.weight === 0 && s.reps === 0) ? null : (s.weight ?? null),
                                 reps: (s.weight === 0 && s.reps === 0) ? null : (s.reps ?? null),
                             }));
@@ -316,7 +301,7 @@ export function HomeScreen({ initialWeek, initialPrs, initialSetupError }: HomeS
             cancelled = true;
         };
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [showInfoPopover, auth.isLoading, auth.isSetupComplete, week.id, currentDayIndex]);
+    }, [showInfoPopover, auth.isLoading, auth.isAuthenticated, week.id, currentDayIndex]);
 
     useEffect(() => {
         return () => {
@@ -340,8 +325,7 @@ export function HomeScreen({ initialWeek, initialPrs, initialSetupError }: HomeS
                     setSelectedExercise(exercise);
                     setIsModalOpen(true);
 
-                    // If the spreadsheet can be modified elsewhere, pull latest sets on open.
-                    if (!auth.isSetupComplete) return;
+                    if (!auth.isAuthenticated) return;
 
                     try {
                         const { sets } = await fetchExerciseSets({
@@ -351,29 +335,27 @@ export function HomeScreen({ initialWeek, initialPrs, initialSetupError }: HomeS
                         });
 
                         const normalizedSets: Set[] = (sets || []).map((s) => ({
-                            // Misma convención que en el modal: 0x0 = vacío, pero peso 0 con reps>0 es válido.
                             weight: (s.weight === 0 && s.reps === 0) ? null : (s.weight ?? null),
                             reps: (s.weight === 0 && s.reps === 0) ? null : (s.reps ?? null),
                         }));
 
-                                const hasFetchedFilled = normalizedSets.some((s) =>
-                                    s.weight !== null && s.weight !== undefined && s.weight >= 0 &&
-                                    s.reps !== null && s.reps !== undefined && s.reps > 0
-                                );
-                                const hasExistingFilled = (exercise.sets || []).some((s) =>
-                                    s.weight !== null && s.weight !== undefined && s.weight >= 0 &&
-                                    s.reps !== null && s.reps !== undefined && s.reps > 0
-                                );
+                        const hasFetchedFilled = normalizedSets.some((s) =>
+                            s.weight !== null && s.weight !== undefined && s.weight >= 0 &&
+                            s.reps !== null && s.reps !== undefined && s.reps > 0
+                        );
+                        const hasExistingFilled = (exercise.sets || []).some((s) =>
+                            s.weight !== null && s.weight !== undefined && s.weight >= 0 &&
+                            s.reps !== null && s.reps !== undefined && s.reps > 0
+                        );
 
-                                // Evitar “pisar” datos locales con un fetch vacío (suele ser ruido/rango incompleto).
-                                if (!hasFetchedFilled && hasExistingFilled) {
-                                    console.warn("fetchExerciseSets devolvió vacío; se mantiene el estado local:", {
-                                        weekId: week.id,
-                                        dayId: currentDay.id,
-                                        exerciseName: exercise.name,
-                                    });
-                                    return;
-                                }
+                        if (!hasFetchedFilled && hasExistingFilled) {
+                            console.warn("fetchExerciseSets devolvió vacío; se mantiene el estado local:", {
+                                weekId: week.id,
+                                dayId: currentDay.id,
+                                exerciseName: exercise.name,
+                            });
+                            return;
+                        }
 
                         setWeek((prev) => {
                             const updated = { ...prev };
@@ -391,10 +373,9 @@ export function HomeScreen({ initialWeek, initialPrs, initialSetupError }: HomeS
                             return updated;
                         });
 
-                        // Keep modal state in sync too.
                         setSelectedExercise((prev) => (prev && prev.name === exercise.name ? { ...prev, sets: normalizedSets } : prev));
                     } catch (e) {
-                        if (!handleSheetsSetupIssue(e)) {
+                        if (!handleSheetsError(e)) {
                             console.error("Failed to preload sets:", e);
                         }
                     }
@@ -448,7 +429,6 @@ export function HomeScreen({ initialWeek, initialPrs, initialSetupError }: HomeS
         if (!selectedExercise || !week || !currentDay) return;
 
         try {
-            // Filter out sets with null values and convert to the format expected by saveExerciseSets
             const validSets = sets
                 .filter(s => s.weight !== null && s.reps !== null && !(s.weight === 0 && s.reps === 0))
                 .map(s => ({ weight: s.weight!, reps: s.reps! }));
@@ -463,7 +443,6 @@ export function HomeScreen({ initialWeek, initialPrs, initialSetupError }: HomeS
                 }
             }
 
-            // Optionally update local state to show progress immediately
             const updatedWeek = { ...week };
             const dayIdx = updatedWeek.days.findIndex(d => d.id === currentDay.id);
             const exIdx = updatedWeek.days[dayIdx].exercises.findIndex(e => e.name === selectedExercise.name);
@@ -472,25 +451,21 @@ export function HomeScreen({ initialWeek, initialPrs, initialSetupError }: HomeS
                 updatedWeek.days[dayIdx].exercises[exIdx].sets = sets;
                 setWeek(updatedWeek);
 
-                // Mantener el ejercicio seleccionado sincronizado.
                 setSelectedExercise((prev) => (prev && prev.name === selectedExercise.name ? { ...prev, sets } : prev));
 
-                // Si el ejercicio quedó completo, cerrar el modal automáticamente.
                 const completedNow = isExerciseComplete({ ...selectedExercise, sets });
                 if (completedNow) {
                     setIsModalOpen(false);
                 }
 
-                // Check if we should show rating modal (if no rating exists for this day)
                 if (validSets.length > 0 && updatedWeek.days[dayIdx].stars === undefined) {
-                    // Small delay to let the exercise modal close first
                     setTimeout(() => {
                         setShowRatingModal(true);
                     }, 200);
                 }
             }
         } catch (error) {
-            if (!handleSheetsSetupIssue(error)) {
+            if (!handleSheetsError(error)) {
                 console.error("Failed to save series:", error);
                 showToast("Error al guardar");
             }
@@ -511,7 +486,6 @@ export function HomeScreen({ initialWeek, initialPrs, initialSetupError }: HomeS
                 throw err;
             }
 
-            // Update local state immediately
             setWeek((prev) => {
                 const updated = { ...prev };
                 const dayIdx = updated.days.findIndex((d) => d.id === currentDay.id);
@@ -523,16 +497,78 @@ export function HomeScreen({ initialWeek, initialPrs, initialSetupError }: HomeS
 
             showToast("Calificación guardada");
         } catch (error) {
-            if (!handleSheetsSetupIssue(error)) {
+            if (!handleSheetsError(error)) {
                 console.error("Failed to save rating:", error);
                 showToast("Error al guardar calificación");
             }
         }
     };
 
+    const handleConnectGoogle = () => {
+        window.location.href = "/api/auth/google/start";
+    };
+
+    // Loading state
+    if (auth.isLoading) {
+        return (
+            <div className="min-h-[calc(100dvh-(var(--bottom-nav-base)+env(safe-area-inset-bottom)))] w-full flex flex-col items-center justify-center bg-[#F2F2F7]">
+                <Loader2 className="w-8 h-8 animate-spin text-ios-blue" />
+            </div>
+        );
+    }
+
+    // Not authenticated: show connect screen
+    if (!auth.isAuthenticated) {
+        return (
+            <div className="min-h-[calc(100dvh-(var(--bottom-nav-base)+env(safe-area-inset-bottom)))] w-full flex flex-col bg-[#F2F2F7]">
+                <div className="flex-1 flex flex-col items-center justify-center px-8">
+                    <div className="w-20 h-20 bg-ios-blue/10 rounded-full flex items-center justify-center mb-6">
+                        <svg className="w-10 h-10" viewBox="0 0 24 24">
+                            <path
+                                fill="#4285F4"
+                                d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"
+                            />
+                            <path
+                                fill="#34A853"
+                                d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"
+                            />
+                            <path
+                                fill="#FBBC05"
+                                d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z"
+                            />
+                            <path
+                                fill="#EA4335"
+                                d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"
+                            />
+                        </svg>
+                    </div>
+                    <h1 className="text-2xl font-black text-black mb-2 text-center">
+                        Bienvenido a Gym Tracker
+                    </h1>
+                    <p className="text-gray-500 text-center mb-8 max-w-xs">
+                        Conectá tu cuenta de Google para empezar a registrar tus entrenamientos.
+                    </p>
+                    <button
+                        onClick={handleConnectGoogle}
+                        className="w-full max-w-xs py-4 bg-black text-white rounded-2xl font-bold flex items-center justify-center gap-2"
+                    >
+                        Conectar con Google
+                    </button>
+                </div>
+            </div>
+        );
+    }
+
     return (
         <div className="min-h-[calc(100dvh-(var(--bottom-nav-base)+env(safe-area-inset-bottom)))] w-full flex flex-col bg-[#F2F2F7] overflow-x-hidden">
-            {/* Header with Week Picker - Increased z-index to sit above DaySelector */}
+            {/* Error banner */}
+            {errorMessage && (
+                <div className="px-4 py-3 bg-red-50 border-b border-red-200">
+                    <p className="text-sm text-red-700 font-medium text-center">{errorMessage}</p>
+                </div>
+            )}
+
+            {/* Header with Week Picker */}
             <header className="flex justify-between items-center px-6 pt-[calc(env(safe-area-inset-top)+2.5rem)] pb-2 shrink-0 z-30 relative">
                 <div className="relative">
                     <button
@@ -552,7 +588,7 @@ export function HomeScreen({ initialWeek, initialPrs, initialSetupError }: HomeS
                     {/* Week Picker Dropdown */}
                     {showWeekPicker && (
                         <div className="absolute top-full left-0 mt-2 w-48 bg-white/90 backdrop-blur-xl rounded-2xl shadow-xl border border-black/5 overflow-hidden origin-top-left animate-in fade-in zoom-in-95 duration-200">
-                            {weeks.map((w, idx) => (
+                            {weeks.map((w) => (
                                 <button
                                     key={String(w.id)}
                                     className="w-full text-left px-4 py-3 font-bold text-sm hover:bg-black/5 active:bg-black/10 transition-colors border-b border-black/5 last:border-0"
@@ -581,14 +617,6 @@ export function HomeScreen({ initialWeek, initialPrs, initialSetupError }: HomeS
                         aria-label={hideCompleted ? "Mostrar ejercicios completados" : "Ocultar ejercicios completados"}
                     >
                         <EyeOff size={18} />
-                    </button>
-
-                    {/* Settings Button */}
-                    <button
-                        onClick={() => setShowSetupModal(true)}
-                        className="w-10 h-10 bg-white rounded-full shadow-sm border border-black/5 flex items-center justify-center text-gray-500 active:scale-95 transition-transform"
-                    >
-                        <Settings size={18} />
                     </button>
 
                     {/* Info Popover */}
@@ -748,24 +776,6 @@ export function HomeScreen({ initialWeek, initialPrs, initialSetupError }: HomeS
                     onSave={handleSaveSeries}
                 />
             )}
-
-            {/* Setup Modal */}
-            <SetupModal
-                isOpen={showSetupModal}
-                onClose={() => {
-                    setShowSetupModal(false);
-                    setSetupBlockingError(null);
-                }}
-                onComplete={() => {
-                    auth.refresh();
-                    setShowSetupModal(false);
-                    setSetupBlockingError(null);
-                }}
-                isAuthenticated={auth.isAuthenticated}
-                hasSpreadsheet={auth.hasSpreadsheet}
-                currentSpreadsheetId={auth.spreadsheetId}
-                externalError={setupBlockingError}
-            />
 
             {/* Session Rating Modal */}
             <SessionRatingModal

@@ -46,10 +46,10 @@ export default function PerfilPage() {
     const [isCopying, setIsCopying] = useState(false);
     const [loadError, setLoadError] = useState<string | null>(null);
 
-    const hasSetup = auth.isSetupComplete;
+    const isReady = auth.isAuthenticated;
 
     const loadWeek = useCallback(async () => {
-        if (!hasSetup) return;
+        if (!isReady) return;
         setIsLoadingWeek(true);
         setLoadError(null);
         try {
@@ -61,14 +61,14 @@ export default function PerfilPage() {
         } finally {
             setIsLoadingWeek(false);
         }
-    }, [hasSetup]);
+    }, [isReady]);
 
     useEffect(() => {
         if (auth.isLoading) return;
-        if (!hasSetup) return;
+        if (!isReady) return;
         if (week || isLoadingWeek) return;
         loadWeek();
-    }, [auth.isLoading, hasSetup, isLoadingWeek, loadWeek, week]);
+    }, [auth.isLoading, isReady, isLoadingWeek, loadWeek, week]);
 
     const routinePreview = useMemo(() => {
         if (!week || !week.days?.length) return null;
@@ -76,9 +76,9 @@ export default function PerfilPage() {
     }, [week]);
 
     const handleCopyRoutine = async () => {
-        if (!hasSetup) {
+        if (!isReady) {
             setCopyState("error");
-            setCopyMessage("Conectá tu cuenta y spreadsheet para copiar la rutina.");
+            setCopyMessage("Conectá tu cuenta de Google para copiar la rutina.");
             return;
         }
 
@@ -116,6 +116,10 @@ export default function PerfilPage() {
         }
     };
 
+    const handleConnectGoogle = () => {
+        window.location.href = "/api/auth/google/start";
+    };
+
     return (
         <div className="px-5 pt-8 pb-10">
             <header className="mb-6">
@@ -134,10 +138,10 @@ export default function PerfilPage() {
                     </p>
                 </div>
 
-                {!hasSetup && (
+                {!isReady && !auth.isLoading && (
                     <div className="flex items-start gap-2 rounded-2xl bg-orange-50 px-3 py-2 text-xs text-orange-800 border border-orange-200">
                         <AlertCircle size={16} className="mt-0.5 shrink-0" />
-                        <div>Conectá tu cuenta de Google y el spreadsheet para habilitar estas acciones.</div>
+                        <div>Conectá tu cuenta de Google para habilitar estas acciones.</div>
                     </div>
                 )}
 
@@ -148,45 +152,53 @@ export default function PerfilPage() {
                     </div>
                 )}
 
-                <button
-                    type="button"
-                    onClick={handleCopyRoutine}
-                    disabled={isCopying || !hasSetup}
-                    className={`w-full py-3 rounded-2xl font-bold flex items-center justify-center gap-2 text-sm ${
-                        isCopying || !hasSetup
-                            ? "bg-black/10 text-black/40"
-                            : "bg-black text-white hover:bg-black/90 active:translate-y-px transition"
-                    }`}
-                >
-                    {isCopying ? <Loader2 size={16} className="animate-spin" /> : <Copy size={16} />}
-                    Copiar rutina para ChatGPT
-                </button>
+                {!isReady && !auth.isLoading ? (
+                    <button
+                        type="button"
+                        onClick={handleConnectGoogle}
+                        className="w-full py-3 rounded-2xl font-bold flex items-center justify-center gap-2 text-sm bg-black text-white"
+                    >
+                        Conectar con Google
+                    </button>
+                ) : (
+                    <>
+                        <button
+                            type="button"
+                            onClick={handleCopyRoutine}
+                            disabled={isCopying || !isReady}
+                            className={`w-full py-3 rounded-2xl font-bold flex items-center justify-center gap-2 text-sm ${
+                                isCopying || !isReady
+                                    ? "bg-black/10 text-black/40"
+                                    : "bg-black text-white hover:bg-black/90 active:translate-y-px transition"
+                            }`}
+                        >
+                            {isCopying ? <Loader2 size={16} className="animate-spin" /> : <Copy size={16} />}
+                            Copiar rutina para ChatGPT
+                        </button>
 
-                <button
-                    type="button"
-                    onClick={() => {
-                        const url = ROUTINE_BUILDER_URL;
-                        const isAndroid = /Android/i.test(navigator.userAgent);
-                        const isIOS = /iPhone|iPad|iPod/i.test(navigator.userAgent);
+                        <button
+                            type="button"
+                            onClick={() => {
+                                const url = ROUTINE_BUILDER_URL;
+                                const isAndroid = /Android/i.test(navigator.userAgent);
+                                const isIOS = /iPhone|iPad|iPod/i.test(navigator.userAgent);
 
-                        if (isAndroid) {
-                            // Intent para Android: intenta abrir en la app, si no está instalada usa el navegador
-                            const intentUrl = `intent://gemini.google.com/gem/1h78boD42OJHWVL_adZzOtrEEs-uwERAn?usp=sharing&hl=es_419#Intent;scheme=https;package=com.google.android.apps.bard;end`;
-                            window.location.href = intentUrl;
-                        } else if (isIOS) {
-                            // En iOS, los Universal Links funcionan automáticamente sin target="_blank"
-                            // Usamos window.open sin target para permitir que iOS intercepte el enlace
-                            window.open(url, '_self');
-                        } else {
-                            // Desktop: abrimos en la misma ventana
-                            window.location.href = url;
-                        }
-                    }}
-                    className="w-full py-3 rounded-2xl font-bold flex items-center justify-center gap-2 text-sm border border-black/10 text-black bg-white hover:bg-black/[0.02] active:translate-y-px transition"
-                >
-                    Armador de rutinas
-                    <ExternalLink size={16} />
-                </button>
+                                if (isAndroid) {
+                                    const intentUrl = `intent://gemini.google.com/gem/1h78boD42OJHWVL_adZzOtrEEs-uwERAn?usp=sharing&hl=es_419#Intent;scheme=https;package=com.google.android.apps.bard;end`;
+                                    window.location.href = intentUrl;
+                                } else if (isIOS) {
+                                    window.open(url, '_self');
+                                } else {
+                                    window.location.href = url;
+                                }
+                            }}
+                            className="w-full py-3 rounded-2xl font-bold flex items-center justify-center gap-2 text-sm border border-black/10 text-black bg-white hover:bg-black/[0.02] active:translate-y-px transition"
+                        >
+                            Armador de rutinas
+                            <ExternalLink size={16} />
+                        </button>
+                    </>
+                )}
 
                 {copyMessage && (
                     <div
@@ -204,7 +216,7 @@ export default function PerfilPage() {
                     </div>
                 )}
 
-                {isLoadingWeek && hasSetup && (
+                {isLoadingWeek && isReady && (
                     <div className="flex items-center gap-2 text-xs text-gray-500">
                         <Loader2 size={16} className="animate-spin" />
                         Cargando Semana 1...
@@ -219,8 +231,6 @@ export default function PerfilPage() {
                         Debug PWA
                     </Link>
                 </div>
-                
-                
             </div>
         </div>
     );
