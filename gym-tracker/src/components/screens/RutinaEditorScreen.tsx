@@ -12,15 +12,18 @@ import {
     RoutineExercise,
 } from "@/lib/sheets-client";
 import { DayRoutineEditor } from "@/components/ui/DayRoutineEditor";
+import { DaySelector } from "@/components/ui/DaySelector";
 import { ExerciseSearchModal } from "@/components/ui/ExerciseSearchModal";
 import { cacheUrls } from "@/lib/pwa";
 
-const DAYS = [
-    { id: 1, name: "DIA 1" },
-    { id: 2, name: "DIA 2" },
-    { id: 3, name: "DIA 3" },
-    { id: 4, name: "DIA 4" },
-    { id: 5, name: "DIA 5" },
+import { Day } from "@/types";
+
+const DAYS: Day[] = [
+    { id: 1, name: "DIA 1", exercises: [] },
+    { id: 2, name: "DIA 2", exercises: [] },
+    { id: 3, name: "DIA 3", exercises: [] },
+    { id: 4, name: "DIA 4", exercises: [] },
+    { id: 5, name: "DIA 5", exercises: [] },
 ];
 
 type ExerciseWithImage = RoutineExercise & { image?: string };
@@ -34,7 +37,8 @@ export function RutinaEditorScreen() {
     const [isLoadingData, setIsLoadingData] = useState(true);
 
     // Current editing state
-    const [selectedDayId, setSelectedDayId] = useState<number>(1);
+    const [selectedDayIndex, setSelectedDayIndex] = useState<number>(0);
+    const selectedDayId = DAYS[selectedDayIndex]?.id ?? 1;
     const [dayExercises, setDayExercises] = useState<ExerciseWithImage[]>([]);
     const [isLoadingDay, setIsLoadingDay] = useState(false);
     const [hasChanges, setHasChanges] = useState(false);
@@ -143,14 +147,14 @@ export function RutinaEditorScreen() {
         };
     }, [auth.isAuthenticated, selectedDayId, isLoadingData, exerciseImageMap]);
 
-    const handleDayChange = (dayId: number) => {
+    const handleDayChange = (index: number) => {
         if (hasChanges) {
             const confirm = window.confirm(
                 "Tenés cambios sin guardar. ¿Querés cambiar de día y perderlos?"
             );
             if (!confirm) return;
         }
-        setSelectedDayId(dayId);
+        setSelectedDayIndex(index);
     };
 
     const handleExercisesChange = (exercises: ExerciseWithImage[]) => {
@@ -309,21 +313,13 @@ export function RutinaEditorScreen() {
 
             {/* Day Selector */}
             <div className="px-6 pb-4">
-                <div className="flex gap-2 overflow-x-auto pb-2">
-                    {DAYS.map((day) => (
-                        <button
-                            key={day.id}
-                            onClick={() => handleDayChange(day.id)}
-                            className={`px-4 py-2.5 rounded-xl font-bold text-sm whitespace-nowrap transition-all ${
-                                selectedDayId === day.id
-                                    ? "bg-black text-white"
-                                    : "bg-white text-black border border-black/10"
-                            }`}
-                        >
-                            {day.name}
-                        </button>
-                    ))}
-                </div>
+                <DaySelector
+                    days={DAYS}
+                    selectedIndex={selectedDayIndex}
+                    onSelect={handleDayChange}
+                    variant="black"
+                    layoutId="rutina-editor-day-pill"
+                />
             </div>
 
             {/* Exercise List */}

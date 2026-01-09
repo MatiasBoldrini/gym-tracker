@@ -8,9 +8,11 @@ type DaySelectorProps = {
     days: Day[];
     selectedIndex: number;
     onSelect: (index: number) => void;
+    variant?: "blue" | "black";
+    layoutId?: string;
 };
 
-export function DaySelector({ days, selectedIndex, onSelect }: DaySelectorProps) {
+export function DaySelector({ days, selectedIndex, onSelect, variant = "blue", layoutId = "day-selector-pill" }: DaySelectorProps) {
     const containerRef = useRef<HTMLDivElement>(null);
     const [isDragging, setIsDragging] = useState(false);
 
@@ -49,6 +51,8 @@ export function DaySelector({ days, selectedIndex, onSelect }: DaySelectorProps)
         }
     };
 
+    const pillColor = variant === "black" ? "bg-black" : "bg-ios-blue";
+
     return (
         <div
             ref={containerRef}
@@ -78,8 +82,8 @@ export function DaySelector({ days, selectedIndex, onSelect }: DaySelectorProps)
                         {/* Animated Background Pill */}
                         {isSelected && (
                             <motion.div
-                                layoutId="day-selector-pill"
-                                className="absolute inset-0 bg-ios-blue rounded-full shadow-[0_2px_8px_rgba(0,0,0,0.15)]"
+                                layoutId={layoutId}
+                                className={`absolute inset-0 ${pillColor} rounded-full shadow-[0_2px_8px_rgba(0,0,0,0.15)]`}
                                 transition={{
                                     type: "spring",
                                     stiffness: 350,
