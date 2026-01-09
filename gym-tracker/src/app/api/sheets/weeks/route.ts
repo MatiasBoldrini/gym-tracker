@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { getUserStore, isUserAuthenticated } from "@/lib/user-store";
+import { getUserStore, isUserAuthenticated, updateUserStore } from "@/lib/user-store";
 import { refreshAccessToken } from "@/lib/google/oauth";
 import { listSpreadsheetSheetTitles } from "@/lib/google/sheets";
 import { normalizeSheetsError } from "@/lib/google/sheets-errors";
@@ -29,6 +29,7 @@ export async function GET() {
         let spreadsheetId = store.spreadsheetId;
         if (!spreadsheetId) {
             spreadsheetId = await ensureSpreadsheetForUser(refreshToken);
+            await updateUserStore({ spreadsheetId });
         }
 
         const accessToken = await refreshAccessToken(refreshToken);

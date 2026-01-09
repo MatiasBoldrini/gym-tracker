@@ -26,14 +26,11 @@ export async function GET(request: NextRequest) {
             return NextResponse.redirect(new URL("/?auth_error=no_refresh_token", request.url));
         }
 
-        // Store the refresh token first
-        await setUserStore({
-            refreshToken: tokens.refresh_token,
-        });
-
         // Bootstrap: find or create the spreadsheet copy automatically
+        // Importante: guardamos refreshToken + spreadsheetId juntos (atómico) para evitar desincronización de cookies.
+        let spreadsheetId: string | null = null;
         try {
-            await ensureSpreadsheetForUser(tokens.refresh_token);
+            spreadsheetId = await ensureSpreadsheetForUser(tokens.refresh_token);
         } catch (setupError: any) {
             console.error("Failed to setup spreadsheet:", setupError);
             // Redirect with setup error - the user is authenticated but spreadsheet setup failed
@@ -44,6 +41,12 @@ export async function GET(request: NextRequest) {
                 new URL(`/?auth_success=true&setup_error=${errorMessage}`, request.url)
             );
         }
+
+        // Store refresh token + spreadsheetId in a single cookie write
+        await setUserStore({
+            refreshToken: tokens.refresh_token,
+            ...(spreadsheetId ? { spreadsheetId } : {}),
+        });
 
         // Redirect to home with success
         return NextResponse.redirect(new URL("/?auth_success=true", request.url));

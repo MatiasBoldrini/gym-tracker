@@ -1,6 +1,5 @@
 import { google } from "googleapis";
 import { refreshAccessToken, getAuthenticatedClient } from "./oauth";
-import { updateUserStore } from "../user-store";
 
 // Template ID (server-only, not NEXT_PUBLIC_*)
 const TEMPLATE_ID =
@@ -29,8 +28,10 @@ export async function findExistingTemplateCopy(
 
     const res = await drive.files.list({
         q: query,
-        fields: "files(id, name)",
-        pageSize: 1,
+        // Tomamos la más reciente para que sea determinístico si existen múltiples copias.
+        orderBy: "modifiedTime desc",
+        fields: "files(id, name, modifiedTime)",
+        pageSize: 10,
     });
 
     const files = res.data.files;
@@ -68,18 +69,38 @@ export async function copyTemplate(accessToken: string): Promise<string> {
     return newFileId;
 }
 
+async function canAccessSpreadsheet(accessToken: string, spreadsheetId: string): Promise<boolean> {
+    try {
+        const auth = getAuthenticatedClient(accessToken);
+        const sheets = google.sheets({ version: "v4", auth });
+        await sheets.spreadsheets.get({
+            spreadsheetId,
+            fields: "spreadsheetId",
+        });
+        return true;
+    } catch {
+        return false;
+    }
+}
+
 /**
  * Ensures the user has a spreadsheet:
  * 1. Searches for an existing copy in their Drive
  * 2. If not found, creates a new copy from the template
  * 3. Returns the spreadsheetId
- *
- * Also updates the user store with the spreadsheetId.
  */
 export async function ensureSpreadsheetForUser(
-    refreshToken: string
+    refreshToken: string,
+    opts?: { knownSpreadsheetId?: string }
 ): Promise<string> {
     const accessToken = await refreshAccessToken(refreshToken);
+
+    // Si ya tenemos un spreadsheetId “conocido” (p.ej. del store), lo preferimos
+    // siempre que sea accesible con esta cuenta.
+    if (opts?.knownSpreadsheetId) {
+        const ok = await canAccessSpreadsheet(accessToken, opts.knownSpreadsheetId);
+        if (ok) return opts.knownSpreadsheetId;
+    }
 
     // First, try to find an existing copy
     let spreadsheetId = await findExistingTemplateCopy(accessToken);
@@ -88,9 +109,6 @@ export async function ensureSpreadsheetForUser(
     if (!spreadsheetId) {
         spreadsheetId = await copyTemplate(accessToken);
     }
-
-    // Persist in the user store (cookie)
-    await updateUserStore({ spreadsheetId });
 
     return spreadsheetId;
 }

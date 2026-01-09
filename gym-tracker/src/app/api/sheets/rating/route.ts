@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getUserStore, isUserAuthenticated } from "@/lib/user-store";
+import { getUserStore, isUserAuthenticated, updateUserStore } from "@/lib/user-store";
 import { refreshAccessToken } from "@/lib/google/oauth";
 import { saveSessionRating } from "@/lib/google/sheets";
 import { normalizeSheetsError } from "@/lib/google/sheets-errors";
@@ -56,6 +56,7 @@ export async function POST(request: NextRequest) {
         let spreadsheetId = store.spreadsheetId;
         if (!spreadsheetId) {
             spreadsheetId = await ensureSpreadsheetForUser(refreshToken);
+            await updateUserStore({ spreadsheetId });
         }
 
         // 4. Get fresh access token
