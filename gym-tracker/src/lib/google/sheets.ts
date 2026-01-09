@@ -120,7 +120,9 @@ export async function readExerciseSets(params: {
  * - Each has rows with: DIA X header, then exercise rows
  * - Columns: A=Exercise name, B=Prescribed, C=?, D=Notes, E=?, F-M=Sets (Reps/Weight pairs)
  */
-export async function saveExerciseSets(params: SaveExerciseParams): Promise<void> {
+export async function saveExerciseSets(
+    params: SaveExerciseParams
+): Promise<{ sheetName: string; range: string; rowIndex: number }> {
     const { accessToken, spreadsheetId, weekId, dayId, exerciseName, sets } = params;
 
     const auth = getAuthenticatedClient(accessToken);
@@ -180,6 +182,12 @@ export async function saveExerciseSets(params: SaveExerciseParams): Promise<void
             values: [setValues],
         },
     });
+
+    return {
+        sheetName,
+        range,
+        rowIndex: exerciseRowIndex,
+    };
 }
 
 export interface SaveSessionRatingParams {
@@ -211,7 +219,9 @@ function starsToString(stars: number): string {
  * The rating is stored in cell F10, F20, F30, etc. based on dayId.
  * Formula: ratingRow = dayId * 10
  */
-export async function saveSessionRating(params: SaveSessionRatingParams): Promise<void> {
+export async function saveSessionRating(
+    params: SaveSessionRatingParams
+): Promise<{ sheetName: string; range: string; rowIndex: number; value: string }> {
     const { accessToken, spreadsheetId, weekId, dayId, stars } = params;
 
     const auth = getAuthenticatedClient(accessToken);
@@ -230,6 +240,13 @@ export async function saveSessionRating(params: SaveSessionRatingParams): Promis
             values: [[ratingValue]],
         },
     });
+
+    return {
+        sheetName,
+        range,
+        rowIndex: ratingRow,
+        value: ratingValue,
+    };
 }
 
 /**

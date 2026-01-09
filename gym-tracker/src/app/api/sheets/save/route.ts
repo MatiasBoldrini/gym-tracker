@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getUserStore, isUserAuthenticated, updateUserStore } from "@/lib/user-store";
 import { refreshAccessToken } from "@/lib/google/oauth";
-import { saveExerciseSets, SetData } from "@/lib/google/sheets";
+import { saveExerciseSets, SetData, readSheetValues } from "@/lib/google/sheets";
 import { normalizeSheetsError } from "@/lib/google/sheets-errors";
 import { ensureSpreadsheetForUser } from "@/lib/google/drive";
 
@@ -70,7 +70,7 @@ export async function POST(request: NextRequest) {
         const accessToken = await refreshAccessToken(refreshToken);
 
         // 5. Write to Google Sheets
-        await saveExerciseSets({
+        const writeMeta = await saveExerciseSets({
             accessToken,
             spreadsheetId,
             weekId: body.weekId,
@@ -79,9 +79,21 @@ export async function POST(request: NextRequest) {
             sets: body.sets,
         });
 
+        const debug = request.nextUrl.searchParams.get("debug") === "1";
+        let writtenValues: any[][] | null = null;
+        if (debug) {
+            try {
+                writtenValues = await readSheetValues(accessToken, spreadsheetId, writeMeta.range);
+            } catch {
+                writtenValues = null;
+            }
+        }
+
         return NextResponse.json({
             ok: true,
             spreadsheetId,
+            write: writeMeta,
+            ...(debug ? { writtenValues } : {}),
         });
     } catch (error: any) {
         console.error("Error saving to Sheets:", error);

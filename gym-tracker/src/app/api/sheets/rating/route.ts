@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getUserStore, isUserAuthenticated, updateUserStore } from "@/lib/user-store";
 import { refreshAccessToken } from "@/lib/google/oauth";
-import { saveSessionRating } from "@/lib/google/sheets";
+import { readSheetValues, saveSessionRating } from "@/lib/google/sheets";
 import { normalizeSheetsError } from "@/lib/google/sheets-errors";
 import { ensureSpreadsheetForUser } from "@/lib/google/drive";
 
@@ -63,7 +63,7 @@ export async function POST(request: NextRequest) {
         const accessToken = await refreshAccessToken(refreshToken);
 
         // 5. Write rating to Google Sheets
-        await saveSessionRating({
+        const writeMeta = await saveSessionRating({
             accessToken,
             spreadsheetId,
             weekId: body.weekId,
@@ -71,9 +71,21 @@ export async function POST(request: NextRequest) {
             stars: body.stars,
         });
 
+        const debug = request.nextUrl.searchParams.get("debug") === "1";
+        let writtenValues: any[][] | null = null;
+        if (debug) {
+            try {
+                writtenValues = await readSheetValues(accessToken, spreadsheetId, writeMeta.range);
+            } catch {
+                writtenValues = null;
+            }
+        }
+
         return NextResponse.json({
             ok: true,
             spreadsheetId,
+            write: writeMeta,
+            ...(debug ? { writtenValues } : {}),
         });
     } catch (error: any) {
         console.error("Error saving rating to Sheets:", error);
