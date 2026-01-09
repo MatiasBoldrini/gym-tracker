@@ -1,9 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getUserStore, isUserAuthenticated, updateUserStore } from "@/lib/user-store";
+import { getAuthContext } from "@/lib/supabase/auth-helper";
 import { refreshAccessToken } from "@/lib/google/oauth";
 import { readExerciseSets } from "@/lib/google/sheets";
 import { normalizeSheetsError } from "@/lib/google/sheets-errors";
-import { ensureSpreadsheetForUser } from "@/lib/google/drive";
 
 function parsePositiveInt(val: string | null): number | null {
     const n = Number(val);
@@ -24,27 +23,16 @@ export async function GET(request: NextRequest) {
             );
         }
 
-        const store = await getUserStore();
-        if (!isUserAuthenticated(store)) {
+        // Get auth context from Supabase + DB
+        const auth = await getAuthContext();
+        if (!auth) {
             return NextResponse.json({ error: "No autenticado" }, { status: 401 });
         }
 
-        const refreshToken = store.refreshToken;
-        if (!refreshToken) {
-            return NextResponse.json({ error: "No autenticado" }, { status: 401 });
-        }
-
-        // Auto-bootstrap: if spreadsheetId is missing, find or create it
-        let spreadsheetId = store.spreadsheetId;
-        if (!spreadsheetId) {
-            spreadsheetId = await ensureSpreadsheetForUser(refreshToken);
-            await updateUserStore({ spreadsheetId });
-        }
-
-        const accessToken = await refreshAccessToken(refreshToken);
+        const accessToken = await refreshAccessToken(auth.refreshToken);
         const sets = await readExerciseSets({
             accessToken,
-            spreadsheetId,
+            spreadsheetId: auth.spreadsheetId,
             weekId,
             dayId,
             exerciseName,

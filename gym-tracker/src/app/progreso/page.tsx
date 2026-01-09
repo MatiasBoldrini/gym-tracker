@@ -1,8 +1,9 @@
 import { ProgresoScreen } from "@/components/screens/ProgresoScreen";
+import { createClient } from "@/lib/supabase/server";
+import { decrypt } from "@/lib/crypto";
 import { refreshAccessToken } from "@/lib/google/oauth";
 import { readSheetValues } from "@/lib/google/sheets";
 import { parsePRData } from "@/lib/sheets-parse";
-import { getUserStore, isUserAuthenticated } from "@/lib/user-store";
 
 export const dynamic = "force-dynamic";
 
@@ -21,13 +22,29 @@ async function readPrSheet(accessToken: string, spreadsheetId: string) {
 
 export default async function ProgresoPage() {
     try {
-        const store = await getUserStore();
-        if (!isUserAuthenticated(store) || !store.spreadsheetId) {
+        const supabase = await createClient();
+        
+        // Check if user is authenticated
+        const { data: { user }, error: authError } = await supabase.auth.getUser();
+        if (authError || !user) {
             return <ProgresoScreen initialPrs={[]} />;
         }
 
-        const accessToken = await refreshAccessToken(store.refreshToken!);
-        const values = await readPrSheet(accessToken, store.spreadsheetId);
+        // Get user integration from DB
+        const { data: integration, error: dbError } = await supabase
+            .from("user_integrations")
+            .select("*")
+            .eq("user_id", user.id)
+            .single();
+
+        if (dbError || !integration || !integration.spreadsheet_id || !integration.google_refresh_token_enc) {
+            return <ProgresoScreen initialPrs={[]} />;
+        }
+
+        // Decrypt refresh token
+        const refreshToken = await decrypt(integration.google_refresh_token_enc);
+        const accessToken = await refreshAccessToken(refreshToken);
+        const values = await readPrSheet(accessToken, integration.spreadsheet_id);
         const prs = parsePRData(values);
 
         return <ProgresoScreen initialPrs={prs} />;
@@ -47,13 +64,3 @@ export default async function ProgresoPage() {
         );
     }
 }
-
-
-
-
-
-
-
-
-
-

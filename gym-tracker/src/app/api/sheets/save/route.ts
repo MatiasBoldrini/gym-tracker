@@ -1,9 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getUserStore, isUserAuthenticated, updateUserStore } from "@/lib/user-store";
+import { getAuthContext } from "@/lib/supabase/auth-helper";
 import { refreshAccessToken } from "@/lib/google/oauth";
 import { saveExerciseSets, SetData, readSheetValues } from "@/lib/google/sheets";
 import { normalizeSheetsError } from "@/lib/google/sheets-errors";
-import { ensureSpreadsheetForUser } from "@/lib/google/drive";
 
 interface SaveRequestBody {
     weekId: number;
@@ -31,9 +30,9 @@ function validateBody(body: unknown): body is SaveRequestBody {
 
 export async function POST(request: NextRequest) {
     try {
-        // 1. Validate auth (cookie store)
-        const store = await getUserStore();
-        if (!isUserAuthenticated(store)) {
+        // 1. Get auth context from Supabase + DB
+        const auth = await getAuthContext();
+        if (!auth) {
             return NextResponse.json({ error: "No autenticado" }, { status: 401 });
         }
 
@@ -52,27 +51,13 @@ export async function POST(request: NextRequest) {
             );
         }
 
-        // 3. Get user's refresh token and spreadsheet ID from cookie store
-        const refreshToken = store.refreshToken;
+        // 3. Get fresh access token
+        const accessToken = await refreshAccessToken(auth.refreshToken);
 
-        if (!refreshToken) {
-            return NextResponse.json({ error: "No autenticado" }, { status: 401 });
-        }
-
-        // Auto-bootstrap: if spreadsheetId is missing, find or create it
-        let spreadsheetId = store.spreadsheetId;
-        if (!spreadsheetId) {
-            spreadsheetId = await ensureSpreadsheetForUser(refreshToken);
-            await updateUserStore({ spreadsheetId });
-        }
-
-        // 4. Get fresh access token
-        const accessToken = await refreshAccessToken(refreshToken);
-
-        // 5. Write to Google Sheets
+        // 4. Write to Google Sheets
         const writeMeta = await saveExerciseSets({
             accessToken,
-            spreadsheetId,
+            spreadsheetId: auth.spreadsheetId,
             weekId: body.weekId,
             dayId: body.dayId,
             exerciseName: body.exerciseName,
@@ -83,7 +68,7 @@ export async function POST(request: NextRequest) {
         let writtenValues: any[][] | null = null;
         if (debug) {
             try {
-                writtenValues = await readSheetValues(accessToken, spreadsheetId, writeMeta.range);
+                writtenValues = await readSheetValues(accessToken, auth.spreadsheetId, writeMeta.range);
             } catch {
                 writtenValues = null;
             }
@@ -91,7 +76,7 @@ export async function POST(request: NextRequest) {
 
         return NextResponse.json({
             ok: true,
-            spreadsheetId,
+            spreadsheetId: auth.spreadsheetId,
             write: writeMeta,
             ...(debug ? { writtenValues } : {}),
         });

@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { getUserStore, isUserAuthenticated } from "@/lib/user-store";
+import { getAuthContext } from "@/lib/supabase/auth-helper";
 import { refreshAccessToken } from "@/lib/google/oauth";
 import { readSheetValues } from "@/lib/google/sheets";
 import { computeFatigaFromSheet } from "@/lib/fatiga";
@@ -7,9 +7,10 @@ import { normalizeSheetsError } from "@/lib/google/sheets-errors";
 
 export async function GET() {
     try {
-        const store = await getUserStore();
-
-        if (!isUserAuthenticated(store) || !store.spreadsheetId) {
+        // Get auth context from Supabase + DB
+        const auth = await getAuthContext();
+        
+        if (!auth) {
             return NextResponse.json({
                 muscleRows: [],
                 daySummary: [],
@@ -18,10 +19,10 @@ export async function GET() {
             });
         }
 
-        const accessToken = await refreshAccessToken(store.refreshToken!);
+        const accessToken = await refreshAccessToken(auth.refreshToken);
         const data = await readSheetValues(
             accessToken,
-            store.spreadsheetId,
+            auth.spreadsheetId,
             `'Fatiga'!A:Z`
         );
         const { muscleRows, daySummary, calendarDays, raw } =
@@ -42,7 +43,3 @@ export async function GET() {
         );
     }
 }
-
-
-
-

@@ -117,7 +117,7 @@ export default function PerfilPage() {
     };
 
     const handleConnectGoogle = () => {
-        window.location.href = "/api/auth/google/start";
+        auth.login();
     };
 
     return (

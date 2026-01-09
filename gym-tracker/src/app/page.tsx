@@ -1,5 +1,6 @@
 import { HomeScreen } from "@/components/screens/HomeScreen";
-import { getUserStore, isUserAuthenticated } from "@/lib/user-store";
+import { createClient } from "@/lib/supabase/server";
+import { decrypt } from "@/lib/crypto";
 import { refreshAccessToken } from "@/lib/google/oauth";
 import { listSpreadsheetSheetTitles, readSheetValues } from "@/lib/google/sheets";
 import { normalizeSheetsError } from "@/lib/google/sheets-errors";
@@ -34,16 +35,30 @@ async function getHomeData(): Promise<{
     prs: any[];
     setupError?: { message: string; code?: string } | null;
 }> {
-    const store = await getUserStore();
+    const supabase = await createClient();
+    
+    // Check if user is authenticated
+    const { data: { user }, error: authError } = await supabase.auth.getUser();
+    if (authError || !user) {
+        return { week: { id: 1, days: [] }, prs: [], setupError: null };
+    }
 
-    // Sin auth/spreadsheet, devolvemos vacío: el cliente mostrará el modal de setup.
-    if (!isUserAuthenticated(store) || !store.spreadsheetId) {
+    // Get user integration from DB
+    const { data: integration, error: dbError } = await supabase
+        .from("user_integrations")
+        .select("*")
+        .eq("user_id", user.id)
+        .single();
+
+    if (dbError || !integration || !integration.spreadsheet_id || !integration.google_refresh_token_enc) {
         return { week: { id: 1, days: [] }, prs: [], setupError: null };
     }
 
     try {
-        const accessToken = await refreshAccessToken(store.refreshToken!);
-        const spreadsheetId = store.spreadsheetId;
+        // Decrypt refresh token
+        const refreshToken = await decrypt(integration.google_refresh_token_enc);
+        const accessToken = await refreshAccessToken(refreshToken);
+        const spreadsheetId = integration.spreadsheet_id;
 
         // Detectar semanas disponibles por títulos reales.
         const titles = await listSpreadsheetSheetTitles(accessToken, spreadsheetId);

@@ -1,45 +1,36 @@
 import { NextResponse } from "next/server";
 import { google } from "googleapis";
-import { getUserStore, isUserAuthenticated, updateUserStore } from "@/lib/user-store";
+import { getAuthContext } from "@/lib/supabase/auth-helper";
 import { refreshAccessToken, getAuthenticatedClient } from "@/lib/google/oauth";
-import { ensureSpreadsheetForUser } from "@/lib/google/drive";
 
 export async function GET() {
     try {
-        const store = await getUserStore();
-        if (!isUserAuthenticated(store) || !store.refreshToken) {
+        // Get auth context from Supabase + DB
+        const auth = await getAuthContext();
+        if (!auth) {
             return NextResponse.json({ error: "No autenticado" }, { status: 401 });
         }
 
-        const refreshToken = store.refreshToken;
-
-        // Garantiza que haya spreadsheetId y lo persiste si faltaba.
-        let spreadsheetId = store.spreadsheetId;
-        if (!spreadsheetId) {
-            spreadsheetId = await ensureSpreadsheetForUser(refreshToken);
-            await updateUserStore({ spreadsheetId });
-        }
-
-        const accessToken = await refreshAccessToken(refreshToken);
-        const auth = getAuthenticatedClient(accessToken);
+        const accessToken = await refreshAccessToken(auth.refreshToken);
+        const client = getAuthenticatedClient(accessToken);
 
         // 1) Metadata del archivo (Drive)
-        const drive = google.drive({ version: "v3", auth });
+        const drive = google.drive({ version: "v3", auth: client });
         const file = await drive.files.get({
-            fileId: spreadsheetId,
+            fileId: auth.spreadsheetId,
             fields: "id,name,modifiedTime,owners(emailAddress),webViewLink",
         });
 
         // 2) Confirmación de acceso a Sheets
-        const sheets = google.sheets({ version: "v4", auth });
+        const sheets = google.sheets({ version: "v4", auth: client });
         const ss = await sheets.spreadsheets.get({
-            spreadsheetId,
+            spreadsheetId: auth.spreadsheetId,
             fields: "spreadsheetId,properties.title",
         });
 
         return NextResponse.json({
             ok: true,
-            spreadsheetId,
+            spreadsheetId: auth.spreadsheetId,
             driveFile: {
                 id: file.data.id ?? null,
                 name: file.data.name ?? null,
@@ -60,4 +51,3 @@ export async function GET() {
         );
     }
 }
-

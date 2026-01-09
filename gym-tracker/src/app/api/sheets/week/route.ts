@@ -1,10 +1,9 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getUserStore, isUserAuthenticated, updateUserStore } from "@/lib/user-store";
+import { getAuthContext } from "@/lib/supabase/auth-helper";
 import { refreshAccessToken } from "@/lib/google/oauth";
 import { readSheetValues } from "@/lib/google/sheets";
 import { parseExerciseMapping, parseWeekData } from "@/lib/sheets-parse";
 import { normalizeSheetsError } from "@/lib/google/sheets-errors";
-import { ensureSpreadsheetForUser } from "@/lib/google/drive";
 
 function getWeekIdFromRequest(request: NextRequest): number | null {
     const weekIdRaw = request.nextUrl.searchParams.get("weekId");
@@ -20,35 +19,24 @@ export async function GET(request: NextRequest) {
             return NextResponse.json({ error: "weekId is required" }, { status: 400 });
         }
 
-        const store = await getUserStore();
-        if (!isUserAuthenticated(store)) {
+        // Get auth context from Supabase + DB
+        const auth = await getAuthContext();
+        if (!auth) {
             return NextResponse.json({ error: "No autenticado" }, { status: 401 });
         }
 
-        const refreshToken = store.refreshToken;
-        if (!refreshToken) {
-            return NextResponse.json({ error: "No autenticado" }, { status: 401 });
-        }
-
-        // Auto-bootstrap: if spreadsheetId is missing, find or create it
-        let spreadsheetId = store.spreadsheetId;
-        if (!spreadsheetId) {
-            spreadsheetId = await ensureSpreadsheetForUser(refreshToken);
-            await updateUserStore({ spreadsheetId });
-        }
-
-        const accessToken = await refreshAccessToken(refreshToken);
+        const accessToken = await refreshAccessToken(auth.refreshToken);
 
         // Load exercise mapping if the sheet exists; if not, fallback to empty mapping.
         let exerciseMapping: Record<string, string> = {};
         try {
-            const mappingValues = await readSheetValues(accessToken, spreadsheetId, `'Ejercicios'!A:D`);
+            const mappingValues = await readSheetValues(accessToken, auth.spreadsheetId, `'Ejercicios'!A:D`);
             exerciseMapping = parseExerciseMapping(mappingValues);
         } catch {
             exerciseMapping = {};
         }
 
-        const weekValues = await readSheetValues(accessToken, spreadsheetId, `'Semana ${weekId}'!A:N`);
+        const weekValues = await readSheetValues(accessToken, auth.spreadsheetId, `'Semana ${weekId}'!A:N`);
         const week = parseWeekData(weekValues, weekId, exerciseMapping);
 
         return NextResponse.json({ week });

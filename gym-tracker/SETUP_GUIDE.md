@@ -1,71 +1,71 @@
 # Guía de Configuración - Gym Tracker
 
-## 📋 Paso 1: Configurar Google OAuth
+## 📋 Paso 1: Crear proyecto en Supabase
 
-### 1.1 Crear un proyecto en Google Cloud Console
+### 1.1 Crear cuenta y proyecto
+
+1. Ve a [Supabase](https://supabase.com/) y creá una cuenta (es gratis)
+2. Click en **"New project"**
+3. Nombre: `gym-tracker` (o el que prefieras)
+4. Database password: generá una segura y guardala
+5. Región: elegí la más cercana a tus usuarios
+6. Click **"Create new project"** y esperá ~2 minutos
+
+### 1.2 Obtener credenciales de Supabase
+
+1. En el dashboard de tu proyecto, andá a **Settings** → **API**
+2. Copiá estos valores (los vas a necesitar):
+   - **Project URL**: algo como `https://xxxx.supabase.co`
+   - **Publishable key** (antes llamada "anon key"): el JWT que empieza con `eyJ...`
+
+### 1.3 Ejecutar migración de base de datos
+
+1. En Supabase, andá a **SQL Editor** → **New Query**
+2. Copiá y pegá el contenido del archivo `supabase/migrations/001_user_integrations.sql`
+3. Click **"Run"** para crear la tabla y las políticas RLS
+
+---
+
+## 📋 Paso 2: Configurar Google OAuth en Supabase
+
+### 2.1 Crear credenciales en Google Cloud Console
 
 1. Ve a [Google Cloud Console](https://console.cloud.google.com/)
-2. Si no tenés cuenta, creá una (es gratis)
-3. Click en el selector de proyectos (arriba a la izquierda) → **"Nuevo proyecto"**
-4. Nombre: `gym-tracker` (o el que prefieras)
-5. Click **"Crear"** y esperá unos segundos
+2. Creá un proyecto nuevo o usá uno existente
+3. Habilitá las APIs:
+   - **Google Sheets API**
+   - **Google Drive API**
+4. Andá a **APIs y servicios** → **Credenciales** → **+ Crear credenciales** → **ID de cliente de OAuth**
+5. Tipo de aplicación: **Aplicación web**
+6. Nombre: `Gym Tracker`
+7. **URIs de redirección autorizados**:
+   - `https://TU_PROJECT_ID.supabase.co/auth/v1/callback`
+   - (Reemplazá `TU_PROJECT_ID` con tu project ID de Supabase)
+8. Copiá el **Client ID** y **Client Secret**
 
-### 1.2 Habilitar APIs necesarias
+### 2.2 Configurar Google como provider en Supabase
 
-1. En el menú lateral izquierdo, buscá **"APIs y servicios"** → **"Biblioteca"**
-2. Buscá y habilitá las siguientes APIs:
-   - **Google Sheets API** - para leer/escribir datos
-   - **Google Drive API** - para crear automáticamente la copia de la plantilla
-3. Click en cada resultado y luego en **"Habilitar"**
-4. Esperá a que se habiliten (aparece un check verde)
+1. En Supabase, andá a **Authentication** → **Providers**
+2. Buscá **Google** y habilitalo
+3. Pegá tu **Client ID** y **Client Secret** de Google
+4. En **Authorized Client IDs**, dejalo vacío o agregá tu Client ID
+5. Click **"Save"**
 
-### 1.3 Configurar pantalla de consentimiento OAuth
+### 2.3 Configurar pantalla de consentimiento OAuth (Google)
 
-1. En el menú lateral: **"APIs y servicios"** → **"Pantalla de consentimiento OAuth"**
-2. Seleccioná **"Externo"** (si querés que cualquiera use la app) o **"Interno"** (solo tu organización)
-   - **Nota**: Para "Externo" eventualmente necesitarás verificación, pero podés empezar en modo "Testing"
-3. Click **"Crear"**
-4. Completá:
-   - **Nombre de la app**: `Gym Tracker`
-   - **Email de soporte**: tu email
-   - **Logo** (opcional): podés subir uno después
-   - **Dominio autorizado** (opcional por ahora)
-5. Click **"Guardar y continuar"**
-6. En **"Scopes"**:
-   - Click **"Agregar o quitar scopes"**
-   - Buscá y seleccioná estos scopes:
-     - `https://www.googleapis.com/auth/spreadsheets` - lectura/escritura de Sheets
-     - `https://www.googleapis.com/auth/drive.readonly` - leer Drive para buscar copias existentes
-     - `https://www.googleapis.com/auth/drive.file` - crear/modificar archivos creados por la app
-   - Click **"Actualizar"** → **"Guardar y continuar"**
-7. En **"Usuarios de prueba"** (si elegiste "Externo"):
-   - Agregá tu email (y los emails de quienes quieras que prueben sin verificación)
-   - Click **"Guardar y continuar"**
-8. Click **"Volver al panel"**
+1. En Google Cloud Console, andá a **APIs y servicios** → **Pantalla de consentimiento OAuth**
+2. Seleccioná **Externo** (o **Interno** si es solo para tu organización)
+3. Completá los datos básicos (nombre, email de soporte)
+4. En **Scopes**, agregá:
+   - `https://www.googleapis.com/auth/spreadsheets`
+   - `https://www.googleapis.com/auth/drive.file`
+5. En **Usuarios de prueba** (si elegiste Externo), agregá los emails de quienes van a probar
 
-### 1.4 Crear credenciales OAuth
+---
 
-1. En el menú lateral: **"APIs y servicios"** → **"Credenciales"**
-2. Click **"+ Crear credenciales"** → **"ID de cliente de OAuth"**
-3. Si te pide configurar la pantalla de consentimiento primero, seguí los pasos anteriores
-4. En **"Tipo de aplicación"**: seleccioná **"Aplicación web"**
-5. Nombre: `Gym Tracker Web Client`
-6. **URIs de redirección autorizados**:
-   - Para desarrollo local: `http://localhost:3000/api/auth/google/callback`
-   - Para producción (Vercel): `https://gym-tracker-hazel.vercel.app/api/auth/google/callback`
-   - Agregá ambas (click **"+ Agregar URI"** para cada una)
-7. Click **"Crear"**
-8. **¡IMPORTANTE!** Copiá estos dos valores (los vas a necesitar):
-   - **ID de cliente**: algo como `123456789-abc.apps.googleusercontent.com`
-   - **Secreto de cliente**: algo como `GOCSPX-xxxxxxxxxxxxx`
-   - ⚠️ El secreto solo se muestra UNA VEZ. Si lo perdés, tenés que crear otra credencial.
-
-### 1.5 Preparar la plantilla de Google Sheets
-
-La app crea automáticamente una copia de la plantilla en el Drive del usuario cuando conecta su cuenta. Para esto:
+## 📋 Paso 3: Preparar la plantilla de Google Sheets
 
 1. Usá la plantilla oficial o creá la tuya:
-
    - **Plantilla oficial**: `1XMFq-Twxtoa_Fs2_6kOWjB65mMqEgzFJ8ujzyZN7iCo`
    - [Ver plantilla](https://docs.google.com/spreadsheets/d/1XMFq-Twxtoa_Fs2_6kOWjB65mMqEgzFJ8ujzyZN7iCo/edit?usp=sharing)
 
@@ -76,99 +76,59 @@ La app crea automáticamente una copia de la plantilla en el Drive del usuario c
    https://docs.google.com/spreadsheets/d/1XMFq-Twxtoa_Fs2_6kOWjB65mMqEgzFJ8ujzyZN7iCo/edit
                                                       ↑ Este es el ID ↑
    ```
-4. Copiá ese ID (lo vas a usar como `SHEETS_TEMPLATE_ID`)
 
 ---
 
-## 📋 Paso 2: Storage / DB
+## 📋 Paso 4: Configurar variables de entorno
 
-Esta versión del proyecto **NO usa KV/Redis/DB**. Guardamos el `refresh_token` y el `spreadsheetId` en una **cookie HttpOnly cifrada**, así que no necesitás configurar Storage en Vercel.
+### 4.1 En Vercel (producción)
 
-Además, usamos **Drive como "fuente de verdad"**: cuando un usuario conecta su cuenta desde otro dispositivo, la app busca automáticamente en su Drive una copia existente (identificada por `appProperties`). Si no la encuentra, crea una nueva.
-
----
-
-## 📋 Paso 3: Configurar variables de entorno
-
-### 3.1 En Vercel (producción)
-
-1. En tu proyecto de Vercel, andá a **"Settings"** → **"Environment Variables"**
-2. Agregá estas variables (click **"Add"** para cada una):
+1. En tu proyecto de Vercel, andá a **Settings** → **Environment Variables**
+2. Agregá estas variables:
 
 ```
+NEXT_PUBLIC_SUPABASE_URL
+Valor: [tu Project URL de Supabase, ej: https://xxxx.supabase.co]
+
+NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY
+Valor: [tu Publishable key de Supabase, ej: eyJ...]
+
 GOOGLE_CLIENT_ID
 Valor: [tu Client ID de Google, ej: 123456789-abc.apps.googleusercontent.com]
 
 GOOGLE_CLIENT_SECRET
 Valor: [tu Client Secret de Google, ej: GOCSPX-xxxxxxxxxxxxx]
 
-GOOGLE_REDIRECT_URI
-Valor: https://tu-app.vercel.app/api/auth/google/callback
-(Reemplazá "tu-app" con el nombre real de tu deployment)
-
-SESSION_SECRET
-Valor: [generá un string random de 32+ caracteres]
-Ejemplo: openssl rand -base64 32
-O usá: https://generate-secret.vercel.app/32
-
 TOKEN_ENCRYPTION_KEY
-Valor: [otro string random de 32+ caracteres, diferente al anterior]
+Valor: [string random de 32+ caracteres para cifrar refresh tokens]
 Ejemplo: openssl rand -base64 32
 
 SHEETS_TEMPLATE_ID
-Valor: [el ID de tu plantilla de Google Sheets, ej: 1XMFq-Twxtoa...]
-(Si no lo definís, por defecto se usa la plantilla oficial.)
+Valor: [el ID de tu plantilla de Google Sheets]
+(Si no lo definís, se usa la plantilla oficial por defecto)
 ```
 
-3. Para cada variable, seleccioná los **entornos** donde aplica:
+3. Para cada variable, seleccioná los **entornos** donde aplica (Production, Preview, Development)
 
-   - ✅ Production
-   - ✅ Preview
-   - ✅ Development (si querés probar en previews)
+### 4.2 En local (.env.local)
 
-4. Click **"Save"** para cada una
-
-### 3.2 En local (.env.local)
-
-1. En la raíz de tu proyecto, creá un archivo `.env.local`
-2. Copiá este contenido y reemplazá los valores:
+Creá un archivo `.env.local` en la raíz del proyecto:
 
 ```bash
-# Google OAuth
-GOOGLE_CLIENT_ID=tu_client_id_aqui.apps.googleusercontent.com
-GOOGLE_CLIENT_SECRET=tu_client_secret_aqui
-GOOGLE_REDIRECT_URI=http://localhost:3000/api/auth/google/callback
+# Supabase
+NEXT_PUBLIC_SUPABASE_URL=https://tu-project.supabase.co
+NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY=eyJ...tu_publishable_key
+
+# Google OAuth (para refresh de tokens)
+GOOGLE_CLIENT_ID=tu_client_id.apps.googleusercontent.com
+GOOGLE_CLIENT_SECRET=tu_client_secret
 
 # Seguridad
-SESSION_SECRET=tu_session_secret_32_chars_minimo
 TOKEN_ENCRYPTION_KEY=tu_encryption_key_32_chars_minimo
 
-# Template (server-only, no usar NEXT_PUBLIC_)
+# Template (server-only)
 SHEETS_TEMPLATE_ID=1XMFq-Twxtoa_Fs2_6kOWjB65mMqEgzFJ8ujzyZN7iCo
 ```
-
-3. Guardá el archivo
-
----
-
-## 📋 Paso 4: Generar secrets seguros (opcional pero recomendado)
-
-Si querés generar strings random seguros para `SESSION_SECRET` y `TOKEN_ENCRYPTION_KEY`:
-
-### Opción A: Terminal (macOS/Linux)
-
-```bash
-# Generar SESSION_SECRET
-openssl rand -base64 32
-
-# Generar TOKEN_ENCRYPTION_KEY (otro diferente)
-openssl rand -base64 32
-```
-
-### Opción B: Online
-
-1. Ve a https://generate-secret.vercel.app/32
-2. Generá dos strings diferentes (uno para cada variable)
 
 ---
 
@@ -177,77 +137,91 @@ openssl rand -base64 32
 ### 5.1 Probar localmente
 
 1. Reiniciá tu servidor de desarrollo:
-
    ```bash
    npm run dev
    ```
 
 2. Abrí `http://localhost:3000`
-3. Deberías ver la pantalla de bienvenida con el botón "Conectar con Google"
-4. Click en **"Conectar con Google"**
-5. Deberías ser redirigido a Google para autorizar (vas a ver los permisos de Sheets + Drive)
-6. Después de autorizar, la app automáticamente:
-   - Busca si ya tenés una copia de la plantilla en tu Drive
-   - Si no la encuentra, crea una nueva copia llamada "Rutina Gym - Gym Tracker"
-7. Serás redirigido a la app ya funcionando
+3. Deberías ver el botón "Conectar con Google"
+4. Al hacer click, Supabase te redirige a Google para autorizar
+5. Después de autorizar:
+   - Se crea automáticamente una copia de la plantilla en tu Drive
+   - El `spreadsheetId` y `refreshToken` se guardan en la BD de Supabase
+6. Serás redirigido a la app ya funcionando
 
 ### 5.2 Probar en Vercel
 
 1. Hacé un commit y push a tu repo
 2. Vercel debería hacer deploy automático
-3. Una vez deployado, andá a tu URL de Vercel
-4. Probá el flujo completo de autenticación
+3. Probá el flujo completo de autenticación
 
 ---
 
 ## ⚠️ Troubleshooting
 
 ### Error: "redirect_uri_mismatch"
+- Verificá que en Google Cloud Console tengas configurado el redirect URI correcto:
+  `https://TU_PROJECT_ID.supabase.co/auth/v1/callback`
 
-- Verificá que agregaste EXACTAMENTE la misma URL en Google Cloud Console
-- Para local: `http://localhost:3000/api/auth/google/callback`
-- Para producción: `https://tu-app.vercel.app/api/auth/google/callback`
+### Error: "No provider_refresh_token received"
+- Asegurate de que los scopes de Drive/Sheets estén configurados en tu app
+- Verificá que `access_type: offline` y `prompt: consent` estén seteados
 
-### Error: "app not verified" (pantalla de advertencia de Google)
-
-- Esto es normal si elegiste "Externo" en la pantalla de consentimiento
-- Podés continuar igual (click en "Avanzar")
-- Para quitarlo, necesitás verificar la app con Google (proceso más largo)
-- **Nota**: Como ahora pedimos permisos de Drive, Google puede requerir verificación para producción
-
-### Error: "Not authenticated" / "No Google account linked"
-
-- Volvé a hacer **Conectar con Google** (si borraste cookies o estás en otro dispositivo/navegador)
-
-### Error: "SESSION_SECRET must be at least 32 characters"
-
-- Asegurate de que tus secrets tengan al menos 32 caracteres
-- Generá nuevos con `openssl rand -base64 32`
-
-### Error al crear la copia de la plantilla
-
+### Error: "Failed to create spreadsheet"
 - Verificá que la plantilla esté compartida con "Cualquiera con el link puede ver"
-- Verificá que habilitaste la Google Drive API en tu proyecto de Google Cloud
+- Verificá que habilitaste las APIs de Drive y Sheets en Google Cloud
 
-### El usuario ya tiene una copia pero se crea otra
+### El usuario no ve su spreadsheet en otro dispositivo
+- Eso no debería pasar más: el `spreadsheetId` se guarda en Supabase y se reutiliza
+- Si pasa, verificá que la tabla `user_integrations` tenga el dato
 
-- Esto puede pasar si la copia anterior fue creada sin `appProperties` (versión anterior de la app)
-- El usuario puede borrar la copia duplicada manualmente desde su Drive
+---
+
+## 📝 Arquitectura
+
+### Flujo de autenticación
+
+```
+Usuario → "Conectar con Google" → Supabase OAuth → Google consent
+                                                         ↓
+                                         Supabase recibe tokens
+                                                         ↓
+                                         Redirect a /auth/callback
+                                                         ↓
+                                    - Guarda refresh_token cifrado en BD
+                                    - Crea spreadsheet si no existe
+                                    - Guarda spreadsheetId en BD
+                                                         ↓
+                                              Redirect a home
+```
+
+### Modelo de datos
+
+Tabla `user_integrations` en Supabase:
+- `user_id`: UUID (PK, referencia a auth.users)
+- `email`: texto
+- `spreadsheet_id`: ID del Google Sheet del usuario
+- `google_refresh_token_enc`: refresh token cifrado (AES-GCM)
+- `created_at`, `updated_at`: timestamps
+
+### Seguridad
+
+- Los refresh tokens se cifran con AES-GCM antes de guardarse en BD
+- RLS (Row Level Security) asegura que cada usuario solo accede a sus datos
+- Las cookies de sesión son manejadas por Supabase (HttpOnly, Secure)
 
 ---
 
 ## 📝 Checklist final
 
-- [ ] Proyecto creado en Google Cloud Console
-- [ ] Google Sheets API habilitada
-- [ ] Google Drive API habilitada
-- [ ] Pantalla de consentimiento OAuth configurada con los 3 scopes
-- [ ] Credenciales OAuth creadas (Client ID + Secret)
-- [ ] Variables de entorno configuradas en Vercel
-- [ ] Archivo `.env.local` creado localmente
-- [ ] Secrets generados (SESSION_SECRET, TOKEN_ENCRYPTION_KEY)
+- [ ] Proyecto creado en Supabase
+- [ ] Migración SQL ejecutada (tabla `user_integrations`)
+- [ ] Google OAuth configurado en Supabase
+- [ ] APIs de Sheets y Drive habilitadas en Google Cloud
+- [ ] Credenciales OAuth creadas en Google Cloud
+- [ ] Variables de entorno configuradas (Vercel y local)
 - [ ] Plantilla compartida con "Cualquiera con el link puede ver"
-- [ ] Probar flujo completo de autenticación
+- [ ] Probar flujo completo de login → crear spreadsheet → usar app
 
 ---
 
@@ -255,19 +229,16 @@ openssl rand -base64 32
 
 Una vez completados estos pasos, tu app debería estar funcionando con:
 
-- ✅ Autenticación OAuth con Google
-- ✅ Creación automática de copia de la plantilla (sin modal de setup)
-- ✅ Detección de copia existente en otro dispositivo (1 copia por usuario)
-- ✅ Escritura a Google Sheets sin CORS
-- ✅ Persistencia multi-usuario vía cookie HttpOnly cifrada (sin DB)
+- ✅ Autenticación gestionada por Supabase
+- ✅ Usuarios y spreadsheets persistidos en BD
+- ✅ Creación automática de spreadsheet en el primer login
+- ✅ Multi-dispositivo: el usuario encuentra su spreadsheet en cualquier device
+- ✅ Refresh tokens cifrados y seguros
 
-### Nombres de pestañas esperados (importante)
+### Nombres de pestañas esperados
 
-La app lee los datos por **título de pestaña** (no por gid). Asegurate de que la plantilla tenga:
-
-- `Semana 1`, `Semana 2`, ... (solo aparecen en el selector las que existan)
-- `RM` (PRs)
+La app lee los datos por **título de pestaña**. Asegurate de que la plantilla tenga:
+- `Semana 1`, `Semana 2`, ... (las que existan)
+- `RM` o `RM A,B,C` (PRs)
 - `Ejercicios` (mapeo nombre→imagen)
 - `Fatiga` (tabla de volumen semanal)
-
-Si tenés algún problema, revisá los logs en Vercel o en la consola del navegador.

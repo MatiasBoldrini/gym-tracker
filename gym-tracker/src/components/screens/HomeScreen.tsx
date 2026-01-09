@@ -505,7 +505,7 @@ export function HomeScreen({ initialWeek, initialPrs, initialSetupError }: HomeS
     };
 
     const handleConnectGoogle = () => {
-        window.location.href = "/api/auth/google/start";
+        auth.login();
     };
 
     // Loading state
