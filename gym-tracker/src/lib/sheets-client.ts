@@ -113,6 +113,37 @@ export async function fetchExerciseSets(params: {
     return (await response.json()) as { sets: { weight: number; reps: number }[] };
 }
 
+export interface BulkExerciseSetsResult {
+    exerciseName: string;
+    sets: { weight: number; reps: number }[];
+}
+
+/**
+ * Fetch sets for multiple exercises in a single request.
+ */
+export async function fetchExerciseSetsBulk(params: {
+    weekId: number;
+    dayId: number;
+    exerciseNames: string[];
+}): Promise<BulkExerciseSetsResult[]> {
+    const { weekId, dayId, exerciseNames } = params;
+    const response = await fetch("/api/sheets/exercises-bulk", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ weekId, dayId, exerciseNames }),
+    });
+    if (!response.ok) {
+        const data = await response.json().catch(() => ({}));
+        throw createApiError({
+            message: data?.error || `Error ${response.status}`,
+            status: response.status,
+            code: (data as any)?.code,
+        });
+    }
+    const json = await response.json();
+    return Array.isArray(json.results) ? json.results : [];
+}
+
 /**
  * Save session rating (stars) for a specific day.
  * @param weekId - The week number (e.g., 1 for "Semana 1")

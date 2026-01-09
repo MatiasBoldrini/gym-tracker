@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState, useEffect, useRef } from "react";
-import { saveExerciseSets, fetchExerciseSets, fetchWeekData, fetchWeeksList, WeekListItem, saveSessionRating } from "@/lib/sheets-client";
+import { saveExerciseSets, fetchExerciseSets, fetchExerciseSetsBulk, fetchWeekData, fetchWeeksList, WeekListItem, saveSessionRating } from "@/lib/sheets-client";
 import { Week, PersonalRecord, Exercise, Set } from "@/types";
 import { ExerciseCard } from "@/components/ui/ExerciseCard";
 import Stack from "@/components/ui/Stack";
@@ -271,22 +271,19 @@ export function HomeScreen({ initialWeek, initialPrs, initialSetupError }: HomeS
         const refresh = async () => {
             setIsRefreshingInfo(true);
             try {
-                const results = await Promise.all(
-                    exerciseNames.map(async (exerciseName) => {
-                        try {
-                            const { sets } = await fetchExerciseSets({ weekId, dayId, exerciseName });
-                            const normalized: Set[] = (sets || []).map((s) => ({
-                                weight: (s.weight === 0 && s.reps === 0) ? null : (s.weight ?? null),
-                                reps: (s.weight === 0 && s.reps === 0) ? null : (s.reps ?? null),
-                            }));
-                            return { exerciseName, sets: normalized };
-                        } catch {
-                            return { exerciseName, sets: null as Set[] | null };
-                        }
-                    })
-                );
+                // Batch fetch: single request for all exercises
+                const bulkResults = await fetchExerciseSetsBulk({ weekId, dayId, exerciseNames });
 
                 if (cancelled) return;
+
+                // Normalize sets (0/0 -> null)
+                const results = bulkResults.map((r) => ({
+                    exerciseName: r.exerciseName,
+                    sets: (r.sets || []).map((s): Set => ({
+                        weight: (s.weight === 0 && s.reps === 0) ? null : (s.weight ?? null),
+                        reps: (s.weight === 0 && s.reps === 0) ? null : (s.reps ?? null),
+                    })),
+                }));
 
                 setWeek((prev) => {
                     const updated = { ...prev };
@@ -298,7 +295,6 @@ export function HomeScreen({ initialWeek, initialPrs, initialSetupError }: HomeS
                     updated.days[dayIdx] = { ...day, exercises: [...day.exercises] };
 
                     for (const r of results) {
-                        if (!r.sets) continue;
                         const exIdx = updated.days[dayIdx].exercises.findIndex((e) => e.name === r.exerciseName);
                         if (exIdx < 0) continue;
                         updated.days[dayIdx].exercises[exIdx] = {
@@ -309,6 +305,9 @@ export function HomeScreen({ initialWeek, initialPrs, initialSetupError }: HomeS
 
                     return updated;
                 });
+            } catch (err) {
+                // Fail silently on bulk error (same UX as before per-exercise errors)
+                console.error("Failed to fetch exercise sets bulk:", err);
             } finally {
                 if (!cancelled) setIsRefreshingInfo(false);
             }

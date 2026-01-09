@@ -113,6 +113,108 @@ export async function readExerciseSets(params: {
 }
 
 /**
+ * Helper: parse columns F..M of a row into SetData[].
+ * Extracted to avoid duplication between readExerciseSets and readExerciseSetsBulk.
+ */
+function parseRowSets(row: any[]): SetData[] {
+    const sets: SetData[] = [];
+    for (let i = 0; i < 4; i++) {
+        const repCol = 5 + i * 2; // F is index 5
+        const weightCol = 6 + i * 2; // G is index 6
+        const repsRaw = row[repCol];
+        const weightRaw = row[weightCol];
+
+        const reps = Number.parseFloat(repsRaw);
+        const weight = Number.parseFloat(weightRaw);
+
+        const repsOk = Number.isFinite(reps) && reps > 0 && reps <= 500;
+        const weightOk = Number.isFinite(weight) && weight >= 0 && weight <= 500;
+        sets.push(repsOk && weightOk ? { reps, weight } : { reps: 0, weight: 0 });
+    }
+    return sets;
+}
+
+export interface BulkExerciseResult {
+    exerciseName: string;
+    sets: SetData[];
+}
+
+/**
+ * Reads sets for multiple exercises in a single Sheets API call.
+ * Throws if any requested exercise is not found (fail-all behavior).
+ */
+export async function readExerciseSetsBulk(params: {
+    accessToken: string;
+    spreadsheetId: string;
+    weekId: number;
+    dayId: number;
+    exerciseNames: string[];
+}): Promise<BulkExerciseResult[]> {
+    const { accessToken, spreadsheetId, weekId, dayId, exerciseNames } = params;
+
+    if (exerciseNames.length === 0) {
+        return [];
+    }
+
+    const auth = getAuthenticatedClient(accessToken);
+    const sheets = google.sheets({ version: "v4", auth });
+
+    const sheetName = `Semana ${weekId}`;
+
+    // Single read for all exercises
+    const readResponse = await sheets.spreadsheets.values.get({
+        spreadsheetId,
+        range: `'${sheetName}'!A:M`,
+        valueRenderOption: "UNFORMATTED_VALUE",
+    });
+
+    const rows = (readResponse.data.values as any[][]) || [];
+
+    // Build a map of normalized exercise name -> row for the target day only
+    const dayRowsMap = new Map<string, any[]>();
+    let inCorrectDay = false;
+
+    for (let i = 0; i < rows.length; i++) {
+        const cellValue = rows[i]?.[0]?.toString().trim().toUpperCase() || "";
+
+        if (cellValue.startsWith("DIA ")) {
+            const currentDayId = parseInt(cellValue.replace("DIA ", ""));
+            inCorrectDay = currentDayId === dayId;
+        } else if (inCorrectDay && rows[i]?.[0]) {
+            const key = normalizeExerciseKey(rows[i][0]);
+            if (key) {
+                dayRowsMap.set(key, rows[i]);
+            }
+        }
+    }
+
+    // Resolve each requested exercise
+    const results: BulkExerciseResult[] = [];
+    const missing: string[] = [];
+
+    for (const exerciseName of exerciseNames) {
+        const key = normalizeExerciseKey(exerciseName);
+        const row = dayRowsMap.get(key);
+        if (!row) {
+            missing.push(exerciseName);
+        } else {
+            results.push({
+                exerciseName,
+                sets: parseRowSets(row),
+            });
+        }
+    }
+
+    if (missing.length > 0) {
+        throw new Error(
+            `Exercises not found in ${sheetName} Day ${dayId}: ${missing.join(", ")}`
+        );
+    }
+
+    return results;
+}
+
+/**
  * Finds the row for an exercise and updates/appends set data.
  * 
  * Sheet structure assumed:
