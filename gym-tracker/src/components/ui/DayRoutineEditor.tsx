@@ -47,11 +47,6 @@ function ExerciseItem({
                 damping: 30,
             }}
             layout
-            layoutTransition={{
-                type: "spring",
-                stiffness: 400,
-                damping: 30,
-            }}
             className={`
                 flex items-center gap-3 p-3 bg-white rounded-2xl border border-black/5
                 ${isDragging ? "z-50 relative" : ""}
