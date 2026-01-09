@@ -3,7 +3,26 @@
 import { useState } from "react";
 import { GripVertical, Trash2, Plus } from "lucide-react";
 import Image from "next/image";
-import { Reorder, useDragControls, motion } from "framer-motion";
+import { motion, AnimatePresence } from "framer-motion";
+import {
+    DndContext,
+    closestCenter,
+    KeyboardSensor,
+    PointerSensor,
+    useSensor,
+    useSensors,
+    DragEndEvent,
+    DragStartEvent,
+    DragOverlay,
+} from "@dnd-kit/core";
+import {
+    arrayMove,
+    SortableContext,
+    sortableKeyboardCoordinates,
+    useSortable,
+    verticalListSortingStrategy,
+} from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
 import { RoutineExercise } from "@/lib/sheets-client";
 
 interface DayRoutineEditorProps {
@@ -13,68 +32,33 @@ interface DayRoutineEditorProps {
     maxExercises?: number;
 }
 
-// Componente individual para cada item con su propio dragControls
-function ExerciseItem({
+type ExerciseWithImage = RoutineExercise & { image?: string };
+
+// Contenido visual del ejercicio (reutilizable)
+function ExerciseItemContent({
     exercise,
     onRemove,
+    dragHandleProps,
+    isOverlay = false,
 }: {
-    exercise: RoutineExercise & { image?: string };
-    onRemove: () => void;
+    exercise: ExerciseWithImage;
+    onRemove?: () => void;
+    dragHandleProps?: React.HTMLAttributes<HTMLDivElement>;
+    isOverlay?: boolean;
 }) {
-    const dragControls = useDragControls();
-    const [isDragging, setIsDragging] = useState(false);
-
     return (
-        <Reorder.Item
-            value={exercise}
-            dragListener={false}
-            dragControls={dragControls}
-            onDragStart={() => setIsDragging(true)}
-            onDragEnd={() => setIsDragging(false)}
-            initial={{ opacity: 0, y: 10 }}
-            animate={{ 
-                opacity: 1, 
-                y: 0,
-                scale: isDragging ? 1.02 : 1,
-                boxShadow: isDragging 
-                    ? "0 10px 40px -10px rgba(0,0,0,0.15)" 
-                    : "0 0px 0px 0px rgba(0,0,0,0)",
-            }}
-            exit={{ opacity: 0, y: -10, transition: { duration: 0.15 } }}
-            transition={{
-                type: "spring",
-                stiffness: 500,
-                damping: 35,
-                mass: 0.5,
-            }}
-            layout="position"
-            layoutId={`exercise-${exercise.name}`}
-            dragElastic={1}
-            dragMomentum={false}
-            whileDrag={{ 
-                scale: 1.03, 
-                zIndex: 50,
-                boxShadow: "0 20px 50px -15px rgba(0,0,0,0.25)",
-            }}
-            className={`
-                flex items-center gap-3 p-3 bg-white rounded-2xl border border-black/5
-                ${isDragging ? "z-50 relative" : ""}
-            `}
-            style={{ 
-                touchAction: "none",
-            }}
-        >
-            {/* Drag Handle - Solo este elemento inicia el drag */}
-            <motion.div
-                onPointerDown={(e) => {
-                    e.preventDefault();
-                    dragControls.start(e);
-                }}
-                whileTap={{ scale: 0.95 }}
-                className="touch-none cursor-grab active:cursor-grabbing p-1.5 -m-1 text-gray-300 hover:text-gray-500 transition-colors select-none"
+        <>
+            {/* Drag Handle */}
+            <div
+                {...dragHandleProps}
+                className={`p-1.5 -m-1 transition-colors select-none ${
+                    isOverlay 
+                        ? "text-gray-500" 
+                        : "touch-none cursor-grab active:cursor-grabbing text-gray-300 hover:text-gray-500"
+                }`}
             >
                 <GripVertical size={20} />
-            </motion.div>
+            </div>
 
             {/* Exercise Image */}
             <div className="w-12 h-12 rounded-xl bg-gray-50 border border-black/5 overflow-hidden flex-shrink-0">
@@ -105,14 +89,67 @@ function ExerciseItem({
             </div>
 
             {/* Delete Button */}
-            <motion.button
-                onClick={onRemove}
-                whileTap={{ scale: 0.9 }}
-                className="p-2 text-gray-300 hover:text-red-500 hover:bg-red-50 rounded-xl transition-colors"
-            >
-                <Trash2 size={18} />
-            </motion.button>
-        </Reorder.Item>
+            {onRemove ? (
+                <motion.button
+                    onClick={onRemove}
+                    whileTap={{ scale: 0.9 }}
+                    className="p-2 text-gray-300 hover:text-red-500 hover:bg-red-50 rounded-xl transition-colors"
+                >
+                    <Trash2 size={18} />
+                </motion.button>
+            ) : (
+                <div className="p-2 text-gray-300">
+                    <Trash2 size={18} />
+                </div>
+            )}
+        </>
+    );
+}
+
+// Componente para el item arrastrable
+function SortableExerciseItem({
+    exercise,
+    exerciseId,
+    onRemove,
+}: {
+    exercise: ExerciseWithImage;
+    exerciseId: string;
+    onRemove: () => void;
+}) {
+    const {
+        attributes,
+        listeners,
+        setNodeRef,
+        transform,
+        transition,
+        isDragging,
+    } = useSortable({ id: exerciseId });
+
+    const style = {
+        transform: CSS.Transform.toString(transform),
+        transition,
+        opacity: isDragging ? 0.4 : 1,
+        touchAction: "none" as const,
+    };
+
+    return (
+        <motion.div
+            ref={setNodeRef}
+            style={style}
+            initial={{ opacity: 0, y: 10 }}
+            animate={{ opacity: isDragging ? 0.4 : 1, y: 0 }}
+            exit={{ opacity: 0, y: -10, transition: { duration: 0.15 } }}
+            className={`
+                flex items-center gap-3 p-3 bg-white rounded-2xl border border-black/5
+                ${isDragging ? "z-10 shadow-lg" : ""}
+            `}
+        >
+            <ExerciseItemContent
+                exercise={exercise}
+                onRemove={onRemove}
+                dragHandleProps={{ ...attributes, ...listeners }}
+            />
+        </motion.div>
     );
 }
 
@@ -122,15 +159,55 @@ export function DayRoutineEditor({
     onAddExercise,
     maxExercises = 7,
 }: DayRoutineEditorProps) {
+    const [activeId, setActiveId] = useState<string | null>(null);
+
+    // Crear IDs estables para cada ejercicio
+    const exerciseIds = exercises.map((e, i) => `${e.name}-${i}`);
+
+    // Configurar sensores con distancia de activación
+    const sensors = useSensors(
+        useSensor(PointerSensor, {
+            activationConstraint: {
+                distance: 8,
+            },
+        }),
+        useSensor(KeyboardSensor, {
+            coordinateGetter: sortableKeyboardCoordinates,
+        })
+    );
+
+    const handleDragStart = (event: DragStartEvent) => {
+        setActiveId(event.active.id as string);
+    };
+
+    const handleDragEnd = (event: DragEndEvent) => {
+        const { active, over } = event;
+        setActiveId(null);
+
+        if (over && active.id !== over.id) {
+            const oldIndex = exerciseIds.indexOf(active.id as string);
+            const newIndex = exerciseIds.indexOf(over.id as string);
+
+            if (oldIndex !== -1 && newIndex !== -1) {
+                const newExercises = arrayMove(exercises, oldIndex, newIndex);
+                onExercisesChange(newExercises);
+            }
+        }
+    };
+
     const handleRemoveExercise = (index: number) => {
         const newExercises = exercises.filter((_, i) => i !== index);
         onExercisesChange(newExercises);
     };
 
+    const activeExercise = activeId
+        ? exercises[exerciseIds.indexOf(activeId)]
+        : null;
+
     return (
         <div className="space-y-2">
             {exercises.length === 0 ? (
-                <motion.div 
+                <motion.div
                     initial={{ opacity: 0 }}
                     animate={{ opacity: 1 }}
                     className="text-center py-12"
@@ -149,22 +226,42 @@ export function DayRoutineEditor({
                 </motion.div>
             ) : (
                 <>
-                    <Reorder.Group
-                        axis="y"
-                        values={exercises}
-                        onReorder={onExercisesChange}
-                        className="space-y-2"
+                    <DndContext
+                        sensors={sensors}
+                        collisionDetection={closestCenter}
+                        onDragStart={handleDragStart}
+                        onDragEnd={handleDragEnd}
                     >
-                        {exercises.map((exercise, index) => (
-                            <ExerciseItem
-                                key={`${exercise.name}-${index}`}
-                                exercise={exercise}
-                                onRemove={() => handleRemoveExercise(index)}
-                            />
-                        ))}
-                    </Reorder.Group>
+                        <SortableContext
+                            items={exerciseIds}
+                            strategy={verticalListSortingStrategy}
+                        >
+                            <div className="space-y-2">
+                                <AnimatePresence mode="popLayout">
+                                    {exercises.map((exercise, index) => (
+                                        <SortableExerciseItem
+                                            key={exerciseIds[index]}
+                                            exerciseId={exerciseIds[index]}
+                                            exercise={exercise}
+                                            onRemove={() => handleRemoveExercise(index)}
+                                        />
+                                    ))}
+                                </AnimatePresence>
+                            </div>
+                        </SortableContext>
 
-                    {/* Add More Button */}
+                        <DragOverlay dropAnimation={null}>
+                            {activeExercise ? (
+                                <div className="flex items-center gap-3 p-3 bg-white rounded-2xl border border-black/5 shadow-2xl scale-105">
+                                    <ExerciseItemContent
+                                        exercise={activeExercise}
+                                        isOverlay
+                                    />
+                                </div>
+                            ) : null}
+                        </DragOverlay>
+                    </DndContext>
+
                     {exercises.length < maxExercises && (
                         <motion.button
                             onClick={onAddExercise}
