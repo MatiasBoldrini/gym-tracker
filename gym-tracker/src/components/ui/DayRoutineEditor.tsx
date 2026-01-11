@@ -1,19 +1,21 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { GripVertical, Trash2, Plus } from "lucide-react";
 import Image from "next/image";
-import { motion, AnimatePresence } from "framer-motion";
+import { motion } from "framer-motion";
 import {
     DndContext,
     closestCenter,
     KeyboardSensor,
-    PointerSensor,
+    MouseSensor,
+    TouchSensor,
     useSensor,
     useSensors,
     DragEndEvent,
     DragStartEvent,
     DragOverlay,
+    DragCancelEvent,
 } from "@dnd-kit/core";
 import {
     arrayMove,
@@ -24,6 +26,7 @@ import {
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 import { RoutineExercise } from "@/lib/sheets-client";
+import { nanoid } from "@/lib/nanoid";
 
 interface DayRoutineEditorProps {
     exercises: (RoutineExercise & { image?: string })[];
@@ -54,7 +57,7 @@ function ExerciseItemContent({
                 className={`p-1.5 -m-1 transition-colors select-none ${
                     isOverlay 
                         ? "text-gray-500" 
-                        : "touch-none cursor-grab active:cursor-grabbing text-gray-300 hover:text-gray-500"
+                        : "cursor-grab active:cursor-grabbing text-gray-300 hover:text-gray-500"
                 }`}
             >
                 <GripVertical size={20} />
@@ -92,6 +95,8 @@ function ExerciseItemContent({
             {onRemove ? (
                 <motion.button
                     onClick={onRemove}
+                    onMouseDown={(e) => e.stopPropagation()}
+                    onTouchStart={(e) => e.stopPropagation()}
                     whileTap={{ scale: 0.9 }}
                     className="p-2 text-gray-300 hover:text-red-500 hover:bg-red-50 rounded-xl transition-colors"
                 >
@@ -123,33 +128,38 @@ function SortableExerciseItem({
         transform,
         transition,
         isDragging,
+        isSorting,
     } = useSortable({ id: exerciseId });
 
     const style = {
         transform: CSS.Transform.toString(transform),
-        transition,
+        transition: isDragging
+            ? undefined
+            : (transition ?? "transform 220ms cubic-bezier(0.2, 0.8, 0.2, 1)"),
         opacity: isDragging ? 0.4 : 1,
-        touchAction: "none" as const,
+        // Importante: no bloquear scroll por defecto. En touch, el sensor con delay se encarga de capturar
+        // el gesto sólo cuando corresponde (long-press + move).
+        touchAction: (isDragging || isSorting ? "none" : "auto") as const,
     };
 
     return (
-        <motion.div
+        <div
             ref={setNodeRef}
             style={style}
-            initial={{ opacity: 0, y: 10 }}
-            animate={{ opacity: isDragging ? 0.4 : 1, y: 0 }}
-            exit={{ opacity: 0, y: -10, transition: { duration: 0.15 } }}
             className={`
                 flex items-center gap-3 p-3 bg-white rounded-2xl border border-black/5
                 ${isDragging ? "z-10 shadow-lg" : ""}
+                select-none
             `}
+            // Long-press / drag: listeners en toda la tarjeta para UX estilo iOS.
+            {...attributes}
+            {...listeners}
         >
             <ExerciseItemContent
                 exercise={exercise}
                 onRemove={onRemove}
-                dragHandleProps={{ ...attributes, ...listeners }}
             />
-        </motion.div>
+        </div>
     );
 }
 
@@ -161,14 +171,36 @@ export function DayRoutineEditor({
 }: DayRoutineEditorProps) {
     const [activeId, setActiveId] = useState<string | null>(null);
 
-    // Crear IDs estables para cada ejercicio
-    const exerciseIds = exercises.map((e, i) => `${e.name}-${i}`);
+    // IDs estables por item (crítico para animaciones "en vivo" al reordenar)
+    const [exerciseIds, setExerciseIds] = useState<string[]>(() =>
+        exercises.map(() => `ex-${nanoid(10)}`)
+    );
 
-    // Configurar sensores con distancia de activación
+    // Reconciliar IDs si cambia la cantidad desde afuera (agregar/quitar)
+    useEffect(() => {
+        setExerciseIds((prev) => {
+            if (prev.length === exercises.length) return prev;
+            if (prev.length < exercises.length) {
+                const missing = exercises.length - prev.length;
+                return [...prev, ...Array.from({ length: missing }, () => `ex-${nanoid(10)}`)];
+            }
+            return prev.slice(0, exercises.length);
+        });
+    }, [exercises.length]);
+
+    // Sensores:
+    // - Touch: long-press para activar reordenamiento (iOS-like) y dejar scroll libre si el gesto es scroll.
+    // - Mouse: drag normal en desktop.
     const sensors = useSensors(
-        useSensor(PointerSensor, {
+        useSensor(TouchSensor, {
             activationConstraint: {
-                distance: 8,
+                delay: 260,
+                tolerance: 8,
+            },
+        }),
+        useSensor(MouseSensor, {
+            activationConstraint: {
+                distance: 6,
             },
         }),
         useSensor(KeyboardSensor, {
@@ -178,6 +210,10 @@ export function DayRoutineEditor({
 
     const handleDragStart = (event: DragStartEvent) => {
         setActiveId(event.active.id as string);
+    };
+
+    const handleDragCancel = (_event: DragCancelEvent) => {
+        setActiveId(null);
     };
 
     const handleDragEnd = (event: DragEndEvent) => {
@@ -190,6 +226,7 @@ export function DayRoutineEditor({
 
             if (oldIndex !== -1 && newIndex !== -1) {
                 const newExercises = arrayMove(exercises, oldIndex, newIndex);
+                setExerciseIds((prev) => arrayMove(prev, oldIndex, newIndex));
                 onExercisesChange(newExercises);
             }
         }
@@ -197,6 +234,7 @@ export function DayRoutineEditor({
 
     const handleRemoveExercise = (index: number) => {
         const newExercises = exercises.filter((_, i) => i !== index);
+        setExerciseIds((prev) => prev.filter((_, i) => i !== index));
         onExercisesChange(newExercises);
     };
 
@@ -231,26 +269,31 @@ export function DayRoutineEditor({
                         collisionDetection={closestCenter}
                         onDragStart={handleDragStart}
                         onDragEnd={handleDragEnd}
+                        onDragCancel={handleDragCancel}
                     >
                         <SortableContext
                             items={exerciseIds}
                             strategy={verticalListSortingStrategy}
                         >
                             <div className="space-y-2">
-                                <AnimatePresence mode="popLayout">
-                                    {exercises.map((exercise, index) => (
-                                        <SortableExerciseItem
-                                            key={exerciseIds[index]}
-                                            exerciseId={exerciseIds[index]}
-                                            exercise={exercise}
-                                            onRemove={() => handleRemoveExercise(index)}
-                                        />
-                                    ))}
-                                </AnimatePresence>
+                                {exercises.map((exercise, index) => (
+                                    <SortableExerciseItem
+                                        key={exerciseIds[index]}
+                                        exerciseId={exerciseIds[index]}
+                                        exercise={exercise}
+                                        onRemove={() => handleRemoveExercise(index)}
+                                    />
+                                ))}
                             </div>
                         </SortableContext>
 
-                        <DragOverlay dropAnimation={null}>
+                        <DragOverlay
+                            adjustScale={false}
+                            dropAnimation={{
+                                duration: 180,
+                                easing: "cubic-bezier(0.2, 0.8, 0.2, 1)",
+                            }}
+                        >
                             {activeExercise ? (
                                 <div className="flex items-center gap-3 p-3 bg-white rounded-2xl border border-black/5 shadow-2xl scale-105">
                                     <ExerciseItemContent
