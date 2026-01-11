@@ -139,7 +139,7 @@ function SortableExerciseItem({
         opacity: isDragging ? 0.4 : 1,
         // Importante: no bloquear scroll por defecto. En touch, el sensor con delay se encarga de capturar
         // el gesto sólo cuando corresponde (long-press + move).
-        touchAction: (isDragging || isSorting ? "none" : "auto") as const,
+        touchAction: (isDragging || isSorting ? "none" : "auto"),
     };
 
     return (
