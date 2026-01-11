@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useMemo, useEffect, useRef } from "react";
-import { X, Search, Plus, Check, ChevronDown } from "lucide-react";
+import { X, Search, Plus, Check, ChevronDown, Filter } from "lucide-react";
 import Image from "next/image";
 import { ExerciseItem } from "@/lib/sheets-client";
 import { cacheUrls } from "@/lib/pwa";
@@ -170,18 +170,28 @@ export function ExerciseSearchModal({
                 {/* Filters */}
                 <div className="px-6 py-3 flex gap-2 overflow-x-auto border-b border-black/5">
                     {/* Muscle Filter */}
-                    <select
-                        value={selectedMuscle}
-                        onChange={(e) => setSelectedMuscle(e.target.value)}
-                        className="px-3 py-2 bg-gray-100 rounded-xl text-sm font-bold focus:outline-none focus:ring-2 focus:ring-ios-blue/30 appearance-none pr-8 bg-[url('data:image/svg+xml;charset=US-ASCII,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%2212%22%20height%3D%2212%22%20viewBox%3D%220%200%2012%2012%22%3E%3Cpath%20fill%3D%22%23666%22%20d%3D%22M2.5%204.5L6%208l3.5-3.5%22%2F%3E%3C%2Fsvg%3E')] bg-no-repeat bg-[right_0.5rem_center]"
-                    >
-                        <option value="">Músculo</option>
-                        {muscles.map((muscle) => (
-                            <option key={muscle} value={muscle}>
-                                {muscle}
-                            </option>
-                        ))}
-                    </select>
+                    <div className="relative shrink-0">
+                        <Filter
+                            size={16}
+                            className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none"
+                        />
+                        <select
+                            value={selectedMuscle}
+                            onChange={(e) => setSelectedMuscle(e.target.value)}
+                            className="h-10 pl-9 pr-10 bg-gray-100 rounded-xl text-sm font-bold text-black focus:outline-none focus:ring-2 focus:ring-ios-blue/30 appearance-none border border-black/5 shadow-[0_1px_0_rgba(0,0,0,0.03)]"
+                        >
+                            <option value="">Músculo</option>
+                            {muscles.map((muscle) => (
+                                <option key={muscle} value={muscle}>
+                                    {muscle}
+                                </option>
+                            ))}
+                        </select>
+                        <ChevronDown
+                            size={16}
+                            className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none"
+                        />
+                    </div>
 
                     {/* Clear Filters */}
                     {selectedMuscle && (
@@ -189,7 +199,7 @@ export function ExerciseSearchModal({
                             onClick={() => {
                                 setSelectedMuscle("");
                             }}
-                            className="px-3 py-2 bg-ios-blue/10 text-ios-blue rounded-xl text-sm font-bold whitespace-nowrap"
+                            className="h-10 px-3 bg-white border border-black/10 text-ios-blue rounded-xl text-sm font-bold whitespace-nowrap shadow-[0_1px_0_rgba(0,0,0,0.03)] transition-colors hover:bg-ios-blue/5 active:scale-[0.98]"
                         >
                             Limpiar
                         </button>
