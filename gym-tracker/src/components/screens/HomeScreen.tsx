@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState, useEffect, useRef } from "react";
-import { saveExerciseSets, fetchExerciseSets, fetchExerciseSetsBulk, fetchWeekData, fetchWeeksList, WeekListItem, saveSessionRating } from "@/lib/sheets-client";
+import { saveExerciseSets, fetchExerciseSets, fetchExerciseSetsBulk, fetchWeekData, fetchWeeksList, saveSessionRating } from "@/lib/sheets-client";
 import { Week, PersonalRecord, Exercise, Set } from "@/types";
 import { ExerciseCard } from "@/components/ui/ExerciseCard";
 import Stack from "@/components/ui/Stack";
@@ -14,13 +14,16 @@ import { OnboardingLoader } from "@/components/ui/OnboardingLoader";
 import { normalizeExerciseKey } from "@/lib/normalize";
 import { cacheUrls } from "@/lib/pwa";
 
+type WeekListItem = { id: number; name: string };
+
 type HomeScreenProps = {
     initialWeek: Week;
+    initialWeeks: WeekListItem[];
     initialPrs: PersonalRecord[];
     initialSetupError?: { message: string; code?: string } | null;
 };
 
-export function HomeScreen({ initialWeek, initialPrs, initialSetupError }: HomeScreenProps) {
+export function HomeScreen({ initialWeek, initialWeeks, initialPrs, initialSetupError }: HomeScreenProps) {
     const [week, setWeek] = useState<Week>(initialWeek);
     const [prs] = useState<PersonalRecord[]>(initialPrs);
     const [currentDayIndex, setCurrentDayIndex] = useState(0);
@@ -28,7 +31,8 @@ export function HomeScreen({ initialWeek, initialPrs, initialSetupError }: HomeS
     const [isModalOpen, setIsModalOpen] = useState(false);
 
     const [showWeekPicker, setShowWeekPicker] = useState(false);
-    const [weeks, setWeeks] = useState<WeekListItem[]>([]);
+    // Initialize weeks from server data to avoid duplicate fetch
+    const [weeks, setWeeks] = useState<WeekListItem[]>(initialWeeks);
     const [selectedWeekId, setSelectedWeekId] = useState<number>(initialWeek?.id || 1);
     const [selectedWeekName, setSelectedWeekName] = useState(initialWeek?.id ? `Semana ${initialWeek.id}` : "Semana 1");
 
@@ -48,6 +52,10 @@ export function HomeScreen({ initialWeek, initialPrs, initialSetupError }: HomeS
 
     // Session rating modal
     const [showRatingModal, setShowRatingModal] = useState(false);
+
+    // Track if we've consumed initial server data (to avoid duplicate fetches only on first mount)
+    const hasConsumedInitialWeeksRef = useRef(initialWeeks.length > 0);
+    const hasConsumedInitialWeekRef = useRef(initialWeek?.days?.length > 0);
 
     // Onboarding loader for new users
     const [showOnboardingLoader, setShowOnboardingLoader] = useState(false);
@@ -97,6 +105,12 @@ export function HomeScreen({ initialWeek, initialPrs, initialSetupError }: HomeS
     };
 
     useEffect(() => {
+        // Skip fetching weeks if we already have them from the server (SSR) - only on first mount
+        if (hasConsumedInitialWeeksRef.current) {
+            hasConsumedInitialWeeksRef.current = false; // Consume initial data, next time we'll fetch
+            return;
+        }
+
         if (auth.isLoading) return;
         if (!auth.isAuthenticated) return;
 
@@ -133,6 +147,12 @@ export function HomeScreen({ initialWeek, initialPrs, initialSetupError }: HomeS
     }, [auth.isLoading, auth.isAuthenticated]);
 
     useEffect(() => {
+        // Skip fetching week if we have initial data for THIS week - only on first mount
+        if (hasConsumedInitialWeekRef.current && initialWeek?.id === selectedWeekId) {
+            hasConsumedInitialWeekRef.current = false; // Consume initial data
+            return;
+        }
+
         if (auth.isLoading) return;
         if (!auth.isAuthenticated) return;
 
@@ -157,7 +177,7 @@ export function HomeScreen({ initialWeek, initialPrs, initialSetupError }: HomeS
         return () => {
             cancelled = true;
         };
-    }, [auth.isLoading, auth.isAuthenticated, selectedWeekId]);
+    }, [auth.isLoading, auth.isAuthenticated, selectedWeekId, initialWeek?.id]);
 
     // Cache selectivo: precachear SOLO las imágenes de la rutina cargada (toda la semana).
     useEffect(() => {
@@ -526,8 +546,10 @@ export function HomeScreen({ initialWeek, initialPrs, initialSetupError }: HomeS
         auth.login();
     };
 
-    // Loading state
-    if (auth.isLoading) {
+    // Loading state: only show loader if we DON'T have initial server data
+    // This avoids blocking SSR content while auth hydrates
+    const hasInitialData = initialWeek?.days && initialWeek.days.length > 0;
+    if (auth.isLoading && !hasInitialData) {
         return (
             <div className="min-h-[calc(100dvh-(var(--bottom-nav-base)+env(safe-area-inset-bottom)))] w-full flex flex-col items-center justify-center bg-[#F2F2F7]">
                 <Loader2 className="w-8 h-8 animate-spin text-ios-blue" />
@@ -536,7 +558,8 @@ export function HomeScreen({ initialWeek, initialPrs, initialSetupError }: HomeS
     }
 
     // Not authenticated: show connect screen
-    if (!auth.isAuthenticated) {
+    // Skip this check if we have initial data (means server already authenticated the user)
+    if (!auth.isAuthenticated && !hasInitialData) {
         return (
             <div className="min-h-[calc(100dvh-(var(--bottom-nav-base)+env(safe-area-inset-bottom)))] w-full flex flex-col bg-[#F2F2F7]">
                 <div className="flex-1 flex flex-col items-center justify-center px-8">

@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { revalidateTag } from "next/cache";
 import { getAuthContext } from "@/lib/supabase/auth-helper";
 import { refreshAccessToken } from "@/lib/google/oauth";
 import { saveExerciseSets, SetData, readSheetValues } from "@/lib/google/sheets";
@@ -63,6 +64,10 @@ export async function POST(request: NextRequest) {
             exerciseName: body.exerciseName,
             sets: body.sets,
         });
+
+        // 5. Invalidate cache for this user's week data (using "minutes" profile to match our 5min cache)
+        revalidateTag(`week-${auth.userId}-${body.weekId}`, "minutes");
+        revalidateTag(`home-${auth.userId}`, "minutes");
 
         const debug = request.nextUrl.searchParams.get("debug") === "1";
         let writtenValues: any[][] | null = null;

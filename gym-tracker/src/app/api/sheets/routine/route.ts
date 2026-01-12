@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { revalidateTag } from "next/cache";
 import { google } from "googleapis";
 import { getAuthContext } from "@/lib/supabase/auth-helper";
 import { refreshAccessToken, getAuthenticatedClient } from "@/lib/google/oauth";
@@ -144,6 +145,12 @@ export async function POST(request: NextRequest) {
                 values,
             },
         });
+
+        // Invalidate cache for this user's week 1 data (routine is always in Semana 1)
+        // Using "minutes" profile to match our 5min cache
+        revalidateTag(`week-${auth.userId}-1`, "minutes");
+        revalidateTag(`home-${auth.userId}`, "minutes");
+        revalidateTag(`weeks-${auth.userId}`, "minutes");
 
         return NextResponse.json({
             ok: true,

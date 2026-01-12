@@ -5,6 +5,7 @@ import { refreshAccessToken } from "@/lib/google/oauth";
 import { listSpreadsheetSheetTitles, readSheetValues } from "@/lib/google/sheets";
 import { normalizeSheetsError } from "@/lib/google/sheets-errors";
 import { parseExerciseMapping, parsePRData, parseWeekData } from "@/lib/sheets-parse";
+import { unstable_cache } from "next/cache";
 import type { Week } from "@/types";
 
 export const dynamic = "force-dynamic";
@@ -30,8 +31,40 @@ async function readPrSheet(accessToken: string, spreadsheetId: string) {
     return [];
 }
 
+type WeekListItem = { id: number; name: string };
+
+// Cached function to fetch all home data from Sheets (per-user, 5 min TTL)
+async function fetchHomeSheetData(refreshToken: string, spreadsheetId: string) {
+    const accessToken = await refreshAccessToken(refreshToken);
+
+    // Detectar semanas disponibles por títulos reales.
+    const titles = await listSpreadsheetSheetTitles(accessToken, spreadsheetId);
+    const availableWeekIds = titles
+        .map(parseWeekFromTitle)
+        .filter((n): n is number => typeof n === "number")
+        .sort((a, b) => a - b);
+
+    // Build weeks list for the client
+    const weeks: WeekListItem[] = availableWeekIds.map(id => ({ id, name: `Semana ${id}` }));
+
+    const weekId = availableWeekIds[0] ?? 1;
+
+    const [weekValues, prValues, mappingValues] = await Promise.all([
+        readSheetValues(accessToken, spreadsheetId, `'Semana ${weekId}'!A:N`),
+        readPrSheet(accessToken, spreadsheetId),
+        readSheetValues(accessToken, spreadsheetId, `'Ejercicios'!A:D`).catch(() => []),
+    ]);
+
+    const exerciseMapping = parseExerciseMapping(mappingValues);
+    const week = parseWeekData(weekValues, weekId, exerciseMapping);
+    const prs = parsePRData(prValues);
+
+    return { week, weeks, prs };
+}
+
 async function getHomeData(): Promise<{
     week: Week;
+    weeks: WeekListItem[];
     prs: any[];
     setupError?: { message: string; code?: string } | null;
 }> {
@@ -40,7 +73,7 @@ async function getHomeData(): Promise<{
     // Check if user is authenticated
     const { data: { user }, error: authError } = await supabase.auth.getUser();
     if (authError || !user) {
-        return { week: { id: 1, days: [] }, prs: [], setupError: null };
+        return { week: { id: 1, days: [] }, weeks: [], prs: [], setupError: null };
     }
 
     // Get user integration from DB
@@ -51,41 +84,33 @@ async function getHomeData(): Promise<{
         .single();
 
     if (dbError || !integration || !integration.spreadsheet_id || !integration.google_refresh_token_enc) {
-        return { week: { id: 1, days: [] }, prs: [], setupError: null };
+        return { week: { id: 1, days: [] }, weeks: [], prs: [], setupError: null };
     }
 
     try {
         // Decrypt refresh token
         const refreshToken = await decrypt(integration.google_refresh_token_enc);
-        const accessToken = await refreshAccessToken(refreshToken);
-        const spreadsheetId = integration.spreadsheet_id;
 
-        // Detectar semanas disponibles por títulos reales.
-        const titles = await listSpreadsheetSheetTitles(accessToken, spreadsheetId);
-        const availableWeekIds = titles
-            .map(parseWeekFromTitle)
-            .filter((n): n is number => typeof n === "number")
-            .sort((a, b) => a - b);
+        // Create a cached version of the fetch function per-user
+        const getCachedHomeData = unstable_cache(
+            () => fetchHomeSheetData(refreshToken, integration.spreadsheet_id),
+            [`home-${user.id}-${integration.spreadsheet_id}`],
+            {
+                revalidate: 300, // 5 minutes
+                tags: [`sheets-${user.id}`, `home-${user.id}`],
+            }
+        );
 
-        const weekId = availableWeekIds[0] ?? 1;
+        const { week, weeks, prs } = await getCachedHomeData();
 
-        const [weekValues, prValues, mappingValues] = await Promise.all([
-            readSheetValues(accessToken, spreadsheetId, `'Semana ${weekId}'!A:N`),
-            readPrSheet(accessToken, spreadsheetId),
-            readSheetValues(accessToken, spreadsheetId, `'Ejercicios'!A:D`).catch(() => []),
-        ]);
-
-        const exerciseMapping = parseExerciseMapping(mappingValues);
-        const week = parseWeekData(weekValues, weekId, exerciseMapping);
-        const prs = parsePRData(prValues);
-
-        return { week, prs, setupError: null };
+        return { week, weeks, prs, setupError: null };
     } catch (err: any) {
         // IMPORTANT: si esto revienta, el usuario queda sin UI para corregir el link/permisos.
         // Así que devolvemos data vacía + un mensaje claro para que el cliente abra Setup.
         const normalized = normalizeSheetsError(err);
         return {
             week: { id: 1, days: [] },
+            weeks: [],
             prs: [],
             setupError: { message: normalized.message, code: normalized.code },
         };
@@ -93,6 +118,6 @@ async function getHomeData(): Promise<{
 }
 
 export default async function Home() {
-    const { week, prs, setupError } = await getHomeData();
-    return <HomeScreen initialWeek={week} initialPrs={prs} initialSetupError={setupError} />;
+    const { week, weeks, prs, setupError } = await getHomeData();
+    return <HomeScreen initialWeek={week} initialWeeks={weeks} initialPrs={prs} initialSetupError={setupError} />;
 }
