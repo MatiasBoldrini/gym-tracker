@@ -52,6 +52,9 @@ const withPWA = require("next-pwa")({
             urlPattern: ({ request, url }) => {
                 return (
                     url.pathname.startsWith("/api/sheets/") &&
+                    // IMPORTANT: exercise sets must be fresh right after saving;
+                    // Workbox StaleWhileRevalidate can temporarily serve stale data.
+                    url.pathname !== "/api/sheets/exercise" &&
                     request.method === "GET"
                 );
             },
@@ -65,6 +68,19 @@ const withPWA = require("next-pwa")({
                 cacheableResponse: {
                     statuses: [200],
                 },
+            },
+        },
+        // API: Exercise sets (GET only) - always hit network for freshness
+        {
+            urlPattern: ({ request, url }) => {
+                return (
+                    url.pathname === "/api/sheets/exercise" &&
+                    request.method === "GET"
+                );
+            },
+            handler: "NetworkOnly",
+            options: {
+                // Intentionally no cache: we want immediate consistency after writes.
             },
         },
         // API: Fatiga endpoint (GET only) - StaleWhileRevalidate

@@ -481,25 +481,41 @@ export function HomeScreen({ initialWeek, initialWeeks, initialPrs, initialSetup
                 }
             }
 
-            const updatedWeek = { ...week };
-            const dayIdx = updatedWeek.days.findIndex(d => d.id === currentDay.id);
-            const exIdx = updatedWeek.days[dayIdx].exercises.findIndex(e => e.name === selectedExercise.name);
+            const dayId = currentDay.id;
+            const exerciseName = selectedExercise.name;
 
-            if (dayIdx >= 0 && exIdx >= 0) {
-                updatedWeek.days[dayIdx].exercises[exIdx].sets = sets;
-                setWeek(updatedWeek);
+            // IMPORTANT: immutable update so derived memos (routineProgress/visibleExercises)
+            // recompute immediately and UI reflects the saved sets without waiting for refetch.
+            setWeek((prev) => {
+                const dayIdx = prev.days.findIndex((d) => d.id === dayId);
+                if (dayIdx < 0) return prev;
+                const exIdx = prev.days[dayIdx].exercises.findIndex((e) => e.name === exerciseName);
+                if (exIdx < 0) return prev;
 
-                setSelectedExercise((prev) => (prev && prev.name === selectedExercise.name ? { ...prev, sets } : prev));
+                const nextDays = [...prev.days];
+                const nextDay = {
+                    ...nextDays[dayIdx],
+                    exercises: [...nextDays[dayIdx].exercises],
+                };
+                nextDay.exercises[exIdx] = { ...nextDay.exercises[exIdx], sets };
+                nextDays[dayIdx] = nextDay;
 
-                const completedNow = isExerciseComplete({ ...selectedExercise, sets });
-                if (completedNow) {
-                    setIsModalOpen(false);
-                }
+                return { ...prev, days: nextDays };
+            });
 
-                if (validSets.length > 0 && updatedWeek.days[dayIdx].stars === undefined) {
-                    setTimeout(() => {
-                        setShowRatingModal(true);
-                    }, 200);
+            setSelectedExercise((prev) => (prev && prev.name === exerciseName ? { ...prev, sets } : prev));
+
+            const completedNow = isExerciseComplete({ ...selectedExercise, sets });
+            if (completedNow) {
+                setIsModalOpen(false);
+            }
+
+            // If the day wasn't rated yet, prompt rating after a successful save.
+            if (validSets.length > 0) {
+                const dayIdxForRating = week.days.findIndex((d) => d.id === dayId);
+                const isUnrated = dayIdxForRating >= 0 && week.days[dayIdxForRating].stars === undefined;
+                if (isUnrated) {
+                    setTimeout(() => setShowRatingModal(true), 200);
                 }
             }
         } catch (error) {
