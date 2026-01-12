@@ -10,7 +10,7 @@ import { DaySelector } from "@/components/ui/DaySelector";
 import { SessionRatingModal } from "@/components/ui/SessionRatingModal";
 import { useAuth } from "@/lib/hooks/useAuth";
 import { EyeOff, Loader2, Sparkles } from "lucide-react";
-import { OnboardingLoader } from "@/components/ui/OnboardingLoader";
+import { OnboardingWizard } from "@/components/screens/OnboardingWizard";
 import { normalizeExerciseKey } from "@/lib/normalize";
 import { cacheUrls } from "@/lib/pwa";
 
@@ -57,23 +57,36 @@ export function HomeScreen({ initialWeek, initialWeeks, initialPrs, initialSetup
     const hasConsumedInitialWeeksRef = useRef(initialWeeks.length > 0);
     const hasConsumedInitialWeekRef = useRef(initialWeek?.days?.length > 0);
 
-    // Onboarding loader for new users
-    const [showOnboardingLoader, setShowOnboardingLoader] = useState(false);
+    // Onboarding wizard for new users or empty routines
+    const [showOnboardingWizard, setShowOnboardingWizard] = useState(false);
 
-    // Check for new user flag in URL
+    // Check if routine is empty (all days have no exercises)
+    const isRoutineEmpty = useMemo(() => {
+        if (!week?.days?.length) return true;
+        return week.days.every((d) => d.exercises.length === 0);
+    }, [week]);
+
+    // Check for new user flag in URL or empty routine
     useEffect(() => {
         if (typeof window === "undefined") return;
+        
+        // Skip if already completed onboarding
+        const hasCompletedOnboarding = localStorage.getItem("onboarding_completed_v1") === "true";
+        if (hasCompletedOnboarding) return;
         
         const urlParams = new URLSearchParams(window.location.search);
         const isNewUser = urlParams.get("is_new_user") === "true";
         
-        if (isNewUser) {
-            setShowOnboardingLoader(true);
+        // Show wizard if new user OR routine is empty
+        if (isNewUser || isRoutineEmpty) {
+            setShowOnboardingWizard(true);
             // Clean URL without reloading
-            const newUrl = window.location.pathname;
-            window.history.replaceState({}, "", newUrl);
+            if (isNewUser) {
+                const newUrl = window.location.pathname;
+                window.history.replaceState({}, "", newUrl);
+            }
         }
-    }, []);
+    }, [isRoutineEmpty]);
 
     // Si el server detectó un problema de acceso (403/404) lo mostramos
     useEffect(() => {
@@ -199,7 +212,21 @@ export function HomeScreen({ initialWeek, initialWeeks, initialPrs, initialSetup
         return map;
     }, [prs]);
 
-    const currentDay = week.days[currentDayIndex];
+    // Filter to only show days with exercises
+    const visibleDays = useMemo(() => {
+        if (!week?.days?.length) return [];
+        return week.days.filter((d) => d.exercises.length > 0);
+    }, [week]);
+
+    // Get current day from visible days
+    const currentDay = visibleDays[currentDayIndex] || null;
+    
+    // Adjust currentDayIndex if it's out of bounds after filtering
+    useEffect(() => {
+        if (visibleDays.length > 0 && currentDayIndex >= visibleDays.length) {
+            setCurrentDayIndex(0);
+        }
+    }, [visibleDays.length, currentDayIndex]);
 
     const isExerciseComplete = (exercise: Exercise) => {
         const targetSetCount = Math.max(
@@ -616,15 +643,25 @@ export function HomeScreen({ initialWeek, initialWeeks, initialPrs, initialSetup
         );
     }
 
-    const handleOnboardingComplete = () => {
-        setShowOnboardingLoader(false);
+    const handleOnboardingComplete = async () => {
+        setShowOnboardingWizard(false);
+        // Refresh week data after onboarding
+        try {
+            const data = await fetchWeekData(selectedWeekId);
+            setWeek(data.week);
+            // Also refresh weeks list
+            const fetchedWeeks = await fetchWeeksList();
+            setWeeks(fetchedWeeks.sort((a, b) => a.id - b.id));
+        } catch (e) {
+            console.error("Failed to refresh data after onboarding:", e);
+        }
     };
 
     return (
         <div className="min-h-[calc(100dvh-(var(--bottom-nav-base)+env(safe-area-inset-bottom)))] w-full flex flex-col bg-[#F2F2F7] overflow-x-hidden">
-            {/* Onboarding loader for new users */}
-            <OnboardingLoader 
-                loading={showOnboardingLoader} 
+            {/* Onboarding wizard for new users */}
+            <OnboardingWizard 
+                isOpen={showOnboardingWizard} 
                 onComplete={handleOnboardingComplete} 
             />
 
@@ -803,13 +840,15 @@ export function HomeScreen({ initialWeek, initialWeeks, initialPrs, initialSetup
             )}
 
             {/* Day Selector */}
-            <div className="px-6 pb-2 shrink-0 z-20">
-                <DaySelector
-                    days={week?.days || []}
-                    selectedIndex={currentDayIndex}
-                    onSelect={setCurrentDayIndex}
-                />
-            </div>
+            {visibleDays.length > 0 && (
+                <div className="px-6 pb-2 shrink-0 z-20">
+                    <DaySelector
+                        days={visibleDays}
+                        selectedIndex={currentDayIndex}
+                        onSelect={setCurrentDayIndex}
+                    />
+                </div>
+            )}
 
             {/* Active Day Content - fills remaining space */}
             <div className="flex-1 flex flex-col items-center justify-center relative min-h-0 -mt-4 overflow-hidden">

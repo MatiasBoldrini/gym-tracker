@@ -1,15 +1,17 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
-import { Loader2, Save, Check } from "lucide-react";
+import { useState, useEffect, useCallback, useMemo } from "react";
+import { Loader2, Save, Check, Plus } from "lucide-react";
 import { useAuth } from "@/lib/hooks/useAuth";
 import {
     fetchExercisesList,
     fetchSeriesOptions,
     fetchDayRoutine,
     saveRoutine,
+    fetchRoutineDaysSummary,
     ExerciseItem,
     RoutineExercise,
+    DaySummary,
 } from "@/lib/sheets-client";
 import { DayRoutineEditor } from "@/components/ui/DayRoutineEditor";
 import { DaySelector } from "@/components/ui/DaySelector";
@@ -18,7 +20,8 @@ import { cacheUrls } from "@/lib/pwa";
 
 import { Day } from "@/types";
 
-const DAYS: Day[] = [
+// All possible days (1-5)
+const ALL_DAYS: Day[] = [
     { id: 1, name: "DIA 1", exercises: [] },
     { id: 2, name: "DIA 2", exercises: [] },
     { id: 3, name: "DIA 3", exercises: [] },
@@ -34,14 +37,47 @@ export function RutinaEditorScreen() {
     // Data state
     const [availableExercises, setAvailableExercises] = useState<ExerciseItem[]>([]);
     const [seriesOptions, setSeriesOptions] = useState<string[]>([]);
+    const [daysSummary, setDaysSummary] = useState<DaySummary[]>([]);
     const [isLoadingData, setIsLoadingData] = useState(true);
 
     // Current editing state
-    const [selectedDayIndex, setSelectedDayIndex] = useState<number>(0);
-    const selectedDayId = DAYS[selectedDayIndex]?.id ?? 1;
+    const [selectedDayId, setSelectedDayId] = useState<number>(1);
     const [dayExercises, setDayExercises] = useState<ExerciseWithImage[]>([]);
     const [isLoadingDay, setIsLoadingDay] = useState(false);
     const [hasChanges, setHasChanges] = useState(false);
+
+    // Compute visible days: days with exercises + currently selected day
+    const visibleDays = useMemo(() => {
+        const nonEmptyDayIds = new Set(
+            daysSummary.filter((d) => d.exercisesCount > 0).map((d) => d.id)
+        );
+        // Always include the currently selected day
+        nonEmptyDayIds.add(selectedDayId);
+        
+        return ALL_DAYS.filter((d) => nonEmptyDayIds.has(d.id));
+    }, [daysSummary, selectedDayId]);
+
+    // Find selected day index in visible days
+    const selectedDayIndex = useMemo(() => {
+        const idx = visibleDays.findIndex((d) => d.id === selectedDayId);
+        return idx >= 0 ? idx : 0;
+    }, [visibleDays, selectedDayId]);
+
+    // Find next available empty day (for "+ Día" button)
+    const nextEmptyDayId = useMemo(() => {
+        const nonEmptyDayIds = new Set(
+            daysSummary.filter((d) => d.exercisesCount > 0).map((d) => d.id)
+        );
+        // Also consider current day as "occupied" for this purpose
+        nonEmptyDayIds.add(selectedDayId);
+        
+        for (let i = 1; i <= 5; i++) {
+            if (!nonEmptyDayIds.has(i)) {
+                return i;
+            }
+        }
+        return null; // All 5 days are used
+    }, [daysSummary, selectedDayId]);
 
     // Saving state
     const [isSaving, setIsSaving] = useState(false);
@@ -59,7 +95,7 @@ export function RutinaEditorScreen() {
         setTimeout(() => setToastMessage(null), 2000);
     };
 
-    // Load initial data (exercises and series)
+    // Load initial data (exercises, series, and days summary)
     useEffect(() => {
         if (!auth.isAuthenticated) return;
 
@@ -68,15 +104,23 @@ export function RutinaEditorScreen() {
         const loadData = async () => {
             setIsLoadingData(true);
             try {
-                const [exercisesData, seriesData] = await Promise.all([
+                const [exercisesData, seriesData, daysData] = await Promise.all([
                     fetchExercisesList(),
                     fetchSeriesOptions(),
+                    fetchRoutineDaysSummary(),
                 ]);
 
                 if (cancelled) return;
 
                 setAvailableExercises(exercisesData);
                 setSeriesOptions(seriesData);
+                setDaysSummary(daysData);
+                
+                // Set initial selected day to first non-empty day, or day 1 if all empty
+                const firstNonEmptyDay = daysData.find((d) => d.exercisesCount > 0);
+                if (firstNonEmptyDay) {
+                    setSelectedDayId(firstNonEmptyDay.id);
+                }
 
                 // Cache all exercise images in background
                 const urls = exercisesData
@@ -154,7 +198,25 @@ export function RutinaEditorScreen() {
             );
             if (!confirm) return;
         }
-        setSelectedDayIndex(index);
+        // Get the day ID from visible days
+        const newDayId = visibleDays[index]?.id;
+        if (newDayId) {
+            setSelectedDayId(newDayId);
+        }
+    };
+
+    const handleAddDay = () => {
+        if (nextEmptyDayId === null) return;
+        
+        if (hasChanges) {
+            const confirm = window.confirm(
+                "Tenés cambios sin guardar. ¿Querés agregar un nuevo día y perderlos?"
+            );
+            if (!confirm) return;
+        }
+        
+        setSelectedDayId(nextEmptyDayId);
+        showToast(`Día ${nextEmptyDayId} habilitado`);
     };
 
     const handleExercisesChange = (exercises: ExerciseWithImage[]) => {
@@ -195,6 +257,9 @@ export function RutinaEditorScreen() {
             setSaveSuccess(true);
             showToast(`${exercise.name} agregado y guardado`);
             setTimeout(() => setSaveSuccess(false), 2000);
+            
+            // Refresh days summary to update visible days
+            refreshDaysSummary();
         } catch (error: any) {
             console.error("Error saving routine:", error);
             setErrorMessage(error.message || "Error al guardar la rutina");
@@ -202,6 +267,16 @@ export function RutinaEditorScreen() {
             showToast(`${exercise.name} agregado (sin guardar)`);
         } finally {
             setIsSaving(false);
+        }
+    };
+
+    // Refresh days summary after saves
+    const refreshDaysSummary = async () => {
+        try {
+            const daysData = await fetchRoutineDaysSummary();
+            setDaysSummary(daysData);
+        } catch (e) {
+            console.error("Failed to refresh days summary:", e);
         }
     };
 
@@ -227,6 +302,9 @@ export function RutinaEditorScreen() {
             setHasChanges(false);
             setSaveSuccess(true);
             showToast("Rutina guardada correctamente");
+
+            // Refresh days summary to update visible days
+            refreshDaysSummary();
 
             // Reset success indicator after a delay
             setTimeout(() => setSaveSuccess(false), 2000);
@@ -278,29 +356,43 @@ export function RutinaEditorScreen() {
                     <h1 className="text-3xl font-black tracking-tight text-black">
                         Crear Rutina
                     </h1>
-                    <button
-                        onClick={handleSave}
-                        disabled={!hasChanges || isSaving}
-                        className={`flex items-center gap-2 px-4 py-2.5 rounded-xl font-bold text-sm transition-all ${
-                            saveSuccess
-                                ? "bg-ios-green text-white"
-                                : hasChanges
-                                ? "bg-ios-blue text-white"
-                                : "bg-gray-200 text-gray-400"
-                        } disabled:opacity-50`}
-                    >
-                        {isSaving ? (
-                            <Loader2 size={18} className="animate-spin" />
-                        ) : saveSuccess ? (
-                            <Check size={18} />
-                        ) : (
-                            <Save size={18} />
+                    <div className="flex items-center gap-2">
+                        {/* Add Day Button */}
+                        {nextEmptyDayId !== null && (
+                            <button
+                                onClick={handleAddDay}
+                                className="flex items-center gap-1.5 px-3 py-2.5 rounded-xl font-bold text-sm bg-gray-100 text-gray-600 hover:bg-gray-200 transition-all"
+                                title={`Agregar Día ${nextEmptyDayId}`}
+                            >
+                                <Plus size={16} />
+                                <span className="hidden sm:inline">Día</span>
+                            </button>
                         )}
-                        {saveSuccess ? "Guardado" : "Guardar"}
-                    </button>
+                        {/* Save Button */}
+                        <button
+                            onClick={handleSave}
+                            disabled={!hasChanges || isSaving}
+                            className={`flex items-center gap-2 px-4 py-2.5 rounded-xl font-bold text-sm transition-all ${
+                                saveSuccess
+                                    ? "bg-ios-green text-white"
+                                    : hasChanges
+                                    ? "bg-ios-blue text-white"
+                                    : "bg-gray-200 text-gray-400"
+                            } disabled:opacity-50`}
+                        >
+                            {isSaving ? (
+                                <Loader2 size={18} className="animate-spin" />
+                            ) : saveSuccess ? (
+                                <Check size={18} />
+                            ) : (
+                                <Save size={18} />
+                            )}
+                            {saveSuccess ? "Guardado" : "Guardar"}
+                        </button>
+                    </div>
                 </div>
                 <p className="text-sm text-gray-500 mt-1">
-                    Semana 1 · {dayExercises.length} ejercicios
+                    Semana 1 · Día {selectedDayId} · {dayExercises.length} ejercicios
                 </p>
             </header>
 
@@ -312,15 +404,17 @@ export function RutinaEditorScreen() {
             )}
 
             {/* Day Selector */}
-            <div className="px-6 pb-4">
-                <DaySelector
-                    days={DAYS}
-                    selectedIndex={selectedDayIndex}
-                    onSelect={handleDayChange}
-                    variant="black"
-                    layoutId="rutina-editor-day-pill"
-                />
-            </div>
+            {visibleDays.length > 0 && (
+                <div className="px-6 pb-4">
+                    <DaySelector
+                        days={visibleDays}
+                        selectedIndex={selectedDayIndex}
+                        onSelect={handleDayChange}
+                        variant="black"
+                        layoutId="rutina-editor-day-pill"
+                    />
+                </div>
+            )}
 
             {/* Exercise List */}
             <div className="flex-1 px-6 pb-8 overflow-y-auto min-h-0">

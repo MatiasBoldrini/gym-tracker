@@ -13,6 +13,10 @@ interface ExerciseSearchModalProps {
     seriesOptions: string[];
     onAddExercise: (exercise: { name: string; prescribedSeries: string; image: string }) => void;
     existingExerciseNames: string[];
+    /** Optional: pre-select multiple muscles for OR filtering (for onboarding) */
+    defaultSelectedMuscles?: string[];
+    /** If true, use multi-muscle OR mode with chips instead of single-select dropdown */
+    multiMuscleMode?: boolean;
 }
 
 export function ExerciseSearchModal({
@@ -22,14 +26,26 @@ export function ExerciseSearchModal({
     seriesOptions,
     onAddExercise,
     existingExerciseNames,
+    defaultSelectedMuscles = [],
+    multiMuscleMode = false,
 }: ExerciseSearchModalProps) {
     const [searchQuery, setSearchQuery] = useState("");
+    // Single muscle mode (legacy)
     const [selectedMuscle, setSelectedMuscle] = useState<string>("");
+    // Multi muscle mode (for onboarding)
+    const [selectedMuscles, setSelectedMuscles] = useState<Set<string>>(new Set(defaultSelectedMuscles));
     const [selectedExercise, setSelectedExercise] = useState<ExerciseItem | null>(null);
     const [selectedSeries, setSelectedSeries] = useState<string>("");
     const [customSeries, setCustomSeries] = useState("");
     const [showSeriesPicker, setShowSeriesPicker] = useState(false);
     const seriesPickerRef = useRef<HTMLDivElement>(null);
+
+    // Initialize selectedMuscles from defaultSelectedMuscles when modal opens
+    useEffect(() => {
+        if (isOpen && defaultSelectedMuscles.length > 0) {
+            setSelectedMuscles(new Set(defaultSelectedMuscles));
+        }
+    }, [isOpen, defaultSelectedMuscles]);
 
     // Get unique muscles and categories for filters
     const muscles = useMemo(() => {
@@ -39,6 +55,19 @@ export function ExerciseSearchModal({
         });
         return Array.from(set).sort();
     }, [exercises]);
+
+    // Toggle a muscle in multi-muscle mode
+    const toggleMuscle = (muscle: string) => {
+        setSelectedMuscles((prev) => {
+            const next = new Set(prev);
+            if (next.has(muscle)) {
+                next.delete(muscle);
+            } else {
+                next.add(muscle);
+            }
+            return next;
+        });
+    };
 
     // Filter exercises based on search and filters
     const filteredExercises = useMemo(() => {
@@ -51,14 +80,22 @@ export function ExerciseSearchModal({
                 }
             }
 
-            // Muscle filter
-            if (selectedMuscle && exercise.muscle !== selectedMuscle) {
-                return false;
+            // Muscle filter (OR mode for multi, AND mode for single)
+            if (multiMuscleMode) {
+                // OR filter: show if muscle is in selected set, or show all if none selected
+                if (selectedMuscles.size > 0 && !selectedMuscles.has(exercise.muscle)) {
+                    return false;
+                }
+            } else {
+                // Single select mode (legacy)
+                if (selectedMuscle && exercise.muscle !== selectedMuscle) {
+                    return false;
+                }
             }
 
             return true;
         });
-    }, [exercises, searchQuery, selectedMuscle]);
+    }, [exercises, searchQuery, selectedMuscle, selectedMuscles, multiMuscleMode]);
 
     // Cache images when filtered exercises change
     useEffect(() => {
@@ -92,12 +129,13 @@ export function ExerciseSearchModal({
         if (!isOpen) {
             setSearchQuery("");
             setSelectedMuscle("");
+            setSelectedMuscles(new Set(defaultSelectedMuscles));
             setSelectedExercise(null);
             setSelectedSeries("");
             setCustomSeries("");
             setShowSeriesPicker(false);
         }
-    }, [isOpen]);
+    }, [isOpen, defaultSelectedMuscles]);
 
     const handleSelectExercise = (exercise: ExerciseItem) => {
         setSelectedExercise(exercise);
@@ -169,40 +207,72 @@ export function ExerciseSearchModal({
 
                 {/* Filters */}
                 <div className="px-6 py-3 flex gap-2 overflow-x-auto border-b border-black/5">
-                    {/* Muscle Filter */}
-                    <div className="relative shrink-0">
-                        <Filter
-                            size={16}
-                            className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none"
-                        />
-                        <select
-                            value={selectedMuscle}
-                            onChange={(e) => setSelectedMuscle(e.target.value)}
-                            className="h-10 pl-9 pr-10 bg-gray-100 rounded-xl text-sm font-bold text-black focus:outline-none focus:ring-2 focus:ring-ios-blue/30 appearance-none border border-black/5 shadow-[0_1px_0_rgba(0,0,0,0.03)]"
-                        >
-                            <option value="">Músculo</option>
-                            {muscles.map((muscle) => (
-                                <option key={muscle} value={muscle}>
-                                    {muscle}
-                                </option>
-                            ))}
-                        </select>
-                        <ChevronDown
-                            size={16}
-                            className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none"
-                        />
-                    </div>
+                    {multiMuscleMode ? (
+                        /* Multi-muscle mode: show chips for each muscle */
+                        <>
+                            {muscles.map((muscle) => {
+                                const isSelected = selectedMuscles.has(muscle);
+                                return (
+                                    <button
+                                        key={muscle}
+                                        onClick={() => toggleMuscle(muscle)}
+                                        className={`h-10 px-4 rounded-xl text-sm font-bold whitespace-nowrap transition-all shrink-0 ${
+                                            isSelected
+                                                ? "bg-ios-blue text-white shadow-md"
+                                                : "bg-gray-100 text-gray-600 border border-black/5"
+                                        }`}
+                                    >
+                                        {muscle}
+                                    </button>
+                                );
+                            })}
+                            {selectedMuscles.size > 0 && (
+                                <button
+                                    onClick={() => setSelectedMuscles(new Set())}
+                                    className="h-10 px-3 bg-white border border-black/10 text-ios-blue rounded-xl text-sm font-bold whitespace-nowrap shadow-[0_1px_0_rgba(0,0,0,0.03)] transition-colors hover:bg-ios-blue/5 active:scale-[0.98] shrink-0"
+                                >
+                                    Limpiar
+                                </button>
+                            )}
+                        </>
+                    ) : (
+                        /* Single muscle mode: dropdown selector */
+                        <>
+                            <div className="relative shrink-0">
+                                <Filter
+                                    size={16}
+                                    className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none"
+                                />
+                                <select
+                                    value={selectedMuscle}
+                                    onChange={(e) => setSelectedMuscle(e.target.value)}
+                                    className="h-10 pl-9 pr-10 bg-gray-100 rounded-xl text-sm font-bold text-black focus:outline-none focus:ring-2 focus:ring-ios-blue/30 appearance-none border border-black/5 shadow-[0_1px_0_rgba(0,0,0,0.03)]"
+                                >
+                                    <option value="">Músculo</option>
+                                    {muscles.map((muscle) => (
+                                        <option key={muscle} value={muscle}>
+                                            {muscle}
+                                        </option>
+                                    ))}
+                                </select>
+                                <ChevronDown
+                                    size={16}
+                                    className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none"
+                                />
+                            </div>
 
-                    {/* Clear Filters */}
-                    {selectedMuscle && (
-                        <button
-                            onClick={() => {
-                                setSelectedMuscle("");
-                            }}
-                            className="h-10 px-3 bg-white border border-black/10 text-ios-blue rounded-xl text-sm font-bold whitespace-nowrap shadow-[0_1px_0_rgba(0,0,0,0.03)] transition-colors hover:bg-ios-blue/5 active:scale-[0.98]"
-                        >
-                            Limpiar
-                        </button>
+                            {/* Clear Filters */}
+                            {selectedMuscle && (
+                                <button
+                                    onClick={() => {
+                                        setSelectedMuscle("");
+                                    }}
+                                    className="h-10 px-3 bg-white border border-black/10 text-ios-blue rounded-xl text-sm font-bold whitespace-nowrap shadow-[0_1px_0_rgba(0,0,0,0.03)] transition-colors hover:bg-ios-blue/5 active:scale-[0.98]"
+                                >
+                                    Limpiar
+                                </button>
+                            )}
+                        </>
                     )}
                 </div>
 

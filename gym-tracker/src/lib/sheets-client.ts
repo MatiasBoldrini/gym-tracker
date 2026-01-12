@@ -294,3 +294,77 @@ export async function saveRoutine(
         };
     }
 }
+
+// ============================================================================
+// Mesociclo & Days Summary API functions
+// ============================================================================
+
+export interface DaySummary {
+    id: number;
+    exercisesCount: number;
+}
+
+/**
+ * Fetch summary of exercises count per day in Semana 1.
+ * Useful for determining which days are configured vs empty.
+ */
+export async function fetchRoutineDaysSummary(): Promise<DaySummary[]> {
+    const response = await fetch("/api/sheets/routine/days", { method: "GET" });
+    const data = await response.json().catch(() => ({} as any));
+    if (!response.ok) {
+        throw createApiError({
+            message: data?.error || `Error ${response.status}`,
+            status: response.status,
+            code: data?.code,
+        });
+    }
+    return Array.isArray(data.days) ? data.days : [];
+}
+
+export interface CreateMesocicloResult {
+    ok: boolean;
+    weeksCreated?: number[];
+    totalWeeks?: number;
+    error?: string;
+    code?: string;
+    status?: number;
+}
+
+/**
+ * Create a mesociclo by duplicating Semana 1 to Semana 2..N.
+ * Cleans reps/weight/stars data from the duplicated weeks.
+ */
+export async function createMesociclo(weeks: number): Promise<CreateMesocicloResult> {
+    try {
+        const response = await fetch("/api/sheets/mesociclo", {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json",
+            },
+            body: JSON.stringify({ weeks }),
+        });
+
+        const data = await response.json();
+
+        if (!response.ok) {
+            return {
+                ok: false,
+                error: data.error || `Error ${response.status}`,
+                code: data.code,
+                status: response.status,
+            };
+        }
+
+        return {
+            ok: true,
+            weeksCreated: data.weeksCreated,
+            totalWeeks: data.totalWeeks,
+        };
+    } catch (error: any) {
+        console.error("Error creating mesociclo:", error);
+        return {
+            ok: false,
+            error: error.message || "Network error",
+        };
+    }
+}
