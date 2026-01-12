@@ -43,48 +43,72 @@ export async function POST(request: NextRequest) {
 
         const sheetsList = spreadsheet.data.sheets || [];
         
-        // Find Semana 1 sheet ID
-        const semana1Sheet = sheetsList.find(
-            (s) => s.properties?.title === "Semana 1"
-        );
+        // Find all week sheets and their IDs
+        const weekSheets: { id: number; sheetId: number; title: string }[] = [];
+        for (const sheet of sheetsList) {
+            const title = sheet.properties?.title?.trim() || "";
+            const sheetId = sheet.properties?.sheetId;
+            const match = title.match(/^Semana\s+(\d+)$/i);
+            if (match && typeof sheetId === "number") {
+                weekSheets.push({
+                    id: parseInt(match[1]),
+                    sheetId: sheetId,
+                    title: title,
+                });
+            }
+        }
+
+        // Sort by week number
+        weekSheets.sort((a, b) => a.id - b.id);
+
+        // If user only wants 1 week, we're done (nothing to duplicate)
+        if (weeks === 1) {
+            return NextResponse.json({
+                ok: true,
+                weeksCreated: [],
+                totalWeeks: 1,
+                message: "Solo se necesita Semana 1, no hay nada que duplicar",
+            });
+        }
+
+        // Find Semana 1 or the first available week sheet to use as template
+        const semana1 = weekSheets.find((w) => w.id === 1);
+        const templateSheet = semana1 || weekSheets[0];
         
-        if (!semana1Sheet || !semana1Sheet.properties?.sheetId) {
+        if (!templateSheet) {
+            // No week sheets found at all - this shouldn't happen if routine was saved
+            const availableSheets = sheetsList.map((s) => s.properties?.title).filter(Boolean);
+            console.error("No week sheets found. Available sheets:", availableSheets);
+            
             return NextResponse.json(
-                { error: "No se encontró la hoja 'Semana 1'" },
+                { 
+                    error: "No se encontró ninguna hoja de semana en tu planilla. Asegurate de tener al menos 'Semana 1'.",
+                    availableSheets,
+                },
                 { status: 404 }
             );
         }
 
-        const semana1SheetId = semana1Sheet.properties.sheetId;
-
-        // Find existing weeks
-        const existingWeeks = new Set<number>();
-        for (const sheet of sheetsList) {
-            const title = sheet.properties?.title || "";
-            const match = title.match(/^Semana\s+(\d+)$/i);
-            if (match) {
-                existingWeeks.add(parseInt(match[1]));
-            }
-        }
+        const existingWeekIds = new Set(weekSheets.map((w) => w.id));
 
         // Create missing weeks
         const weeksCreated: number[] = [];
         
-        for (let weekNum = 2; weekNum <= weeks; weekNum++) {
-            if (existingWeeks.has(weekNum)) {
+        for (let weekNum = 1; weekNum <= weeks; weekNum++) {
+            if (existingWeekIds.has(weekNum)) {
                 continue; // Skip if already exists
             }
 
             const newSheetName = `Semana ${weekNum}`;
 
-            // Duplicate Semana 1
+            // Duplicate the template sheet
             const duplicateResponse = await sheets.spreadsheets.batchUpdate({
                 spreadsheetId: auth.spreadsheetId,
                 requestBody: {
                     requests: [
                         {
                             duplicateSheet: {
-                                sourceSheetId: semana1SheetId,
+                                sourceSheetId: templateSheet.sheetId,
                                 newSheetName: newSheetName,
                             },
                         },
