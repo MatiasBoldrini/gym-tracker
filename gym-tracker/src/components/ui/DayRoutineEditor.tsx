@@ -291,13 +291,16 @@ export function DayRoutineEditor({
 
                         <DragOverlay
                             adjustScale={false}
+                            // Seguridad: el overlay no debe bloquear clicks (especialmente sobre la BottomNav)
+                            // y lo mantenemos por debajo del nav (nav z=1000).
+                            zIndex={200}
                             dropAnimation={{
                                 duration: 180,
                                 easing: "cubic-bezier(0.2, 0.8, 0.2, 1)",
                             }}
                         >
                             {activeExercise ? (
-                                <div className="flex items-center gap-3 p-3 bg-white rounded-2xl border border-black/5 shadow-2xl scale-105">
+                                <div className="pointer-events-none flex items-center gap-3 p-3 bg-white rounded-2xl border border-black/5 shadow-2xl scale-105">
                                     <ExerciseItemContent
                                         exercise={activeExercise}
                                         isOverlay

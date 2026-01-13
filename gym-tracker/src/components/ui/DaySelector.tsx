@@ -1,7 +1,7 @@
 "use client";
 
 import { motion } from "framer-motion";
-import { useRef, useState, PointerEvent } from "react";
+import { useEffect, useRef, useState, PointerEvent } from "react";
 import { Day } from "@/types";
 
 type DaySelectorProps = {
@@ -15,10 +15,11 @@ type DaySelectorProps = {
 export function DaySelector({ days, selectedIndex, onSelect, variant = "blue", layoutId = "day-selector-pill" }: DaySelectorProps) {
     const containerRef = useRef<HTMLDivElement>(null);
     const [isDragging, setIsDragging] = useState(false);
+    const activePointerIdRef = useRef<number | null>(null);
 
     const handlePointerDown = (e: PointerEvent<HTMLDivElement>) => {
         setIsDragging(true);
-        e.currentTarget.setPointerCapture(e.pointerId);
+        activePointerIdRef.current = e.pointerId;
         detectSelection(e);
     };
 
@@ -29,8 +30,33 @@ export function DaySelector({ days, selectedIndex, onSelect, variant = "blue", l
 
     const handlePointerUp = (e: PointerEvent<HTMLDivElement>) => {
         setIsDragging(false);
-        e.currentTarget.releasePointerCapture(e.pointerId);
+        if (activePointerIdRef.current === e.pointerId) {
+            activePointerIdRef.current = null;
+        }
     };
+
+    // IMPORTANTE:
+    // Antes usábamos setPointerCapture() para soportar "drag" por los días.
+    // Pero si el componente se desmonta/cancela en medio de un gesto (o se pierde el pointerup),
+    // puede quedar capturando eventos y bloquear clicks globales (incluida la BottomNav).
+    // Para evitarlo, no capturamos el pointer y cortamos el "dragging" con un listener global.
+    useEffect(() => {
+        if (!isDragging) return;
+
+        const stop = () => {
+            setIsDragging(false);
+            activePointerIdRef.current = null;
+        };
+
+        window.addEventListener("pointerup", stop, { passive: true });
+        window.addEventListener("pointercancel", stop, { passive: true });
+        window.addEventListener("blur", stop);
+        return () => {
+            window.removeEventListener("pointerup", stop);
+            window.removeEventListener("pointercancel", stop);
+            window.removeEventListener("blur", stop);
+        };
+    }, [isDragging]);
 
     const detectSelection = (e: PointerEvent<HTMLDivElement>) => {
         // We find the element specifically under the pointer
