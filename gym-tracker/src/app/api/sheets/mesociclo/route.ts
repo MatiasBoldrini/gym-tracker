@@ -198,3 +198,86 @@ async function cleanWeekData(
         },
     });
 }
+
+/**
+ * DELETE /api/sheets/mesociclo
+ * Deletes all week sheets except "Semana 1" (mesociclo reset).
+ */
+export async function DELETE(request: NextRequest) {
+    try {
+        const auth = await getAuthContext();
+        if (!auth) {
+            return NextResponse.json({ error: "No autenticado" }, { status: 401 });
+        }
+
+        const accessToken = await refreshAccessToken(auth.refreshToken);
+        const authClient = getAuthenticatedClient(accessToken);
+        const sheets = google.sheets({ version: "v4", auth: authClient });
+
+        // Get spreadsheet metadata to find sheet IDs
+        const spreadsheet = await sheets.spreadsheets.get({
+            spreadsheetId: auth.spreadsheetId,
+            fields: "sheets.properties",
+        });
+
+        const sheetsList = spreadsheet.data.sheets || [];
+        
+        // Find all week sheets except Semana 1
+        const sheetsToDelete: { id: number; sheetId: number; title: string }[] = [];
+        for (const sheet of sheetsList) {
+            const title = sheet.properties?.title?.trim() || "";
+            const sheetId = sheet.properties?.sheetId;
+            const match = title.match(/^Semana\s+(\d+)$/i);
+            if (match && typeof sheetId === "number") {
+                const weekNum = parseInt(match[1]);
+                if (weekNum > 1) {
+                    sheetsToDelete.push({
+                        id: weekNum,
+                        sheetId: sheetId,
+                        title: title,
+                    });
+                }
+            }
+        }
+
+        if (sheetsToDelete.length === 0) {
+            return NextResponse.json({
+                ok: true,
+                deletedCount: 0,
+                message: "No hay semanas para borrar, solo existe Semana 1",
+            });
+        }
+
+        // Delete sheets in batch
+        const deleteRequests = sheetsToDelete.map((sheet) => ({
+            deleteSheet: {
+                sheetId: sheet.sheetId,
+            },
+        }));
+
+        await sheets.spreadsheets.batchUpdate({
+            spreadsheetId: auth.spreadsheetId,
+            requestBody: {
+                requests: deleteRequests,
+            },
+        });
+
+        // Revalidate caches
+        revalidateTag(`weeks-${auth.userId}`, "minutes");
+        revalidateTag(`sheets-${auth.userId}`, "minutes");
+        revalidateTag(`home-${auth.userId}`, "minutes");
+
+        return NextResponse.json({
+            ok: true,
+            deletedCount: sheetsToDelete.length,
+            deletedWeeks: sheetsToDelete.map((s) => s.id),
+        });
+    } catch (error: any) {
+        console.error("Error deleting mesociclo:", error);
+        const normalized = normalizeSheetsError(error);
+        return NextResponse.json(
+            { error: normalized.message, code: normalized.code },
+            { status: normalized.status }
+        );
+    }
+}

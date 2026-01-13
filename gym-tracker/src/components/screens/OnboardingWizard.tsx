@@ -21,6 +21,7 @@ type Step = "days" | "muscles" | "exercises" | "weeks" | "complete";
 interface OnboardingWizardProps {
     isOpen: boolean;
     onComplete: () => void;
+    onSkip?: () => void;
 }
 
 interface DayConfig {
@@ -29,7 +30,7 @@ interface DayConfig {
     exercises: (RoutineExercise & { image?: string; muscle?: string })[];
 }
 
-export function OnboardingWizard({ isOpen, onComplete }: OnboardingWizardProps) {
+export function OnboardingWizard({ isOpen, onComplete, onSkip }: OnboardingWizardProps) {
     // Wizard state
     const [step, setStep] = useState<Step>("days");
     const [totalDays, setTotalDays] = useState<number>(0);
@@ -102,6 +103,18 @@ export function OnboardingWizard({ isOpen, onComplete }: OnboardingWizardProps) 
         });
         return ids;
     }, [currentDay]);
+
+    // Reset wizard state when opened
+    useEffect(() => {
+        if (isOpen) {
+            setStep("days");
+            setTotalDays(0);
+            setCurrentDayIndex(0);
+            setDaysConfig([]);
+            setTotalWeeks(0);
+            setErrorMessage(null);
+        }
+    }, [isOpen]);
 
     // Load initial data
     useEffect(() => {
@@ -272,9 +285,6 @@ export function OnboardingWizard({ isOpen, onComplete }: OnboardingWizardProps) 
                 throw new Error(result.error || "Error al crear mesociclo");
             }
 
-            // Mark onboarding as complete in localStorage
-            localStorage.setItem("onboarding_completed_v1", "true");
-
             setStep("complete");
             
             // Wait a moment then close
@@ -300,8 +310,26 @@ export function OnboardingWizard({ isOpen, onComplete }: OnboardingWizardProps) 
         );
     }
 
+    const handleSkip = () => {
+        if (onSkip) {
+            onSkip();
+        }
+    };
+
     return (
         <div className="fixed inset-0 z-[200] bg-[#F2F2F7] flex flex-col overflow-hidden">
+            {/* Skip button - visible on all steps except complete */}
+            {step !== "complete" && (
+                <div className="absolute top-[env(safe-area-inset-top)] right-0 p-6 z-10">
+                    <button
+                        onClick={handleSkip}
+                        className="text-gray-500 font-bold text-sm hover:text-gray-700 active:opacity-60 transition-all"
+                    >
+                        Omitir por ahora
+                    </button>
+                </div>
+            )}
+
             <AnimatePresence mode="wait">
                 {/* Step 1: Number of Days */}
                 {step === "days" && (
@@ -319,21 +347,27 @@ export function OnboardingWizard({ isOpen, onComplete }: OnboardingWizardProps) 
                             Elegí la cantidad de días por semana que vas a dedicar al gym
                         </p>
 
-                        {/* Number selector */}
-                        <div className="flex gap-3 mb-12">
-                            {[1, 2, 3, 4, 5].map((num) => (
-                                <button
-                                    key={num}
-                                    onClick={() => setTotalDays(num)}
-                                    className={`w-16 h-16 rounded-2xl text-2xl font-black transition-all ${
-                                        totalDays === num
-                                            ? "bg-ios-blue text-white shadow-lg scale-110"
-                                            : "bg-white text-gray-400 border-2 border-gray-200"
-                                    }`}
-                                >
-                                    {num}
-                                </button>
-                            ))}
+                        {/* Number counter */}
+                        <div className="flex items-center gap-6 mb-12">
+                            <button
+                                onClick={() => setTotalDays(Math.max(1, totalDays - 1))}
+                                disabled={totalDays <= 1}
+                                className="w-14 h-14 rounded-2xl bg-white text-black font-black text-2xl shadow-md border-2 border-gray-200 disabled:opacity-30 disabled:cursor-not-allowed active:scale-95 transition-all"
+                            >
+                                −
+                            </button>
+                            <div className="w-24 h-24 rounded-3xl bg-white shadow-lg border-2 border-gray-200 flex items-center justify-center">
+                                <span className="text-5xl font-black tabular-nums text-black">
+                                    {totalDays || 0}
+                                </span>
+                            </div>
+                            <button
+                                onClick={() => setTotalDays(Math.min(5, totalDays + 1))}
+                                disabled={totalDays >= 5}
+                                className="w-14 h-14 rounded-2xl bg-white text-black font-black text-2xl shadow-md border-2 border-gray-200 disabled:opacity-30 disabled:cursor-not-allowed active:scale-95 transition-all"
+                            >
+                                +
+                            </button>
                         </div>
 
                         <button

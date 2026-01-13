@@ -1,11 +1,12 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { ExternalLink, Copy, Check, Loader2, AlertCircle, LogOut, FileSpreadsheet } from "lucide-react";
-import { fetchWeekData } from "@/lib/sheets-client";
+import { ExternalLink, Copy, Check, Loader2, AlertCircle, LogOut, FileSpreadsheet, RefreshCw } from "lucide-react";
+import { fetchWeekData, resetMesociclo } from "@/lib/sheets-client";
 import { Week } from "@/types";
 import { useAuth } from "@/lib/hooks/useAuth";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 
 const ROUTINE_BUILDER_URL =
     "https://gemini.google.com/gem/1h78boD42OJHWVL_adZzOtrEEs-uwERAn?usp=sharing&hl=es_419";
@@ -39,12 +40,14 @@ function buildToonRoutine(week: Week): string {
 
 export default function PerfilPage() {
     const auth = useAuth();
+    const router = useRouter();
     const [week, setWeek] = useState<Week | null>(null);
     const [isLoadingWeek, setIsLoadingWeek] = useState(false);
     const [copyState, setCopyState] = useState<CopyState>("idle");
     const [copyMessage, setCopyMessage] = useState<string | null>(null);
     const [isCopying, setIsCopying] = useState(false);
     const [loadError, setLoadError] = useState<string | null>(null);
+    const [isResettingMesociclo, setIsResettingMesociclo] = useState(false);
 
     const isReady = auth.isAuthenticated;
 
@@ -118,6 +121,39 @@ export default function PerfilPage() {
 
     const handleConnectGoogle = () => {
         auth.login();
+    };
+
+    const handleRedoOnboarding = async () => {
+        if (!isReady) return;
+
+        const confirmed = window.confirm(
+            "⚠️ Esto borrará todas las semanas excepto Semana 1 y reiniciará el wizard de configuración.\n\n¿Estás seguro?"
+        );
+
+        if (!confirmed) return;
+
+        setIsResettingMesociclo(true);
+        
+        try {
+            // Reset mesociclo (delete Semana 2..N)
+            const result = await resetMesociclo();
+            
+            if (!result.ok) {
+                throw new Error(result.error || "Error al resetear mesociclo");
+            }
+
+            // Clear onboarding flags
+            localStorage.removeItem("onboarding_completed_v1");
+            localStorage.removeItem("onboarding_dismissed_v1");
+
+            // Navigate to home with force flag
+            router.push("/?force_onboarding=true");
+        } catch (error: any) {
+            console.error("Error resetting onboarding:", error);
+            alert("Error al resetear: " + (error.message || "Intentá de nuevo"));
+        } finally {
+            setIsResettingMesociclo(false);
+        }
     };
 
     return (
@@ -221,6 +257,26 @@ export default function PerfilPage() {
                         <Loader2 size={16} className="animate-spin" />
                         Cargando Semana 1...
                     </div>
+                )}
+
+                {isReady && (
+                    <button
+                        type="button"
+                        onClick={handleRedoOnboarding}
+                        disabled={isResettingMesociclo}
+                        className={`w-full py-3 rounded-2xl font-bold flex items-center justify-center gap-2 text-sm ${
+                            isResettingMesociclo
+                                ? "bg-black/10 text-black/40"
+                                : "bg-ios-blue text-white hover:bg-ios-blue/90 active:translate-y-px transition"
+                        }`}
+                    >
+                        {isResettingMesociclo ? (
+                            <Loader2 size={16} className="animate-spin" />
+                        ) : (
+                            <RefreshCw size={16} />
+                        )}
+                        Rehacer onboarding
+                    </button>
                 )}
 
                 <div className="pt-2">

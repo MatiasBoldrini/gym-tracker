@@ -368,3 +368,34 @@ export async function createMesociclo(weeks: number): Promise<CreateMesocicloRes
         };
     }
 }
+
+/**
+ * Reset mesociclo by deleting all weeks except Semana 1.
+ * Used when redoing the onboarding wizard.
+ */
+export async function resetMesociclo(): Promise<SaveResult> {
+    try {
+        const response = await fetch("/api/sheets/mesociclo", {
+            method: "DELETE",
+        });
+
+        const data = await response.json();
+
+        if (!response.ok) {
+            return {
+                ok: false,
+                error: data.error || `Error ${response.status}`,
+                code: data.code,
+                status: response.status,
+            };
+        }
+
+        return { ok: true };
+    } catch (error: any) {
+        console.error("Error resetting mesociclo:", error);
+        return {
+            ok: false,
+            error: error.message || "Network error",
+        };
+    }
+}

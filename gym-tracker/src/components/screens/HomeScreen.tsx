@@ -70,11 +70,23 @@ export function HomeScreen({ initialWeek, initialWeeks, initialPrs, initialSetup
     useEffect(() => {
         if (typeof window === "undefined") return;
         
-        // Skip if already completed onboarding
-        const hasCompletedOnboarding = localStorage.getItem("onboarding_completed_v1") === "true";
-        if (hasCompletedOnboarding) return;
-        
         const urlParams = new URLSearchParams(window.location.search);
+        const forceOnboarding = urlParams.get("force_onboarding") === "true";
+        
+        // Force onboarding if explicitly requested (from redo)
+        if (forceOnboarding) {
+            setShowOnboardingWizard(true);
+            // Clean URL without reloading
+            const newUrl = window.location.pathname;
+            window.history.replaceState({}, "", newUrl);
+            return;
+        }
+        
+        // Skip if already completed or dismissed onboarding
+        const hasCompletedOnboarding = localStorage.getItem("onboarding_completed_v1") === "true";
+        const hasDismissedOnboarding = localStorage.getItem("onboarding_dismissed_v1") === "true";
+        if (hasCompletedOnboarding || hasDismissedOnboarding) return;
+        
         const isNewUser = urlParams.get("is_new_user") === "true";
         
         // Show wizard if new user OR routine is empty
@@ -644,6 +656,8 @@ export function HomeScreen({ initialWeek, initialWeeks, initialPrs, initialSetup
     }
 
     const handleOnboardingComplete = async () => {
+        localStorage.setItem("onboarding_completed_v1", "true");
+        localStorage.removeItem("onboarding_dismissed_v1");
         setShowOnboardingWizard(false);
         // Refresh week data after onboarding
         try {
@@ -657,12 +671,18 @@ export function HomeScreen({ initialWeek, initialWeeks, initialPrs, initialSetup
         }
     };
 
+    const handleOnboardingSkip = () => {
+        localStorage.setItem("onboarding_dismissed_v1", "true");
+        setShowOnboardingWizard(false);
+    };
+
     return (
         <div className="min-h-[calc(100dvh-(var(--bottom-nav-base)+env(safe-area-inset-bottom)))] w-full flex flex-col bg-[#F2F2F7] overflow-x-hidden">
             {/* Onboarding wizard for new users */}
             <OnboardingWizard 
                 isOpen={showOnboardingWizard} 
-                onComplete={handleOnboardingComplete} 
+                onComplete={handleOnboardingComplete}
+                onSkip={handleOnboardingSkip}
             />
 
             {/* Error banner */}
