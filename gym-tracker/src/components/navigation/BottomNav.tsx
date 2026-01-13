@@ -2,17 +2,25 @@
 
 import { Home, LineChart, Activity, User, PenSquare } from "lucide-react";
 import { usePathname, useRouter } from "next/navigation";
-import { useEffect } from "react";
+import { useEffect, useState, useRef } from "react";
 import { useAuth } from "@/lib/hooks/useAuth";
 
 export function BottomNav() {
     const pathname = usePathname();
     const router = useRouter();
     const { isAuthenticated, isLoading } = useAuth();
+    const [debugLog, setDebugLog] = useState<string[]>([]);
+    const logCountRef = useRef(0);
+
+    const addDebugLog = (message: string) => {
+        logCountRef.current++;
+        setDebugLog(prev => [...prev.slice(-4), `${logCountRef.current}. ${message}`]);
+        console.log(message);
+    };
 
     // Log pathname changes
     useEffect(() => {
-        console.log('🔵 [BottomNav] Pathname changed to:', pathname);
+        addDebugLog(`🔵 Pathname: ${pathname}`);
     }, [pathname]);
 
     const navItems = [
@@ -42,6 +50,16 @@ export function BottomNav() {
     }
 
     return (
+        <>
+            {/* Debug Log */}
+            {debugLog.length > 0 && (
+                <div className="fixed bottom-[calc(var(--bottom-nav-base)+env(safe-area-inset-bottom)+0.5rem)] left-2 right-2 bg-black/90 text-white text-[10px] p-2 rounded-lg z-[1001] font-mono max-h-32 overflow-auto">
+                    {debugLog.map((log, i) => (
+                        <div key={i}>{log}</div>
+                    ))}
+                </div>
+            )}
+        
         <nav className="fixed bottom-0 left-0 right-0 bg-white/70 backdrop-blur-md border-t border-black/5 px-4 flex justify-around items-center z-[1000] pointer-events-auto h-[calc(var(--bottom-nav-base)+env(safe-area-inset-bottom))] pt-2 pb-[env(safe-area-inset-bottom)]">
             {navItems.map((item) => {
                 const isActive = pathname === item.href;
@@ -52,39 +70,25 @@ export function BottomNav() {
                         key={item.name}
                         type="button"
                         onPointerDown={(e) => {
-                            console.log('🔵 [BottomNav] PointerDown:', {
-                                name: item.name,
-                                href: item.href,
-                                currentPath: pathname,
-                                eventType: e.type,
-                                pointerType: e.pointerType,
-                                defaultPrevented: e.defaultPrevented,
-                                isPropagationStopped: e.isPropagationStopped(),
-                                timestamp: new Date().toISOString()
-                            });
+                            addDebugLog(`🔵 PointerDown: ${item.name} -> ${item.href}`);
                             
                             // En mobile (y con dnd/gestos), onClick puede quedar "tarde" o encolarse.
                             // PointerDown es inmediato y evita el síntoma de "clickeo navbar, recién navega
                             // cuando clickeo otro botón".
                             if (pathname === item.href) {
-                                console.log('🔵 [BottomNav] Same path, ignoring');
+                                addDebugLog(`🔵 Same path, ignoring`);
                                 return;
                             }
                             
                             e.preventDefault();
                             e.stopPropagation();
                             
-                            console.log('🔵 [BottomNav] Calling router.push:', item.href);
+                            addDebugLog(`🔵 Calling router.push: ${item.href}`);
                             router.push(item.href);
-                            console.log('🔵 [BottomNav] router.push called');
+                            addDebugLog(`🔵 router.push called`);
                         }}
                         onClick={(e) => {
-                            console.log('🟡 [BottomNav] Click event fired:', {
-                                name: item.name,
-                                href: item.href,
-                                defaultPrevented: e.defaultPrevented,
-                                timestamp: new Date().toISOString()
-                            });
+                            addDebugLog(`🟡 Click: ${item.name}`);
                         }}
                         onMouseEnter={() => {
                             try {
@@ -106,5 +110,6 @@ export function BottomNav() {
                 );
             })}
         </nav>
+        </>
     );
 }
