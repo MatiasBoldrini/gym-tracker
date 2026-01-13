@@ -10,6 +10,9 @@ import {
     createMesociclo,
     ExerciseItem,
     RoutineExercise,
+    fetchRoutineDaysSummary,
+    saveOnboardingProgress,
+    loadOnboardingProgress,
 } from "@/lib/sheets-client";
 import { ExerciseSearchModal } from "@/components/ui/ExerciseSearchModal";
 import { BodyMapInteractive } from "@/components/ui/BodyMapInteractive";
@@ -57,6 +60,7 @@ export function OnboardingWizard({
     const [availableExercises, setAvailableExercises] = useState<ExerciseItem[]>([]);
     const [seriesOptions, setSeriesOptions] = useState<string[]>([]);
     const [isLoadingData, setIsLoadingData] = useState(true);
+    const [isRehydrating, setIsRehydrating] = useState(false);
 
     // UI state
     const [isSearchModalOpen, setIsSearchModalOpen] = useState(false);
@@ -184,27 +188,144 @@ export function OnboardingWizard({
         };
     }, [isOpen, setupComplete, auth.hasSpreadsheet]);
 
-    // Initialize days config when totalDays is set
+    // Ensure daysConfig stays aligned with totalDays (expand/trim) and keep index in range
     useEffect(() => {
-        if (totalDays > 0 && daysConfig.length === 0) {
-            const config: DayConfig[] = [];
-            for (let i = 1; i <= totalDays; i++) {
-                config.push({ dayId: i, muscles: [], exercises: [] });
+        if (totalDays <= 0) return;
+        setDaysConfig((prev) => {
+            let next = [...prev];
+            if (next.length < totalDays) {
+                for (let i = next.length; i < totalDays; i++) {
+                    next.push({ dayId: i + 1, muscles: [], exercises: [] });
+                }
+            } else if (next.length > totalDays) {
+                next = next.slice(0, totalDays);
             }
-            setDaysConfig(config);
-        }
-    }, [totalDays, daysConfig.length]);
+
+            // Re-number dayId to stay consistent
+            next = next.map((day, idx) => ({ ...day, dayId: idx + 1 }));
+
+            // Avoid state updates if nothing changed
+            const unchanged = next.length === prev.length && next.every((d, idx) =>
+                prev[idx] &&
+                prev[idx].dayId === d.dayId &&
+                prev[idx].muscles === d.muscles &&
+                prev[idx].exercises === d.exercises
+            );
+            return unchanged ? prev : next;
+        });
+
+        setCurrentDayIndex((idx) => {
+            if (idx < 0) return 0;
+            if (idx > totalDays - 1) return Math.max(totalDays - 1, 0);
+            return idx;
+        });
+    }, [totalDays]);
+
+    // Persist onboarding progreso (best-effort)
+    const persistProgress = useCallback(
+        (partial: Partial<{ step: Step; currentDayIndex: number; totalDays: number }>) => {
+            const payload = {
+                totalDays: (partial.totalDays ?? totalDays) || undefined,
+                currentDayIndex: partial.currentDayIndex ?? currentDayIndex,
+                step: partial.step ?? step,
+            };
+            if (!payload.totalDays) return;
+            saveOnboardingProgress(payload).catch((e) =>
+                console.error("No se pudo guardar progreso de onboarding:", e)
+            );
+        },
+        [currentDayIndex, step, totalDays]
+    );
+
+    // Rehydrate progress when wizard opens
+    useEffect(() => {
+        if (!isOpen) return;
+        let cancelled = false;
+
+        const rehydrate = async () => {
+            setIsRehydrating(true);
+            try {
+                const [progress, summary] = await Promise.all([
+                    loadOnboardingProgress(),
+                    auth.hasSpreadsheet ? fetchRoutineDaysSummary().catch(() => []) : Promise.resolve([]),
+                ]);
+
+                const hasSavedExercises = Array.isArray(summary)
+                    ? summary.some((d) => d.exercisesCount > 0)
+                    : false;
+
+                // Determine totalDays: prefer saved progress, otherwise derive from summary length (cap 5)
+                const derivedTotalDays = progress?.totalDays && progress.totalDays > 0
+                    ? Math.min(5, progress.totalDays)
+                    : hasSavedExercises && Array.isArray(summary) && summary.length > 0
+                        ? Math.min(5, summary.length)
+                        : 0;
+
+                if (derivedTotalDays > 0) {
+                    setTotalDays(derivedTotalDays);
+                }
+
+                let nextDayIndex = typeof progress?.currentDayIndex === "number" && progress.currentDayIndex >= 0
+                    ? progress.currentDayIndex
+                    : 0;
+                let nextStep: Step = "muscles";
+
+                const isValidStep = (value: string | undefined | null): value is Step =>
+                    value === "days" || value === "muscles" || value === "exercises" || value === "weeks" || value === "complete";
+
+                if (isValidStep(progress?.step)) {
+                    nextStep = progress!.step;
+                }
+
+                if (hasSavedExercises && derivedTotalDays > 0 && Array.isArray(summary)) {
+                    const firstIncompleteIdx = summary.findIndex(
+                        (d, idx) => idx < derivedTotalDays && d.exercisesCount === 0
+                    );
+
+                    if (firstIncompleteIdx === -1) {
+                        // Todos los días con algo cargado: pasar a semanas
+                        nextDayIndex = Math.min(derivedTotalDays - 1, summary.length - 1);
+                        nextStep = "weeks";
+                    } else {
+                        nextDayIndex = firstIncompleteIdx;
+                        nextStep = "muscles";
+                    }
+                }
+
+                setCurrentDayIndex((idx) => {
+                    if (nextDayIndex < 0) return 0;
+                    return Math.min(nextDayIndex, Math.max((derivedTotalDays || totalDays) - 1, 0));
+                });
+
+                if (derivedTotalDays > 0) {
+                    setStep(nextStep);
+                }
+            } catch (error) {
+                console.error("Error rehidratando onboarding:", error);
+            } finally {
+                if (!cancelled) setIsRehydrating(false);
+            }
+        };
+
+        rehydrate();
+        return () => {
+            cancelled = true;
+        };
+    }, [auth.hasSpreadsheet, isOpen]);
 
     // Toggle muscle selection for current day
     const toggleMuscle = (muscle: string) => {
         setDaysConfig((prev) => {
             const updated = [...prev];
-            const day = updated[currentDayIndex];
-            if (day.muscles.includes(muscle)) {
-                day.muscles = day.muscles.filter((m) => m !== muscle);
-            } else {
-                day.muscles = [...day.muscles, muscle];
-            }
+            const oldDay = updated[currentDayIndex];
+            // Create a new object reference so useMemo dependencies detect the change
+            const newDay = {
+                ...oldDay,
+                muscles: oldDay.muscles.includes(muscle)
+                    ? oldDay.muscles.filter((m) => m !== muscle)
+                    : [...oldDay.muscles, muscle],
+            };
+            updated[currentDayIndex] = newDay;
             return updated;
         });
     };
@@ -292,10 +413,13 @@ export function OnboardingWizard({
 
             // Move to next day or weeks step
             if (currentDayIndex < totalDays - 1) {
+                const nextIndex = currentDayIndex + 1;
                 setCurrentDayIndex((prev) => prev + 1);
                 setStep("muscles");
+                persistProgress({ currentDayIndex: nextIndex, step: "muscles" });
             } else {
                 setStep("weeks");
+                persistProgress({ step: "weeks" });
             }
         } catch (error: any) {
             setErrorMessage(error.message || "Error al guardar la rutina");
@@ -335,6 +459,18 @@ export function OnboardingWizard({
     };
 
     if (!isOpen) return null;
+
+    // Fallback to avoid overlay vacío if state desincroniza
+    if ((step === "muscles" || step === "exercises") && !currentDay) {
+        return (
+            <div className="fixed inset-0 z-[200] bg-[#F2F2F7] flex flex-col items-center justify-center">
+                <Loader2 className="w-8 h-8 animate-spin text-ios-blue" />
+                <p className="mt-3 text-gray-500 font-medium">
+                    {isRehydrating ? "Recuperando tu rutina..." : "Preparando tu siguiente día..."}
+                </p>
+            </div>
+        );
+    }
 
     // Check if we need Sheets data for the current step
     // Steps "days" and "muscles" don't need Sheets data - user can proceed while setup runs
@@ -419,6 +555,7 @@ export function OnboardingWizard({
                             onClick={() => {
                                 if (totalDays > 0) {
                                     setStep("muscles");
+                                    persistProgress({ step: "muscles", currentDayIndex: 0, totalDays });
                                 }
                             }}
                             disabled={totalDays === 0}
@@ -608,6 +745,7 @@ export function OnboardingWizard({
                                 onClick={() => {
                                     if (currentDay.muscles.length > 0) {
                                         setStep("exercises");
+                                        persistProgress({ step: "exercises" });
                                     }
                                 }}
                                 disabled={currentDay.muscles.length === 0}

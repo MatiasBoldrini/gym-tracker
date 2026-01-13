@@ -552,3 +552,45 @@ export async function resetOnboarding(): Promise<{ ok: boolean; error?: string }
         return { ok: false, error: error.message || "Network error" };
     }
 }
+
+// ============================================================================
+// Onboarding progress persistence
+// ============================================================================
+
+export interface OnboardingProgress {
+    totalDays?: number;
+    currentDayIndex?: number;
+    step?: string;
+}
+
+export async function saveOnboardingProgress(progress: OnboardingProgress): Promise<{ ok: boolean; error?: string }> {
+    try {
+        const response = await fetch("/api/user/preferences/onboarding", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ action: "progress", progress }),
+        });
+        const data = await response.json();
+        if (!response.ok) {
+            return { ok: false, error: data.error || `Error ${response.status}` };
+        }
+        return { ok: true };
+    } catch (error: any) {
+        console.error("Error saving onboarding progress:", error);
+        return { ok: false, error: error.message || "Network error" };
+    }
+}
+
+export async function loadOnboardingProgress(): Promise<OnboardingProgress | null> {
+    try {
+        const response = await fetch("/api/user/preferences/onboarding", { method: "GET" });
+        const data = await response.json();
+        if (!response.ok) {
+            return null;
+        }
+        return data.onboarding_progress ?? null;
+    } catch (error) {
+        console.error("Error loading onboarding progress:", error);
+        return null;
+    }
+}

@@ -8,10 +8,15 @@
  * Genera una tabla con todos los ejercicios y sus récords personales
  * Busca en todas las hojas que empiecen con "Semana"
  *
+ * El parámetro recalcToken se ignora; se usa para forzar recálculo
+ * con argumentos volátiles (ej: RAND()) sin necesidad de triggers.
+ *
+ * @param {*} recalcToken Token de recálculo (opcional, ignorado)
  * @return {Array} Tabla con columnas: Ejercicio, Peso PR, Reps, Fecha, 1RM Estimado
  * @customfunction
  */
-function TABLA_PRS() {
+function TABLA_PRS(recalcToken) {
+    // recalcToken se ignora; su presencia permite usar RAND()/NOW() en la fórmula.
     const ss = SpreadsheetApp.getActiveSpreadsheet();
     const hojas = ss.getSheets().filter((h) => h.getName().startsWith("Semana"));
 
@@ -23,8 +28,10 @@ function TABLA_PRS() {
         const matchSemana = nombreHoja.match(/Semana\s*(\d+)/i);
         const numSemana = matchSemana ? parseInt(matchSemana[1]) : 0;
 
-        const datos = hoja.getDataRange().getValues();
-        if (datos.length < 2) return;
+        const lastRow = hoja.getLastRow();
+        if (lastRow < 2) return;
+        // Leer solo columnas A..M (13 columnas) para cubrir ejercicio + 4 sets (reps/peso)
+        const datos = hoja.getRange(1, 1, lastRow, 13).getValues();
 
         let diaActual = 0;
 
@@ -47,19 +54,24 @@ function TABLA_PRS() {
                 return;
             }
 
-            for (let col = 1; col < fila.length - 1; col++) {
-                const valor1 = fila[col];
-                const valor2 = fila[col + 1];
+            // Columnas de sets: F-G, H-I, J-K, L-M (reps/peso)
+            const sets = [
+                [fila[5], fila[6]],
+                [fila[7], fila[8]],
+                [fila[9], fila[10]],
+                [fila[11], fila[12]],
+            ];
 
+            sets.forEach(([valorReps, valorPeso]) => {
                 if (
-                    typeof valor1 === "number" &&
-                    typeof valor2 === "number" &&
-                    valor1 > 0 &&
-                    valor2 > 0 &&
-                    valor1 <= 30
+                    typeof valorReps === "number" &&
+                    typeof valorPeso === "number" &&
+                    valorReps > 0 &&
+                    valorPeso > 0 &&
+                    valorReps <= 30
                 ) {
-                    const reps = valor1;
-                    const peso = valor2;
+                    const reps = valorReps;
+                    const peso = valorPeso;
                     const rm1 = reps === 1 ? peso : peso / (1.0278 - 0.0278 * reps);
 
                     if (!prs[ejercicio] || rm1 > prs[ejercicio].rm1) {
@@ -68,7 +80,7 @@ function TABLA_PRS() {
                         prs[ejercicio] = { peso: peso, reps: reps, rm1: rm1, fecha: fecha };
                     }
                 }
-            }
+            });
         });
     });
 
@@ -274,11 +286,11 @@ function GRILLA_SERIES_FATIGA(musculos, diasSemana, mapeo, hoja, modo, maxSeries
     };
 
     // Normalizar inputs (pueden ser arrays 2D o valores únicos)
-    const musculosList = Array.isArray(musculos) 
+    const musculosList = Array.isArray(musculos)
         ? musculos.flat().filter(m => m && m.toString().trim() !== "")
         : [musculos];
-    
-    const diasList = Array.isArray(diasSemana) 
+
+    const diasList = Array.isArray(diasSemana)
         ? diasSemana.flat().filter(d => d && d.toString().trim() !== "")
         : [diasSemana];
 
@@ -298,7 +310,7 @@ function GRILLA_SERIES_FATIGA(musculos, diasSemana, mapeo, hoja, modo, maxSeries
 
     // Leer datos de la hoja de semana una sola vez
     const datos = sheet.getDataRange().getValues();
-    
+
     // Preprocesar: crear índice de series por día y músculo
     const seriesPorDiaMusculo = {};
     let diaActual = 0;
@@ -327,15 +339,15 @@ function GRILLA_SERIES_FATIGA(musculos, diasSemana, mapeo, hoja, modo, maxSeries
 
     // Generar matriz de resultado
     const resultado = [];
-    
+
     musculosList.forEach(musculo => {
         const fila = [];
         const musculoNorm = musculo.toString().trim().toLowerCase();
-        
+
         diasList.forEach(diaSem => {
             const diaNorm = diaSem.toString().trim().toUpperCase().substring(0, 3);
             const numDia = mapeoDict[diaNorm];
-            
+
             if (numDia) {
                 const key = `${numDia}|${musculoNorm}`;
                 const series = seriesPorDiaMusculo[key];
@@ -344,7 +356,7 @@ function GRILLA_SERIES_FATIGA(musculos, diasSemana, mapeo, hoja, modo, maxSeries
                 fila.push("");
             }
         });
-        
+
         resultado.push(fila);
     });
 

@@ -126,6 +126,10 @@ export function HomeScreen({ initialWeek, initialWeeks, initialPrs, initialSetup
         if (auth.onboarding.hasCompleted || auth.onboarding.hasDismissed) {
             return;
         }
+        // Si hay progreso guardado, no abrir automáticamente: se mostrará CTA
+        if (auth.onboarding.hasProgress) {
+            return;
+        }
         
         // Priority 2: Fallback to localStorage (for compat / offline)
         const hasCompletedOnboarding = localStorage.getItem("onboarding_completed_v1") === "true";
@@ -136,7 +140,7 @@ export function HomeScreen({ initialWeek, initialWeeks, initialPrs, initialSetup
         if (isNewUser || isRoutineEmpty) {
             setShowOnboardingWizard(true);
         }
-    }, [isRoutineEmpty, runSetupInBackground, auth.onboarding.hasCompleted, auth.onboarding.hasDismissed]);
+    }, [isRoutineEmpty, runSetupInBackground, auth.onboarding.hasCompleted, auth.onboarding.hasDismissed, auth.onboarding.hasProgress]);
 
     // Si el server detectó un problema de acceso (403/404) lo mostramos
     useEffect(() => {
@@ -750,6 +754,24 @@ export function HomeScreen({ initialWeek, initialWeeks, initialPrs, initialSetup
             {errorMessage && (
                 <div className="px-4 py-3 bg-red-50 border-b border-red-200">
                     <p className="text-sm text-red-700 font-medium text-center">{errorMessage}</p>
+                </div>
+            )}
+
+            {/* CTA para continuar onboarding (sin auto abrir) */}
+            {auth.onboarding.shouldShow && auth.onboarding.hasProgress && !showOnboardingWizard && (
+                <div className="px-4 pt-4">
+                    <div className="p-4 rounded-2xl bg-white border border-black/5 shadow-sm flex items-center justify-between gap-3">
+                        <div className="flex-1">
+                            <p className="text-sm font-black text-black">Continuar onboarding</p>
+                            <p className="text-xs text-gray-500">Retomá donde lo dejaste</p>
+                        </div>
+                        <button
+                            onClick={() => setShowOnboardingWizard(true)}
+                            className="px-4 py-2 bg-black text-white rounded-xl text-sm font-bold active:translate-y-px transition"
+                        >
+                            Continuar
+                        </button>
+                    </div>
                 </div>
             )}
 

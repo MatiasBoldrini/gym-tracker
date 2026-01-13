@@ -19,7 +19,7 @@ export async function GET() {
         // Fetch onboarding preferences
         const { data: prefs } = await supabase
             .from("user_preferences")
-            .select("onboarding_version, onboarding_completed_at, onboarding_dismissed_at")
+            .select("onboarding_version, onboarding_completed_at, onboarding_dismissed_at, onboarding_progress")
             .eq("user_id", user.id)
             .single();
 
@@ -37,6 +37,8 @@ export async function GET() {
                 hasCompleted: !!prefs?.onboarding_completed_at,
                 hasDismissed: !!prefs?.onboarding_dismissed_at,
                 shouldShow: !prefs?.onboarding_completed_at && !prefs?.onboarding_dismissed_at,
+                progress: prefs?.onboarding_progress ?? null,
+                hasProgress: !!prefs?.onboarding_progress,
             },
         });
     } catch (error) {

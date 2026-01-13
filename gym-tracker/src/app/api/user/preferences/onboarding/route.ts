@@ -3,10 +3,18 @@ import { createClient } from "@/lib/supabase/server";
 
 const CURRENT_ONBOARDING_VERSION = 1;
 
+interface OnboardingProgress {
+    totalDays?: number;
+    currentDayIndex?: number;
+    step?: string;
+    updatedAt?: string;
+}
+
 export interface OnboardingPreferences {
     onboarding_version: number;
     onboarding_completed_at: string | null;
     onboarding_dismissed_at: string | null;
+    onboarding_progress?: OnboardingProgress | null;
 }
 
 /**
@@ -27,7 +35,7 @@ export async function GET() {
 
         const { data: prefs, error } = await supabase
             .from("user_preferences")
-            .select("onboarding_version, onboarding_completed_at, onboarding_dismissed_at")
+            .select("onboarding_version, onboarding_completed_at, onboarding_dismissed_at, onboarding_progress")
             .eq("user_id", user.id)
             .single();
 
@@ -45,10 +53,12 @@ export async function GET() {
             onboarding_version: prefs?.onboarding_version ?? CURRENT_ONBOARDING_VERSION,
             onboarding_completed_at: prefs?.onboarding_completed_at ?? null,
             onboarding_dismissed_at: prefs?.onboarding_dismissed_at ?? null,
+            onboarding_progress: prefs?.onboarding_progress ?? null,
             // Computed flags for convenience
             hasCompletedOnboarding: !!prefs?.onboarding_completed_at,
             hasDismissedOnboarding: !!prefs?.onboarding_dismissed_at,
             shouldShowOnboarding: !prefs?.onboarding_completed_at && !prefs?.onboarding_dismissed_at,
+            hasProgress: !!prefs?.onboarding_progress,
         });
     } catch (error) {
         console.error("Error in onboarding preferences GET:", error);
@@ -60,7 +70,8 @@ export async function GET() {
 }
 
 interface UpdateOnboardingBody {
-    action: "complete" | "dismiss";
+    action: "complete" | "dismiss" | "progress";
+    progress?: OnboardingProgress | null;
 }
 
 /**
@@ -82,31 +93,49 @@ export async function POST(request: NextRequest) {
         const body: UpdateOnboardingBody = await request.json();
         const { action } = body;
 
-        if (action !== "complete" && action !== "dismiss") {
+        const now = new Date().toISOString();
+        let upsertData: Record<string, any> | null = null;
+
+        if (action === "complete") {
+            upsertData = {
+                onboarding_completed_at: now,
+                onboarding_dismissed_at: null,
+                onboarding_progress: null,
+                onboarding_version: CURRENT_ONBOARDING_VERSION,
+            };
+        } else if (action === "dismiss") {
+            upsertData = {
+                onboarding_dismissed_at: now,
+                onboarding_progress: null,
+                onboarding_version: CURRENT_ONBOARDING_VERSION,
+            };
+        } else if (action === "progress") {
+            if (!body.progress) {
+                return NextResponse.json(
+                    { error: "progress requerido cuando action='progress'" },
+                    { status: 400 }
+                );
+            }
+            upsertData = {
+                onboarding_progress: {
+                    ...body.progress,
+                    updatedAt: now,
+                },
+                onboarding_version: CURRENT_ONBOARDING_VERSION,
+            };
+        } else {
             return NextResponse.json(
-                { error: "action debe ser 'complete' o 'dismiss'" },
+                { error: "action debe ser 'complete', 'dismiss' o 'progress'" },
                 { status: 400 }
             );
         }
-
-        const now = new Date().toISOString();
-        const updateData = action === "complete"
-            ? { 
-                onboarding_completed_at: now, 
-                onboarding_dismissed_at: null,
-                onboarding_version: CURRENT_ONBOARDING_VERSION,
-              }
-            : { 
-                onboarding_dismissed_at: now,
-                onboarding_version: CURRENT_ONBOARDING_VERSION,
-              };
 
         const { error: upsertError } = await supabase
             .from("user_preferences")
             .upsert(
                 {
                     user_id: user.id,
-                    ...updateData,
+                    ...upsertData,
                     updated_at: now,
                 },
                 { onConflict: "user_id" }
@@ -151,6 +180,7 @@ export async function DELETE() {
             .update({
                 onboarding_completed_at: null,
                 onboarding_dismissed_at: null,
+                onboarding_progress: null,
                 updated_at: new Date().toISOString(),
             })
             .eq("user_id", user.id);

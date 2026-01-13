@@ -10,6 +10,8 @@ interface OnboardingState {
     hasCompleted: boolean;
     hasDismissed: boolean;
     shouldShow: boolean;
+    progress: any | null;
+    hasProgress: boolean;
 }
 
 interface AuthState {
@@ -29,6 +31,8 @@ const defaultOnboarding: OnboardingState = {
     hasCompleted: false,
     hasDismissed: false,
     shouldShow: true,
+    progress: null,
+    hasProgress: false,
 };
 
 export function useAuth() {
