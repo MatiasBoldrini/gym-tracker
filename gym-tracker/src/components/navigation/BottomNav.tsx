@@ -2,13 +2,12 @@
 
 import { Home, LineChart, Activity, User, PenSquare } from "lucide-react";
 import { usePathname, useRouter } from "next/navigation";
-import { useEffect, useTransition } from "react";
+import { useEffect } from "react";
 import { useAuth } from "@/lib/hooks/useAuth";
 
 export function BottomNav() {
     const pathname = usePathname();
     const router = useRouter();
-    const [, startTransition] = useTransition();
     const { isAuthenticated, isLoading } = useAuth();
 
     const navItems = [
@@ -47,14 +46,14 @@ export function BottomNav() {
                     <button
                         key={item.name}
                         type="button"
-                        onClick={() => {
+                        onPointerDown={(e) => {
+                            // En mobile (y con dnd/gestos), onClick puede quedar "tarde" o encolarse.
+                            // PointerDown es inmediato y evita el síntoma de "clickeo navbar, recién navega
+                            // cuando clickeo otro botón".
                             if (pathname === item.href) return;
-                            // No usamos <Link/> acá porque en /rutina detectamos un bug donde la navegación
-                            // queda "pendiente" hasta el siguiente click. Con router.push dentro de una transición
-                            // evitamos depender del handler interno de Link.
-                            startTransition(() => {
-                                router.push(item.href);
-                            });
+                            e.preventDefault();
+                            e.stopPropagation();
+                            router.push(item.href);
                         }}
                         onMouseEnter={() => {
                             try {
@@ -67,7 +66,7 @@ export function BottomNav() {
                             } catch { }
                         }}
                         aria-current={isActive ? "page" : undefined}
-                        className={`pointer-events-auto flex flex-col items-center gap-1 transition-colors ${isActive ? "text-ios-blue" : "text-ios-gray"
+                        className={`pointer-events-auto touch-manipulation flex flex-col items-center gap-1 transition-colors ${isActive ? "text-ios-blue" : "text-ios-gray"
                             }`}
                     >
                         <Icon size={24} />
