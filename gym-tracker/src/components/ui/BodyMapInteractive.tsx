@@ -11,6 +11,8 @@ type BodyMapProps = {
     className?: string;
     /** Optional: IDs of muscle groups to highlight with a stroke/outline */
     highlightGroupIds?: string[];
+    /** Optional: IDs of muscle groups to mark as "active" (e.g. last tapped) */
+    activeGroupIds?: string[];
 };
 
 // Colors matching iOS design system
@@ -33,18 +35,27 @@ const getFillColor = (intensity: number) => {
     return COLORS.empty;
 };
 
-export function BodyMapInteractive({ view, intensityByGroupId, onMuscleClick, className, highlightGroupIds = [] }: BodyMapProps) {
+export function BodyMapInteractive({
+    view,
+    intensityByGroupId,
+    onMuscleClick,
+    className,
+    highlightGroupIds = [],
+    activeGroupIds = [],
+}: BodyMapProps) {
     const handleClick = (id: string, e: React.MouseEvent) => {
         e.stopPropagation();
         if (onMuscleClick) onMuscleClick(id, e);
     };
 
     const highlightSet = new Set(highlightGroupIds);
+    const activeSet = new Set(activeGroupIds);
 
     const MusclePath = ({ id, d, children }: { id: string; d?: string; children?: React.ReactNode }) => {
         const intensity = intensityByGroupId[id] || 0;
         const fill = getFillColor(intensity);
         const isHighlighted = highlightSet.has(id);
+        const isActive = activeSet.has(id);
 
         return (
             <g
@@ -56,6 +67,13 @@ export function BodyMapInteractive({ view, intensityByGroupId, onMuscleClick, cl
                 {d ? (
                     <>
                         <path d={d} />
+                        {isActive && (
+                            <path
+                                d={d}
+                                fill="rgba(0, 122, 255, 0.25)"
+                                className="pointer-events-none"
+                            />
+                        )}
                         {isHighlighted && (
                             <path
                                 d={d}
@@ -66,15 +84,41 @@ export function BodyMapInteractive({ view, intensityByGroupId, onMuscleClick, cl
                                 className="pointer-events-none"
                             />
                         )}
+                        {isActive && (
+                            <path
+                                d={d}
+                                fill="none"
+                                stroke="#007AFF"
+                                strokeWidth="4"
+                                strokeLinejoin="round"
+                                className="pointer-events-none"
+                            />
+                        )}
                     </>
                 ) : (
                     <>
                         {children}
+                        {isActive && (
+                            <g fill="rgba(0, 122, 255, 0.25)" className="pointer-events-none">
+                                {children}
+                            </g>
+                        )}
                         {isHighlighted && (
                             <g
                                 fill="none"
                                 stroke="#007AFF"
                                 strokeWidth="3"
+                                strokeLinejoin="round"
+                                className="pointer-events-none"
+                            >
+                                {children}
+                            </g>
+                        )}
+                        {isActive && (
+                            <g
+                                fill="none"
+                                stroke="#007AFF"
+                                strokeWidth="4"
                                 strokeLinejoin="round"
                                 className="pointer-events-none"
                             >

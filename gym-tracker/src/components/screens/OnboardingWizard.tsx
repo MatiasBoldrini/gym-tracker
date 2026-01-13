@@ -49,6 +49,7 @@ export function OnboardingWizard({ isOpen, onComplete }: OnboardingWizardProps) 
 
     // BodyMap popover state
     const [selectedBodyMapMuscle, setSelectedBodyMapMuscle] = useState<string | null>(null);
+    const [selectedBodyMapGroupId, setSelectedBodyMapGroupId] = useState<string | null>(null);
     const [isBodyMapPopoverOpen, setIsBodyMapPopoverOpen] = useState(false);
     const [popoverPosition, setPopoverPosition] = useState<{ x: number; y: number } | null>(null);
 
@@ -170,6 +171,7 @@ export function OnboardingWizard({ isOpen, onComplete }: OnboardingWizardProps) 
         const y = rect.top;
 
         setSelectedBodyMapMuscle(category);
+        setSelectedBodyMapGroupId(muscleId);
         setPopoverPosition({ x, y });
         setIsBodyMapPopoverOpen(true);
     };
@@ -358,50 +360,57 @@ export function OnboardingWizard({ isOpen, onComplete }: OnboardingWizardProps) 
                         exit={{ opacity: 0, x: -50 }}
                         className="flex-1 flex flex-col min-h-0 pt-[calc(env(safe-area-inset-top)+1.5rem)]"
                     >
-                        {/* Header */}
-                        <div className="px-6 mb-4">
-                            <p className="text-ios-blue font-bold text-sm mb-1">
-                                Día {currentDay.dayId} de {totalDays}
-                            </p>
-                            <h1 className="text-3xl font-black text-black">
-                                ¿Qué vas a entrenar?
-                            </h1>
-                            <p className="text-gray-500 mt-1">
-                                Tocá el gráfico o las tarjetas para seleccionar
-                            </p>
-                        </div>
+                        {/* Scrollable content (iOS-safe) */}
+                        <div
+                            className="flex-1 min-h-0 h-0 overflow-y-auto pb-4"
+                            style={{ WebkitOverflowScrolling: "touch", overscrollBehavior: "contain", touchAction: "pan-y" }}
+                        >
+                            {/* Header */}
+                            <div className="px-6 mb-4">
+                                <p className="text-ios-blue font-bold text-sm mb-1">
+                                    Día {currentDay.dayId} de {totalDays}
+                                </p>
+                                <h1 className="text-3xl font-black text-black">
+                                    ¿Qué vas a entrenar?
+                                </h1>
+                                <p className="text-gray-500 mt-1">
+                                    Tocá el gráfico o las tarjetas para seleccionar
+                                </p>
+                            </div>
 
-                        {/* Body Map Section */}
-                        <div className="px-6 mb-4">
-                            <div className="bg-white rounded-2xl p-4 border border-black/5 shadow-sm">
-                                <div className="flex gap-4 w-full h-[280px]">
-                                    <div className="flex-1 flex flex-col items-center justify-center relative">
-                                        <BodyMapInteractive
-                                            view="front"
-                                            intensityByGroupId={intensityByGroupId}
-                                            onMuscleClick={handleBodyMapMuscleClick}
-                                            highlightGroupIds={currentDayHighlightedIds}
-                                            className="h-full w-full"
-                                        />
-                                        <span className="absolute bottom-0 text-[10px] font-black text-gray-300 uppercase tracking-widest pointer-events-none">
-                                            Frente
-                                        </span>
-                                    </div>
-                                    <div className="flex-1 flex flex-col items-center justify-center relative">
-                                        <BodyMapInteractive
-                                            view="back"
-                                            intensityByGroupId={intensityByGroupId}
-                                            onMuscleClick={handleBodyMapMuscleClick}
-                                            highlightGroupIds={currentDayHighlightedIds}
-                                            className="h-full w-full"
-                                        />
-                                        <span className="absolute bottom-0 text-[10px] font-black text-gray-300 uppercase tracking-widest pointer-events-none">
-                                            Espalda
-                                        </span>
+                            {/* Body Map Section */}
+                            <div className="px-6 mb-4">
+                                <div className="bg-white rounded-2xl p-4 border border-black/5 shadow-sm">
+                                    <div className="flex gap-4 w-full h-[280px]">
+                                        <div className="flex-1 flex flex-col items-center justify-center relative">
+                                            <BodyMapInteractive
+                                                view="front"
+                                                intensityByGroupId={intensityByGroupId}
+                                                onMuscleClick={handleBodyMapMuscleClick}
+                                                highlightGroupIds={currentDayHighlightedIds}
+                                                activeGroupIds={selectedBodyMapGroupId ? [selectedBodyMapGroupId] : []}
+                                                className="h-full w-full"
+                                            />
+                                            <span className="absolute bottom-0 text-[10px] font-black text-gray-300 uppercase tracking-widest pointer-events-none">
+                                                Frente
+                                            </span>
+                                        </div>
+                                        <div className="flex-1 flex flex-col items-center justify-center relative">
+                                            <BodyMapInteractive
+                                                view="back"
+                                                intensityByGroupId={intensityByGroupId}
+                                                onMuscleClick={handleBodyMapMuscleClick}
+                                                highlightGroupIds={currentDayHighlightedIds}
+                                                activeGroupIds={selectedBodyMapGroupId ? [selectedBodyMapGroupId] : []}
+                                                className="h-full w-full"
+                                            />
+                                            <span className="absolute bottom-0 text-[10px] font-black text-gray-300 uppercase tracking-widest pointer-events-none">
+                                                Espalda
+                                            </span>
+                                        </div>
                                     </div>
                                 </div>
                             </div>
-                        </div>
 
                         {/* BodyMap Popover */}
                         <AnimatePresence>
@@ -410,7 +419,12 @@ export function OnboardingWizard({ isOpen, onComplete }: OnboardingWizardProps) 
                                     {/* Backdrop */}
                                     <div
                                         className="fixed inset-0 z-40 bg-transparent"
-                                        onClick={() => setIsBodyMapPopoverOpen(false)}
+                                        onClick={() => {
+                                            setIsBodyMapPopoverOpen(false);
+                                            setSelectedBodyMapMuscle(null);
+                                            setSelectedBodyMapGroupId(null);
+                                            setPopoverPosition(null);
+                                        }}
                                     />
                                     <motion.div
                                         initial={{ opacity: 0, scale: 0.8, y: 10 }}
@@ -445,6 +459,9 @@ export function OnboardingWizard({ isOpen, onComplete }: OnboardingWizardProps) 
                                                         toggleMuscle(matchingMuscle);
                                                     }
                                                     setIsBodyMapPopoverOpen(false);
+                                                    setSelectedBodyMapMuscle(null);
+                                                    setSelectedBodyMapGroupId(null);
+                                                    setPopoverPosition(null);
                                                 }}
                                                 className={`w-full py-3 rounded-xl font-bold text-sm transition-all ${
                                                     isCategorySelectedForCurrentDay(selectedBodyMapMuscle)
@@ -468,11 +485,7 @@ export function OnboardingWizard({ isOpen, onComplete }: OnboardingWizardProps) 
                         </AnimatePresence>
 
                         {/* Muscle Grid */}
-                        <div
-                            className="flex-1 min-h-0 overflow-y-auto px-6 pb-4"
-                            // iOS: scroll con inercia + permite pan vertical dentro del contenedor
-                            style={{ WebkitOverflowScrolling: "touch", overscrollBehavior: "contain", touchAction: "pan-y" }}
-                        >
+                        <div className="px-6 pb-4">
                             <p className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-3">
                                 O seleccioná por tarjetas
                             </p>
@@ -484,6 +497,8 @@ export function OnboardingWizard({ isOpen, onComplete }: OnboardingWizardProps) 
                                         <button
                                             key={muscle}
                                             onClick={() => toggleMuscle(muscle)}
+                                            // ayuda a que el gesto vertical se trate como scroll en mobile
+                                            style={{ touchAction: "pan-y" }}
                                             className={`p-4 rounded-2xl text-left font-bold transition-all ${
                                                 isSelected
                                                     ? "bg-ios-blue text-white shadow-lg"
@@ -503,6 +518,7 @@ export function OnboardingWizard({ isOpen, onComplete }: OnboardingWizardProps) 
                                     );
                                 })}
                             </div>
+                        </div>
                         </div>
 
                         {/* Continue Button */}
@@ -533,94 +549,97 @@ export function OnboardingWizard({ isOpen, onComplete }: OnboardingWizardProps) 
                         exit={{ opacity: 0, x: -50 }}
                         className="flex-1 flex flex-col min-h-0 pt-[calc(env(safe-area-inset-top)+1.5rem)]"
                     >
-                        {/* Header */}
-                        <div className="px-6 mb-4">
-                            <p className="text-ios-blue font-bold text-sm mb-1">
-                                Día {currentDay.dayId} de {totalDays}
-                            </p>
-                            <h1 className="text-3xl font-black text-black">
-                                Elegí tus ejercicios
-                            </h1>
-                            <p className="text-gray-500 mt-1">
-                                {currentDay.muscles.join(", ")}
-                            </p>
-                        </div>
-
-                        {/* Error Message */}
-                        {errorMessage && (
-                            <div className="mx-6 mb-4 px-4 py-3 bg-red-50 border border-red-200 rounded-2xl">
-                                <p className="text-sm text-red-700 font-medium">{errorMessage}</p>
-                            </div>
-                        )}
-
-                        {/* Exercise List */}
+                        {/* Scrollable content (iOS-safe) */}
                         <div
-                            className="flex-1 min-h-0 overflow-y-auto px-6 pb-4"
+                            className="flex-1 min-h-0 h-0 overflow-y-auto pb-4"
                             style={{ WebkitOverflowScrolling: "touch", overscrollBehavior: "contain", touchAction: "pan-y" }}
                         >
-                            {currentDay.exercises.length === 0 ? (
-                                <div className="text-center py-12">
-                                    <p className="text-gray-400 font-medium mb-4">
-                                        Aún no agregaste ejercicios
-                                    </p>
-                                    <button
-                                        onClick={() => setIsSearchModalOpen(true)}
-                                        className="inline-flex items-center gap-2 px-6 py-3 bg-ios-blue text-white rounded-2xl font-bold"
-                                    >
-                                        <Plus size={20} />
-                                        Agregar Ejercicio
-                                    </button>
-                                </div>
-                            ) : (
-                                <div className="space-y-2">
-                                    {currentDay.exercises.map((exercise, idx) => (
-                                        <div
-                                            key={`${exercise.name}-${idx}`}
-                                            className="flex items-center gap-3 p-3 bg-white rounded-2xl border border-black/5"
-                                        >
-                                            <div className="w-12 h-12 rounded-xl bg-gray-50 border border-black/5 overflow-hidden flex-shrink-0">
-                                                {exercise.image ? (
-                                                    <Image
-                                                        src={`/images/exercises/${exercise.image}`}
-                                                        alt={exercise.name}
-                                                        width={48}
-                                                        height={48}
-                                                        className="w-full h-full object-contain"
-                                                    />
-                                                ) : (
-                                                    <div className="w-full h-full flex items-center justify-center text-gray-300 text-[10px] font-bold">
-                                                        IMG
-                                                    </div>
-                                                )}
-                                            </div>
-                                            <div className="flex-1 min-w-0">
-                                                <div className="font-bold text-black text-sm truncate">
-                                                    {exercise.name}
-                                                </div>
-                                                <div className="text-xs text-gray-400 font-medium">
-                                                    {exercise.prescribedSeries}
-                                                </div>
-                                            </div>
-                                            <button
-                                                onClick={() => handleRemoveExercise(idx)}
-                                                className="p-2 text-gray-300 hover:text-red-500 hover:bg-red-50 rounded-xl transition-colors"
-                                            >
-                                                <Trash2 size={18} />
-                                            </button>
-                                        </div>
-                                    ))}
+                            {/* Header */}
+                            <div className="px-6 mb-4">
+                                <p className="text-ios-blue font-bold text-sm mb-1">
+                                    Día {currentDay.dayId} de {totalDays}
+                                </p>
+                                <h1 className="text-3xl font-black text-black">
+                                    Elegí tus ejercicios
+                                </h1>
+                                <p className="text-gray-500 mt-1">
+                                    {currentDay.muscles.join(", ")}
+                                </p>
+                            </div>
 
-                                    {currentDay.exercises.length < 7 && (
-                                        <button
-                                            onClick={() => setIsSearchModalOpen(true)}
-                                            className="w-full flex items-center justify-center gap-2 p-4 border-2 border-dashed border-gray-200 rounded-2xl text-gray-400 font-bold hover:border-ios-blue hover:text-ios-blue transition-colors"
-                                        >
-                                            <Plus size={20} />
-                                            Agregar Ejercicio ({currentDay.exercises.length}/7)
-                                        </button>
-                                    )}
+                            {/* Error Message */}
+                            {errorMessage && (
+                                <div className="mx-6 mb-4 px-4 py-3 bg-red-50 border border-red-200 rounded-2xl">
+                                    <p className="text-sm text-red-700 font-medium">{errorMessage}</p>
                                 </div>
                             )}
+
+                            {/* Exercise List */}
+                            <div className="px-6 pb-4">
+                                {currentDay.exercises.length === 0 ? (
+                                    <div className="text-center py-12">
+                                        <p className="text-gray-400 font-medium mb-4">
+                                            Aún no agregaste ejercicios
+                                        </p>
+                                        <button
+                                            onClick={() => setIsSearchModalOpen(true)}
+                                            className="inline-flex items-center gap-2 px-6 py-3 bg-ios-blue text-white rounded-2xl font-bold"
+                                        >
+                                            <Plus size={20} />
+                                            Agregar Ejercicio
+                                        </button>
+                                    </div>
+                                ) : (
+                                    <div className="space-y-2">
+                                        {currentDay.exercises.map((exercise, idx) => (
+                                            <div
+                                                key={`${exercise.name}-${idx}`}
+                                                className="flex items-center gap-3 p-3 bg-white rounded-2xl border border-black/5"
+                                            >
+                                                <div className="w-12 h-12 rounded-xl bg-gray-50 border border-black/5 overflow-hidden flex-shrink-0">
+                                                    {exercise.image ? (
+                                                        <Image
+                                                            src={`/images/exercises/${exercise.image}`}
+                                                            alt={exercise.name}
+                                                            width={48}
+                                                            height={48}
+                                                            className="w-full h-full object-contain"
+                                                        />
+                                                    ) : (
+                                                        <div className="w-full h-full flex items-center justify-center text-gray-300 text-[10px] font-bold">
+                                                            IMG
+                                                        </div>
+                                                    )}
+                                                </div>
+                                                <div className="flex-1 min-w-0">
+                                                    <div className="font-bold text-black text-sm truncate">
+                                                        {exercise.name}
+                                                    </div>
+                                                    <div className="text-xs text-gray-400 font-medium">
+                                                        {exercise.prescribedSeries}
+                                                    </div>
+                                                </div>
+                                                <button
+                                                    onClick={() => handleRemoveExercise(idx)}
+                                                    className="p-2 text-gray-300 hover:text-red-500 hover:bg-red-50 rounded-xl transition-colors"
+                                                >
+                                                    <Trash2 size={18} />
+                                                </button>
+                                            </div>
+                                        ))}
+
+                                        {currentDay.exercises.length < 7 && (
+                                            <button
+                                                onClick={() => setIsSearchModalOpen(true)}
+                                                className="w-full flex items-center justify-center gap-2 p-4 border-2 border-dashed border-gray-200 rounded-2xl text-gray-400 font-bold hover:border-ios-blue hover:text-ios-blue transition-colors"
+                                            >
+                                                <Plus size={20} />
+                                                Agregar Ejercicio ({currentDay.exercises.length}/7)
+                                            </button>
+                                        )}
+                                    </div>
+                                )}
+                            </div>
                         </div>
 
                         {/* Save & Continue Button */}

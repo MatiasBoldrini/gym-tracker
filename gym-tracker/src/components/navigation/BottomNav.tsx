@@ -1,14 +1,14 @@
 "use client";
 
 import { Home, LineChart, Activity, User, PenSquare } from "lucide-react";
-import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { useEffect } from "react";
+import { useEffect, useTransition } from "react";
 import { useAuth } from "@/lib/hooks/useAuth";
 
 export function BottomNav() {
     const pathname = usePathname();
     const router = useRouter();
+    const [, startTransition] = useTransition();
     const { isAuthenticated, isLoading } = useAuth();
 
     const navItems = [
@@ -44,31 +44,16 @@ export function BottomNav() {
                 const Icon = item.icon;
 
                 return (
-                    <Link
+                    <button
                         key={item.name}
-                        href={item.href}
-                        prefetch={true}
-                        onClick={(e) => {
-                            // Fix robusto: en /rutina (DndContext) a veces la navegación client-side queda "pendiente"
-                            // y recién se aplica tras el siguiente click. Forzamos router.push y, si no cambia la URL,
-                            // hacemos fallback a navegación hard para no dejar la app "trabada".
+                        type="button"
+                        onClick={() => {
                             if (pathname === item.href) return;
-
-                            e.preventDefault();
-                            e.stopPropagation();
-
-                            const target = item.href;
-                            const beforePath = window.location.pathname;
-
-                            requestAnimationFrame(() => {
-                                router.push(target);
-
-                                // Fallback: si el router no llega a cambiar la URL rápidamente, forzamos reload.
-                                window.setTimeout(() => {
-                                    if (window.location.pathname === beforePath) {
-                                        window.location.href = target;
-                                    }
-                                }, 200);
+                            // No usamos <Link/> acá porque en /rutina detectamos un bug donde la navegación
+                            // queda "pendiente" hasta el siguiente click. Con router.push dentro de una transición
+                            // evitamos depender del handler interno de Link.
+                            startTransition(() => {
+                                router.push(item.href);
                             });
                         }}
                         onMouseEnter={() => {
@@ -76,19 +61,18 @@ export function BottomNav() {
                                 router.prefetch(item.href);
                             } catch { }
                         }}
-                        onTouchStart={(e) => {
-                            // Detener propagación para evitar que dnd-kit capture el evento
-                            e.stopPropagation();
+                        onTouchStart={() => {
                             try {
                                 router.prefetch(item.href);
                             } catch { }
                         }}
+                        aria-current={isActive ? "page" : undefined}
                         className={`flex flex-col items-center gap-1 transition-colors ${isActive ? "text-ios-blue" : "text-ios-gray"
                             }`}
                     >
                         <Icon size={24} />
                         <span className="text-[10px] font-medium">{item.name}</span>
-                    </Link>
+                    </button>
                 );
             })}
         </nav>
