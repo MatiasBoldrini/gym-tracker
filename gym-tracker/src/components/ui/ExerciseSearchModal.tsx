@@ -204,7 +204,7 @@ export function ExerciseSearchModal({
             />
 
             {/* Modal */}
-            <div className="relative w-full max-w-lg bg-white rounded-t-3xl h-[85vh] min-h-[500px] flex flex-col animate-in slide-in-from-bottom duration-300">
+            <div className="relative w-full max-w-lg bg-white rounded-t-3xl h-[85vh] min-h-[500px] flex flex-col animate-in slide-in-from-bottom duration-300 pb-[calc(var(--bottom-nav-base)+env(safe-area-inset-bottom))]">
                 {/* Header */}
                 <div className="flex items-center justify-between px-6 py-4 border-b border-black/5">
                     <h2 className="text-xl font-black text-black">Agregar Ejercicio</h2>
@@ -482,8 +482,8 @@ export function ExerciseSearchModal({
                     </div>
                 )}
 
-                {/* Safe area padding for iOS */}
-                <div className="h-[env(safe-area-inset-bottom)]" />
+                {/* Safe area padding for iOS + BottomNav */}
+                <div className="h-[calc(var(--bottom-nav-base)+env(safe-area-inset-bottom))]" />
             </div>
         </div>
     );

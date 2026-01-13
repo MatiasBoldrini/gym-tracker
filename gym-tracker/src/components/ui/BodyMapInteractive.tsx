@@ -67,6 +67,13 @@ export function BodyMapInteractive({
                 {d ? (
                     <>
                         <path d={d} />
+                        {isHighlighted && (
+                            <path
+                                d={d}
+                                fill="rgba(0, 122, 255, 0.16)"
+                                className="pointer-events-none"
+                            />
+                        )}
                         {isActive && (
                             <path
                                 d={d}
@@ -79,7 +86,7 @@ export function BodyMapInteractive({
                                 d={d}
                                 fill="none"
                                 stroke="#007AFF"
-                                strokeWidth="3"
+                                strokeWidth="2"
                                 strokeLinejoin="round"
                                 className="pointer-events-none"
                             />
@@ -98,6 +105,11 @@ export function BodyMapInteractive({
                 ) : (
                     <>
                         {children}
+                        {isHighlighted && (
+                            <g fill="rgba(0, 122, 255, 0.16)" className="pointer-events-none">
+                                {children}
+                            </g>
+                        )}
                         {isActive && (
                             <g fill="rgba(0, 122, 255, 0.25)" className="pointer-events-none">
                                 {children}

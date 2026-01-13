@@ -15,6 +15,7 @@ import {
 import { ExerciseSearchModal } from "@/components/ui/ExerciseSearchModal";
 import { BodyMapInteractive } from "@/components/ui/BodyMapInteractive";
 import { MUSCLE_MAPPING, parseSeriesCount, getCategoryFromSvgId } from "@/lib/fatiga";
+import { useAuth } from "@/lib/hooks/useAuth";
 
 type Step = "days" | "muscles" | "exercises" | "weeks" | "complete";
 
@@ -31,6 +32,7 @@ interface DayConfig {
 }
 
 export function OnboardingWizard({ isOpen, onComplete, onSkip }: OnboardingWizardProps) {
+    const auth = useAuth();
     // Wizard state
     const [step, setStep] = useState<Step>("days");
     const [totalDays, setTotalDays] = useState<number>(0);
@@ -47,6 +49,7 @@ export function OnboardingWizard({ isOpen, onComplete, onSkip }: OnboardingWizar
     const [isSearchModalOpen, setIsSearchModalOpen] = useState(false);
     const [isSaving, setIsSaving] = useState(false);
     const [errorMessage, setErrorMessage] = useState<string | null>(null);
+    const [isSkipModalOpen, setIsSkipModalOpen] = useState(false);
 
     // BodyMap popover state
     const [selectedBodyMapMuscle, setSelectedBodyMapMuscle] = useState<string | null>(null);
@@ -311,9 +314,7 @@ export function OnboardingWizard({ isOpen, onComplete, onSkip }: OnboardingWizar
     }
 
     const handleSkip = () => {
-        if (onSkip) {
-            onSkip();
-        }
+        setIsSkipModalOpen(true);
     };
 
     return (
@@ -556,7 +557,7 @@ export function OnboardingWizard({ isOpen, onComplete, onSkip }: OnboardingWizar
                         </div>
 
                         {/* Continue Button */}
-                        <div className="px-6 py-4 bg-white border-t border-gray-200">
+                        <div className="px-6 pt-4 pb-[calc(var(--bottom-nav-base)+env(safe-area-inset-bottom))] bg-white border-t border-gray-200">
                             <button
                                 onClick={() => {
                                     if (currentDay.muscles.length > 0) {
@@ -569,7 +570,7 @@ export function OnboardingWizard({ isOpen, onComplete, onSkip }: OnboardingWizar
                                 Elegir ejercicios
                                 <ChevronRight size={20} />
                             </button>
-                            <div className="h-[env(safe-area-inset-bottom)]" />
+                            <div className="h-0" />
                         </div>
                     </motion.div>
                 )}
@@ -677,7 +678,7 @@ export function OnboardingWizard({ isOpen, onComplete, onSkip }: OnboardingWizar
                         </div>
 
                         {/* Save & Continue Button */}
-                        <div className="px-6 py-4 bg-white border-t border-gray-200">
+                        <div className="px-6 pt-4 pb-[calc(var(--bottom-nav-base)+env(safe-area-inset-bottom))] bg-white border-t border-gray-200">
                             <button
                                 onClick={saveCurrentDayAndContinue}
                                 disabled={currentDay.exercises.length === 0 || isSaving}
@@ -694,7 +695,7 @@ export function OnboardingWizard({ isOpen, onComplete, onSkip }: OnboardingWizar
                                     </>
                                 )}
                             </button>
-                            <div className="h-[env(safe-area-inset-bottom)]" />
+                            <div className="h-0" />
                         </div>
 
                         {/* Exercise Search Modal */}
@@ -807,6 +808,68 @@ export function OnboardingWizard({ isOpen, onComplete, onSkip }: OnboardingWizar
                             Tu rutina de {totalDays} días por {totalWeeks} semanas está lista
                         </p>
                     </motion.div>
+                )}
+            </AnimatePresence>
+
+            {/* Skip confirmation modal */}
+            <AnimatePresence>
+                {isSkipModalOpen && (
+                    <>
+                        <motion.div
+                            key="skip-backdrop"
+                            initial={{ opacity: 0 }}
+                            animate={{ opacity: 1 }}
+                            exit={{ opacity: 0 }}
+                            className="fixed inset-0 z-[300] bg-black/30 backdrop-blur-sm"
+                            onClick={() => setIsSkipModalOpen(false)}
+                        />
+                        <motion.div
+                            key="skip-modal"
+                            initial={{ opacity: 0, scale: 0.95, y: 20 }}
+                            animate={{ opacity: 1, scale: 1, y: 0 }}
+                            exit={{ opacity: 0, scale: 0.95, y: 20 }}
+                            className="fixed inset-x-4 bottom-[calc(var(--bottom-nav-base)+env(safe-area-inset-bottom)+1rem)] z-[310] bg-white rounded-3xl shadow-2xl border border-black/5 p-5 space-y-4"
+                        >
+                            <div className="flex items-start gap-3">
+                                <div className="w-10 h-10 rounded-2xl bg-ios-blue/10 text-ios-blue flex items-center justify-center font-black text-sm">
+                                    i
+                                </div>
+                                <div className="flex-1 space-y-1">
+                                    <h3 className="text-lg font-black text-black">Antes de salir</h3>
+                                    <p className="text-sm text-gray-600">
+                                        Podés seguir con el setup en la página de Perfil, o podés modificar tu rutina desde Google Sheets.
+                                    </p>
+                                    {auth.spreadsheetId && (
+                                        <a
+                                            href={`https://docs.google.com/spreadsheets/d/${auth.spreadsheetId}`}
+                                            target="_blank"
+                                            rel="noreferrer"
+                                            className="inline-flex items-center gap-2 text-sm font-bold text-ios-blue underline underline-offset-4"
+                                        >
+                                            Abrir mi rutina en Google Sheets
+                                        </a>
+                                    )}
+                                </div>
+                            </div>
+                            <div className="flex flex-col gap-2">
+                                <button
+                                    onClick={() => setIsSkipModalOpen(false)}
+                                    className="w-full py-4 rounded-2xl font-bold text-sm bg-black text-white active:translate-y-px transition"
+                                >
+                                    Seguir planificando
+                                </button>
+                                <button
+                                    onClick={() => {
+                                        if (onSkip) onSkip();
+                                        setIsSkipModalOpen(false);
+                                    }}
+                                    className="w-full py-4 rounded-2xl font-bold text-sm bg-gray-100 text-gray-800 border border-black/5 active:translate-y-px transition"
+                                >
+                                    Cerrar y salir
+                                </button>
+                            </div>
+                        </motion.div>
+                    </>
                 )}
             </AnimatePresence>
         </div>
