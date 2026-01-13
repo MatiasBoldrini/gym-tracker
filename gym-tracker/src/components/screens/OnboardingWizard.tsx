@@ -22,6 +22,55 @@ import { useAuth } from "@/lib/hooks/useAuth";
 
 type Step = "days" | "muscles" | "exercises" | "weeks" | "complete";
 
+type MuscleGroup = "upper" | "lower" | "other";
+
+type MuscleOption = {
+    key: string; // clave canónica (normalizada, sin tildes/case extra)
+    label: string; // display capitalizado
+    group: MuscleGroup;
+};
+
+const MUSCLE_GROUP_ORDER: Record<MuscleGroup, number> = {
+    upper: 0,
+    lower: 1,
+    other: 2,
+};
+
+const UPPER_MUSCLES = new Set<string>([
+    "pecho",
+    "espalda",
+    "hombro",
+    "biceps",
+    "triceps",
+    "antebrazos",
+    "cuello",
+]);
+
+const LOWER_MUSCLES = new Set<string>([
+    "cuadriceps",
+    "isquiotibiales",
+    "gluteos",
+    "gemelos",
+    "aductores",
+]);
+
+const OTHER_MUSCLES = new Set<string>([
+    "abdominales",
+]);
+
+const getMuscleGroup = (normalizedMuscle: string): MuscleGroup => {
+    if (UPPER_MUSCLES.has(normalizedMuscle)) return "upper";
+    if (LOWER_MUSCLES.has(normalizedMuscle)) return "lower";
+    if (OTHER_MUSCLES.has(normalizedMuscle)) return "other";
+    return "other";
+};
+
+const capitalizeFirst = (input: string): string => {
+    const value = String(input ?? "").trim();
+    if (!value) return "";
+    return value.charAt(0).toUpperCase() + value.slice(1);
+};
+
 interface OnboardingWizardProps {
     isOpen: boolean;
     onComplete: () => void;
@@ -74,25 +123,46 @@ export function OnboardingWizard({
     const [isBodyMapPopoverOpen, setIsBodyMapPopoverOpen] = useState(false);
     const [popoverPosition, setPopoverPosition] = useState<{ x: number; y: number } | null>(null);
 
-    // Get unique muscles from exercises
-    const availableMuscles = useMemo(() => {
-        const set = new Set<string>();
+    // Get unique muscles from exercises (dedupe por normalización + grupo)
+    const availableMuscles = useMemo<MuscleOption[]>(() => {
+        const map = new Map<string, MuscleOption>();
+
+        const addMuscle = (rawMuscle: string | undefined | null) => {
+            if (!rawMuscle) return;
+            const normalized = normalizeMuscleKey(rawMuscle);
+            if (!normalized) return;
+            if (map.has(normalized)) return;
+
+            const labelSource = rawMuscle.trim() || normalized;
+            map.set(normalized, {
+                key: normalized,
+                label: capitalizeFirst(labelSource),
+                group: getMuscleGroup(normalized),
+            });
+        };
 
         // Preferir datos reales de Sheets cuando existen.
-        availableExercises.forEach((e) => {
-            if (e.muscle) set.add(e.muscle);
+        availableExercises.forEach((e) => addMuscle(e.muscle));
+
+        // Mantener lo que ya está seleccionado aunque no esté en la data (progreso previo).
+        daysConfig.forEach((day) => {
+            day.muscles.forEach((m) => addMuscle(m));
         });
 
         // Fallback: mostrar todas las categorías conocidas aunque la data aún no cargue.
-        if (set.size === 0) {
-            Object.keys(MUSCLE_MAPPING).forEach((muscle) => set.add(muscle));
+        if (map.size === 0) {
+            Object.keys(MUSCLE_MAPPING).forEach(addMuscle);
+        } else {
+            Object.keys(MUSCLE_MAPPING).forEach(addMuscle);
         }
 
-        // Orden alfabético robusto (ignora tildes/case).
-        return Array.from(set).sort((a, b) =>
-            a.localeCompare(b, "es", { sensitivity: "base" })
-        );
-    }, [availableExercises]);
+        const values = Array.from(map.values());
+        return values.sort((a, b) => {
+            const groupOrder = MUSCLE_GROUP_ORDER[a.group] - MUSCLE_GROUP_ORDER[b.group];
+            if (groupOrder !== 0) return groupOrder;
+            return a.label.localeCompare(b.label, "es", { sensitivity: "base" });
+        });
+    }, [availableExercises, daysConfig]);
 
     // Current day being configured
     const currentDay = daysConfig[currentDayIndex];
@@ -104,7 +174,7 @@ export function OnboardingWizard({
         // Sum series from all days
         daysConfig.forEach((day) => {
             day.exercises.forEach((exercise) => {
-                const muscle = exercise.muscle?.toLowerCase().trim();
+                const muscle = normalizeMuscleKey(exercise.muscle);
                 if (!muscle) return;
                 const seriesCount = parseSeriesCount(exercise.prescribedSeries);
                 seriesByCategory[muscle] = (seriesByCategory[muscle] || 0) + seriesCount;
@@ -313,17 +383,24 @@ export function OnboardingWizard({
         };
     }, [auth.hasSpreadsheet, isOpen]);
 
-    // Toggle muscle selection for current day
+    // Toggle muscle selection for current day (usa clave normalizada)
     const toggleMuscle = (muscle: string) => {
+        const key = normalizeMuscleKey(muscle);
+        if (!key) return;
+
         setDaysConfig((prev) => {
             const updated = [...prev];
             const oldDay = updated[currentDayIndex];
             // Create a new object reference so useMemo dependencies detect the change
+            const normalizedCurrent = new Set(oldDay.muscles.map(normalizeMuscleKey));
+            if (normalizedCurrent.has(key)) {
+                normalizedCurrent.delete(key);
+            } else {
+                normalizedCurrent.add(key);
+            }
             const newDay = {
                 ...oldDay,
-                muscles: oldDay.muscles.includes(muscle)
-                    ? oldDay.muscles.filter((m) => m !== muscle)
-                    : [...oldDay.muscles, muscle],
+                muscles: Array.from(normalizedCurrent),
             };
             updated[currentDayIndex] = newDay;
             return updated;
@@ -346,17 +423,17 @@ export function OnboardingWizard({
         setIsBodyMapPopoverOpen(true);
     };
 
-    // Get series count for a category
+    // Get series count for a category (usando clave normalizada)
     const getSeriesForCategory = (category: string): number => {
-        return weeklySeriesByCategory[category.toLowerCase().trim()] || 0;
+        const key = normalizeMuscleKey(category);
+        return weeklySeriesByCategory[key] || 0;
     };
 
     // Check if a category is selected for the current day
     const isCategorySelectedForCurrentDay = (category: string): boolean => {
         if (!currentDay) return false;
-        return currentDay.muscles.some(
-            (m) => m.toLowerCase().trim() === category.toLowerCase().trim()
-        );
+        const key = normalizeMuscleKey(category);
+        return currentDay.muscles.some((m) => normalizeMuscleKey(m) === key);
     };
 
     // Add exercise to current day
@@ -668,14 +745,14 @@ export function OnboardingWizard({
                                             <button
                                                 onClick={() => {
                                                     // Buscar match robusto (case/tildes) y fallback a la categoría tocada.
-                                                    const matchingMuscle =
+                                                    const matchingMuscleKey =
                                                         availableMuscles.find(
                                                             (m) =>
-                                                                normalizeMuscleKey(m) ===
+                                                                normalizeMuscleKey(m.key) ===
                                                                 normalizeMuscleKey(selectedBodyMapMuscle)
-                                                        ) || selectedBodyMapMuscle;
+                                                        )?.key || normalizeMuscleKey(selectedBodyMapMuscle);
 
-                                                    toggleMuscle(matchingMuscle);
+                                                    toggleMuscle(matchingMuscleKey);
                                                     setIsBodyMapPopoverOpen(false);
                                                     setSelectedBodyMapMuscle(null);
                                                     setSelectedBodyMapGroupId(null);
@@ -708,33 +785,56 @@ export function OnboardingWizard({
                                 O seleccioná por tarjetas
                             </p>
                             <div className="grid grid-cols-2 gap-3">
-                                {availableMuscles.map((muscle) => {
-                                    const isSelected = currentDay.muscles.includes(muscle);
-                                    const seriesCount = getSeriesForCategory(muscle);
+                                {(() => {
+                                    const renderGroup = (group: MuscleGroup, title: string) => {
+                                        const muscles = availableMuscles.filter((m) => m.group === group);
+                                        if (muscles.length === 0) return null;
+
+                                        return (
+                                            <>
+                                                <div className="col-span-2 text-xs font-black text-gray-500 uppercase tracking-[0.14em]">
+                                                    {title}
+                                                </div>
+                                                {muscles.map((muscle) => {
+                                                    const isSelected = currentDay.muscles.some(
+                                                        (m) => normalizeMuscleKey(m) === muscle.key
+                                                    );
+                                                    const seriesCount = getSeriesForCategory(muscle.key);
+                                                    return (
+                                                        <button
+                                                            key={muscle.key}
+                                                            onClick={() => toggleMuscle(muscle.key)}
+                                                            // ayuda a que el gesto vertical se trate como scroll en mobile
+                                                            style={{ touchAction: "pan-y" }}
+                                                            className={`p-4 rounded-2xl text-left font-bold transition-all ${
+                                                                isSelected
+                                                                    ? "bg-ios-blue text-white shadow-lg"
+                                                                    : "bg-white text-gray-700 border border-gray-200"
+                                                            }`}
+                                                        >
+                                                            <span className="text-lg">{muscle.label}</span>
+                                                            {seriesCount > 0 && (
+                                                                <span
+                                                                    className={`ml-2 text-xs ${isSelected ? "text-white/70" : "text-gray-400"}`}
+                                                                >
+                                                                    ({seriesCount}s)
+                                                                </span>
+                                                            )}
+                                                        </button>
+                                                    );
+                                                })}
+                                            </>
+                                        );
+                                    };
+
                                     return (
-                                        <button
-                                            key={muscle}
-                                            onClick={() => toggleMuscle(muscle)}
-                                            // ayuda a que el gesto vertical se trate como scroll en mobile
-                                            style={{ touchAction: "pan-y" }}
-                                            className={`p-4 rounded-2xl text-left font-bold transition-all ${
-                                                isSelected
-                                                    ? "bg-ios-blue text-white shadow-lg"
-                                                    : "bg-white text-gray-700 border border-gray-200"
-                                            }`}
-                                        >
-                                            <span className="text-lg">{muscle}</span>
-                                            {seriesCount > 0 && (
-                                                <span className={`ml-2 text-xs ${isSelected ? "text-white/70" : "text-gray-400"}`}>
-                                                    ({seriesCount}s)
-                                                </span>
-                                            )}
-                                            {isSelected && (
-                                                <Check size={18} className="inline ml-2" />
-                                            )}
-                                        </button>
+                                        <>
+                                            {renderGroup("upper", "Tren Superior")}
+                                            {renderGroup("lower", "Tren Inferior")}
+                                            {renderGroup("other", "Otros")}
+                                        </>
                                     );
-                                })}
+                                })()}
                             </div>
                         </div>
                         </div>

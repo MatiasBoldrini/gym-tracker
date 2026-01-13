@@ -5,6 +5,7 @@ import { X, Search, Plus, Check, ChevronDown, Filter } from "lucide-react";
 import Image from "next/image";
 import { ExerciseItem } from "@/lib/sheets-client";
 import { cacheUrls } from "@/lib/pwa";
+import { normalizeMuscleKey } from "@/lib/normalize";
 
 interface ExerciseSearchModalProps {
     isOpen: boolean;
@@ -33,7 +34,11 @@ export function ExerciseSearchModal({
     // Single muscle mode (legacy)
     const [selectedMuscle, setSelectedMuscle] = useState<string>("");
     // Multi muscle mode (for onboarding)
-    const [selectedMuscles, setSelectedMuscles] = useState<Set<string>>(new Set(defaultSelectedMuscles));
+    const normalizedDefaultMuscles = useMemo(
+        () => defaultSelectedMuscles.map((m) => normalizeMuscleKey(m)).filter((m): m is string => Boolean(m)),
+        [defaultSelectedMuscles]
+    );
+    const [selectedMuscles, setSelectedMuscles] = useState<Set<string>>(new Set(normalizedDefaultMuscles));
     // Focused muscle (when clicking on a selected muscle chip)
     const [focusedMuscle, setFocusedMuscle] = useState<string | null>(null);
     const [selectedExercise, setSelectedExercise] = useState<ExerciseItem | null>(null);
@@ -46,28 +51,52 @@ export function ExerciseSearchModal({
 
     // Initialize selectedMuscles from defaultSelectedMuscles when modal opens
     useEffect(() => {
-        if (isOpen && defaultSelectedMuscles.length > 0) {
-            setSelectedMuscles(new Set(defaultSelectedMuscles));
+        if (isOpen && normalizedDefaultMuscles.length > 0) {
+            setSelectedMuscles(new Set(normalizedDefaultMuscles));
         }
-    }, [isOpen, defaultSelectedMuscles]);
+    }, [isOpen, normalizedDefaultMuscles]);
 
-    // Get unique muscles and categories for filters
-    const muscles = useMemo(() => {
-        const set = new Set<string>();
-        exercises.forEach((e) => {
-            if (e.muscle) set.add(e.muscle);
-        });
-        return Array.from(set).sort();
-    }, [exercises]);
+    const muscleOptions = useMemo(() => {
+        const map = new Map<string, { key: string; label: string }>();
+
+        const capitalizeFirst = (input: string) => {
+            const v = String(input ?? "").trim();
+            if (!v) return "";
+            return v.charAt(0).toUpperCase() + v.slice(1);
+        };
+
+        const addMuscle = (raw: string | undefined | null) => {
+            if (!raw) return;
+            const key = normalizeMuscleKey(raw);
+            if (!key || map.has(key)) return;
+            const labelSource = raw.trim() || key;
+            map.set(key, { key, label: capitalizeFirst(labelSource) });
+        };
+
+        exercises.forEach((e) => addMuscle(e.muscle));
+        normalizedDefaultMuscles.forEach(addMuscle);
+
+        return Array.from(map.values()).sort((a, b) =>
+            a.label.localeCompare(b.label, "es", { sensitivity: "base" })
+        );
+    }, [exercises, normalizedDefaultMuscles]);
+
+    const getMuscleLabel = (key: string) => {
+        const normalized = normalizeMuscleKey(key);
+        return muscleOptions.find((m) => m.key === normalized)?.label || normalized || "";
+    };
 
     // Toggle a muscle in multi-muscle mode (from picker)
     const toggleMuscle = (muscle: string) => {
+        const key = normalizeMuscleKey(muscle);
+        if (!key) return;
+
         setSelectedMuscles((prev) => {
             const next = new Set(prev);
-            if (next.has(muscle)) {
-                next.delete(muscle);
+            if (next.has(key)) {
+                next.delete(key);
             } else {
-                next.add(muscle);
+                next.add(key);
             }
             return next;
         });
@@ -75,18 +104,21 @@ export function ExerciseSearchModal({
 
     // Handle clicking on a selected muscle chip (focus/unfocus)
     const handleMuscleChipClick = (muscle: string) => {
-        if (focusedMuscle === muscle) {
+        const key = normalizeMuscleKey(muscle);
+        if (focusedMuscle === key) {
             // Unfocus - show all selected muscles again
             setFocusedMuscle(null);
         } else {
             // Focus on this muscle
-            setFocusedMuscle(muscle);
+            setFocusedMuscle(key);
         }
     };
 
     // Filter exercises based on search and filters
     const filteredExercises = useMemo(() => {
         return exercises.filter((exercise) => {
+            const exerciseKey = normalizeMuscleKey(exercise.muscle);
+
             // Search filter
             if (searchQuery) {
                 const query = searchQuery.toLowerCase();
@@ -99,18 +131,19 @@ export function ExerciseSearchModal({
             if (multiMuscleMode) {
                 // If a muscle is focused, only show exercises from that muscle
                 if (focusedMuscle) {
-                    if (exercise.muscle !== focusedMuscle) {
+                    if (exerciseKey !== focusedMuscle) {
                         return false;
                     }
                 } else {
                     // OR filter: show if muscle is in selected set, or show all if none selected
-                    if (selectedMuscles.size > 0 && !selectedMuscles.has(exercise.muscle)) {
+                    if (selectedMuscles.size > 0 && !selectedMuscles.has(exerciseKey)) {
                         return false;
                     }
                 }
             } else {
                 // Single select mode (legacy)
-                if (selectedMuscle && exercise.muscle !== selectedMuscle) {
+                const selectedMuscleKey = normalizeMuscleKey(selectedMuscle);
+                if (selectedMuscleKey && exerciseKey !== selectedMuscleKey) {
                     return false;
                 }
             }
@@ -154,7 +187,7 @@ export function ExerciseSearchModal({
         if (!isOpen) {
             setSearchQuery("");
             setSelectedMuscle("");
-            setSelectedMuscles(new Set(defaultSelectedMuscles));
+            setSelectedMuscles(new Set(normalizedDefaultMuscles));
             setFocusedMuscle(null);
             setSelectedExercise(null);
             setSelectedSeries("");
@@ -162,7 +195,7 @@ export function ExerciseSearchModal({
             setShowSeriesPicker(false);
             setShowMusclePicker(false);
         }
-    }, [isOpen, defaultSelectedMuscles]);
+    }, [isOpen, normalizedDefaultMuscles]);
 
     const handleSelectExercise = (exercise: ExerciseItem) => {
         setSelectedExercise(exercise);
@@ -259,19 +292,19 @@ export function ExerciseSearchModal({
                                 {showMusclePicker && (
                                     <div className="absolute top-full left-0 right-0 mt-2 bg-white rounded-xl shadow-lg border border-black/10 max-h-64 overflow-y-auto z-20">
                                         <div className="p-2 space-y-1">
-                                            {muscles.map((muscle) => {
-                                                const isSelected = selectedMuscles.has(muscle);
+                                            {muscleOptions.map((muscle) => {
+                                                const isSelected = selectedMuscles.has(muscle.key);
                                                 return (
                                                     <button
-                                                        key={muscle}
-                                                        onClick={() => toggleMuscle(muscle)}
+                                                        key={muscle.key}
+                                                        onClick={() => toggleMuscle(muscle.key)}
                                                         className={`w-full flex items-center justify-between px-4 py-2.5 rounded-lg text-left text-sm font-bold transition-colors ${
                                                             isSelected
                                                                 ? "bg-ios-blue/10 text-ios-blue"
                                                                 : "text-gray-700 hover:bg-gray-50"
                                                         }`}
                                                     >
-                                                        <span>{muscle}</span>
+                                                        <span>{muscle.label}</span>
                                                         {isSelected && <Check size={16} />}
                                                     </button>
                                                 );
@@ -296,7 +329,7 @@ export function ExerciseSearchModal({
                                                         : "bg-ios-blue/10 text-ios-blue"
                                                 }`}
                                             >
-                                                {muscle}
+                                                {getMuscleLabel(muscle)}
                                             </button>
                                         );
                                     })}
@@ -317,9 +350,9 @@ export function ExerciseSearchModal({
                                     className="h-10 pl-9 pr-10 bg-gray-100 rounded-xl text-sm font-bold text-black focus:outline-none focus:ring-2 focus:ring-ios-blue/30 appearance-none border border-black/5 shadow-[0_1px_0_rgba(0,0,0,0.03)]"
                                 >
                                     <option value="">Músculo</option>
-                                    {muscles.map((muscle) => (
-                                        <option key={muscle} value={muscle}>
-                                            {muscle}
+                                    {muscleOptions.map((muscle) => (
+                                        <option key={muscle.key} value={muscle.key}>
+                                            {muscle.label}
                                         </option>
                                     ))}
                                 </select>
