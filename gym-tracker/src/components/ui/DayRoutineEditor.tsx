@@ -16,6 +16,7 @@ import {
     DragStartEvent,
     DragOverlay,
     DragCancelEvent,
+    PointerSensor,
 } from "@dnd-kit/core";
 import {
     arrayMove,
@@ -190,20 +191,13 @@ export function DayRoutineEditor({
     }, [exercises.length]);
 
     // Sensores:
-    // - Pointer: unificado para mouse y touch, más confiable con Next.js
-    // - Touch: long-press para activar reordenamiento (iOS-like) y dejar scroll libre si el gesto es scroll.
-    // - Mouse: drag normal en desktop.
-    // IMPORTANTE: Usamos activationConstraint más estrictos para evitar conflictos con Next.js Link
+    // Usamos PointerSensor unificado que maneja mouse y touch de manera más limpia
+    // y NO interfiere con otros eventos cuando no está en drag mode.
     const sensors = useSensors(
-        useSensor(TouchSensor, {
+        useSensor(PointerSensor, {
             activationConstraint: {
-                delay: 300, // Increased delay to avoid conflicts
+                delay: 250,
                 tolerance: 5,
-            },
-        }),
-        useSensor(MouseSensor, {
-            activationConstraint: {
-                distance: 10, // Increased distance to avoid accidental activation
             },
         }),
         useSensor(KeyboardSensor, {
@@ -297,6 +291,7 @@ export function DayRoutineEditor({
                         onDragStart={handleDragStart}
                         onDragEnd={handleDragEnd}
                         onDragCancel={handleDragCancel}
+                        autoScroll={false}
                     >
                         <SortableContext
                             items={exerciseIds}

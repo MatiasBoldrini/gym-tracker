@@ -2,7 +2,7 @@
 
 import { Home, LineChart, Activity, User, PenSquare } from "lucide-react";
 import { usePathname, useRouter } from "next/navigation";
-import { useEffect, useState, useRef } from "react";
+import { useEffect, useState, useRef, startTransition } from "react";
 import { useAuth } from "@/lib/hooks/useAuth";
 
 export function BottomNav() {
@@ -81,12 +81,12 @@ export function BottomNav() {
                             e.stopImmediatePropagation();
                             
                             addDebugLog(`🟡 Calling router.push: ${item.href}`);
-                            // Usar queueMicrotask para asegurar que la navegación ocurre después del evento
-                            queueMicrotask(() => {
+                            // Usar startTransition para que React priorice esta navegación
+                            startTransition(() => {
                                 router.push(item.href);
-                                addDebugLog(`🟡 router.push executed`);
+                                addDebugLog(`🟡 router.push executed in transition`);
                             });
-                            addDebugLog(`🟡 router.push queued`);
+                            addDebugLog(`🟡 router.push started`);
                         }}
                         onMouseEnter={() => {
                             try {
