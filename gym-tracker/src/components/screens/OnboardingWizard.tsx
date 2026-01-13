@@ -5,8 +5,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { ChevronRight, Check, Loader2, X, Plus, Trash2 } from "lucide-react";
 import Image from "next/image";
 import {
-    fetchExercisesList,
-    fetchSeriesOptions,
+    fetchOnboardingData,
     saveRoutine,
     createMesociclo,
     ExerciseItem,
@@ -23,6 +22,12 @@ interface OnboardingWizardProps {
     isOpen: boolean;
     onComplete: () => void;
     onSkip?: () => void;
+    /** Whether spreadsheet setup is running in background */
+    isSettingUp?: boolean;
+    /** Whether spreadsheet setup completed successfully */
+    setupComplete?: boolean;
+    /** Error from spreadsheet setup (if any) */
+    setupError?: string | null;
 }
 
 interface DayConfig {
@@ -31,7 +36,14 @@ interface DayConfig {
     exercises: (RoutineExercise & { image?: string; muscle?: string })[];
 }
 
-export function OnboardingWizard({ isOpen, onComplete, onSkip }: OnboardingWizardProps) {
+export function OnboardingWizard({ 
+    isOpen, 
+    onComplete, 
+    onSkip,
+    isSettingUp = false,
+    setupComplete = false,
+    setupError = null,
+}: OnboardingWizardProps) {
     const auth = useAuth();
     // Wizard state
     const [step, setStep] = useState<Step>("days");
@@ -119,24 +131,29 @@ export function OnboardingWizard({ isOpen, onComplete, onSkip }: OnboardingWizar
         }
     }, [isOpen]);
 
-    // Load initial data
+    // Load initial data - deferred until setup is complete
+    // This allows user to start onboarding (select days) while spreadsheet is being created
     useEffect(() => {
         if (!isOpen) return;
+        // Wait for setup to complete before loading Sheets data
+        if (!setupComplete && !auth.hasSpreadsheet) {
+            // Mark as loading but don't fetch yet
+            setIsLoadingData(true);
+            return;
+        }
 
         let cancelled = false;
 
         const loadData = async () => {
             setIsLoadingData(true);
             try {
-                const [exercisesData, seriesData] = await Promise.all([
-                    fetchExercisesList(),
-                    fetchSeriesOptions(),
-                ]);
+                // Use batched endpoint (single request instead of 2)
+                const { exercises, series } = await fetchOnboardingData();
 
                 if (cancelled) return;
 
-                setAvailableExercises(exercisesData);
-                setSeriesOptions(seriesData);
+                setAvailableExercises(exercises);
+                setSeriesOptions(series);
             } catch (error: any) {
                 console.error("Error loading data:", error);
                 setErrorMessage(error.message || "Error al cargar datos");
@@ -149,7 +166,7 @@ export function OnboardingWizard({ isOpen, onComplete, onSkip }: OnboardingWizar
         return () => {
             cancelled = true;
         };
-    }, [isOpen]);
+    }, [isOpen, setupComplete, auth.hasSpreadsheet]);
 
     // Initialize days config when totalDays is set
     useEffect(() => {
@@ -303,12 +320,23 @@ export function OnboardingWizard({ isOpen, onComplete, onSkip }: OnboardingWizar
 
     if (!isOpen) return null;
 
-    // Loading state
-    if (isLoadingData) {
+    // Check if we need Sheets data for the current step
+    // Steps "days" and "muscles" don't need Sheets data - user can proceed while setup runs
+    const stepNeedsSheetsData = step === "exercises" || step === "weeks";
+    const isWaitingForSetup = isSettingUp || (!setupComplete && !auth.hasSpreadsheet);
+    
+    // Show loading only if we're on a step that needs data AND we're still loading
+    if (stepNeedsSheetsData && (isLoadingData || isWaitingForSetup)) {
+        const message = isWaitingForSetup 
+            ? "Creando tu planilla de entrenamiento..." 
+            : "Cargando ejercicios...";
         return (
             <div className="fixed inset-0 z-[200] bg-[#F2F2F7] flex flex-col items-center justify-center">
                 <Loader2 className="w-10 h-10 animate-spin text-ios-blue" />
-                <p className="mt-4 text-gray-500 font-medium">Preparando tu entrenamiento...</p>
+                <p className="mt-4 text-gray-500 font-medium">{message}</p>
+                {setupError && (
+                    <p className="mt-2 text-red-500 text-sm font-medium text-center px-8">{setupError}</p>
+                )}
             </div>
         );
     }

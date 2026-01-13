@@ -238,6 +238,29 @@ export async function fetchSeriesOptions(): Promise<string[]> {
 }
 
 /**
+ * Fetch exercises and series in a single batched request.
+ * More efficient for onboarding (1 API call instead of 2).
+ */
+export async function fetchOnboardingData(): Promise<{
+    exercises: ExerciseItem[];
+    series: string[];
+}> {
+    const response = await fetch("/api/sheets/onboarding-data", { method: "GET" });
+    const data = await response.json().catch(() => ({} as any));
+    if (!response.ok) {
+        throw createApiError({
+            message: data?.error || `Error ${response.status}`,
+            status: response.status,
+            code: data?.code,
+        });
+    }
+    return {
+        exercises: Array.isArray(data.exercises) ? data.exercises : [],
+        series: Array.isArray(data.series) ? data.series : [],
+    };
+}
+
+/**
  * Fetch current routine exercises for a specific day.
  */
 export async function fetchDayRoutine(dayId: number): Promise<RoutineExercise[]> {
@@ -397,5 +420,135 @@ export async function resetMesociclo(): Promise<SaveResult> {
             ok: false,
             error: error.message || "Network error",
         };
+    }
+}
+
+// ============================================================================
+// Setup API functions
+// ============================================================================
+
+export interface SetupResult {
+    ok: boolean;
+    spreadsheetId?: string;
+    alreadyExists?: boolean;
+    error?: string;
+}
+
+/**
+ * Setup user's spreadsheet (create copy from template if needed).
+ * Called after auth when setup_pending=true.
+ */
+export async function setupSpreadsheet(): Promise<SetupResult> {
+    try {
+        const response = await fetch("/api/sheets/setup", {
+            method: "POST",
+        });
+
+        const data = await response.json();
+
+        if (!response.ok) {
+            return {
+                ok: false,
+                error: data.error || `Error ${response.status}`,
+            };
+        }
+
+        return {
+            ok: true,
+            spreadsheetId: data.spreadsheetId,
+            alreadyExists: data.alreadyExists,
+        };
+    } catch (error: any) {
+        console.error("Error setting up spreadsheet:", error);
+        return {
+            ok: false,
+            error: error.message || "Network error",
+        };
+    }
+}
+
+/**
+ * Check if setup is complete (has spreadsheet).
+ */
+export async function checkSetupStatus(): Promise<{
+    setupComplete: boolean;
+    authenticated: boolean;
+    spreadsheetId: string | null;
+}> {
+    try {
+        const response = await fetch("/api/sheets/setup", { method: "GET" });
+        const data = await response.json();
+        return {
+            setupComplete: data.setupComplete ?? false,
+            authenticated: data.authenticated ?? false,
+            spreadsheetId: data.spreadsheetId ?? null,
+        };
+    } catch {
+        return { setupComplete: false, authenticated: false, spreadsheetId: null };
+    }
+}
+
+// ============================================================================
+// Onboarding Preferences API functions
+// ============================================================================
+
+/**
+ * Mark onboarding as completed (persisted in Supabase)
+ */
+export async function completeOnboarding(): Promise<{ ok: boolean; error?: string }> {
+    try {
+        const response = await fetch("/api/user/preferences/onboarding", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ action: "complete" }),
+        });
+        const data = await response.json();
+        if (!response.ok) {
+            return { ok: false, error: data.error || `Error ${response.status}` };
+        }
+        return { ok: true };
+    } catch (error: any) {
+        console.error("Error completing onboarding:", error);
+        return { ok: false, error: error.message || "Network error" };
+    }
+}
+
+/**
+ * Mark onboarding as dismissed (persisted in Supabase)
+ */
+export async function dismissOnboarding(): Promise<{ ok: boolean; error?: string }> {
+    try {
+        const response = await fetch("/api/user/preferences/onboarding", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ action: "dismiss" }),
+        });
+        const data = await response.json();
+        if (!response.ok) {
+            return { ok: false, error: data.error || `Error ${response.status}` };
+        }
+        return { ok: true };
+    } catch (error: any) {
+        console.error("Error dismissing onboarding:", error);
+        return { ok: false, error: error.message || "Network error" };
+    }
+}
+
+/**
+ * Reset onboarding state (for "redo onboarding" feature)
+ */
+export async function resetOnboarding(): Promise<{ ok: boolean; error?: string }> {
+    try {
+        const response = await fetch("/api/user/preferences/onboarding", {
+            method: "DELETE",
+        });
+        const data = await response.json();
+        if (!response.ok) {
+            return { ok: false, error: data.error || `Error ${response.status}` };
+        }
+        return { ok: true };
+    } catch (error: any) {
+        console.error("Error resetting onboarding:", error);
+        return { ok: false, error: error.message || "Network error" };
     }
 }

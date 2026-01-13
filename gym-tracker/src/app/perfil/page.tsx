@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { ExternalLink, Copy, Check, Loader2, AlertCircle, LogOut, FileSpreadsheet, RefreshCw } from "lucide-react";
-import { fetchWeekData, resetMesociclo } from "@/lib/sheets-client";
+import { fetchWeekData, resetMesociclo, resetOnboarding } from "@/lib/sheets-client";
 import { Week } from "@/types";
 import { useAuth } from "@/lib/hooks/useAuth";
 import Link from "next/link";
@@ -142,9 +142,12 @@ export default function PerfilPage() {
                 throw new Error(result.error || "Error al resetear mesociclo");
             }
 
-            // Clear onboarding flags
+            // Clear onboarding flags (localStorage for compat)
             localStorage.removeItem("onboarding_completed_v1");
             localStorage.removeItem("onboarding_dismissed_v1");
+            
+            // Reset onboarding in server DB
+            await resetOnboarding();
 
             // Navigate to home with force flag
             router.push("/?force_onboarding=true");

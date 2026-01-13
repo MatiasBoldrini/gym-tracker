@@ -2,9 +2,11 @@ import { NextRequest, NextResponse } from "next/server";
 import { createServerClient } from "@supabase/ssr";
 import { cookies } from "next/headers";
 import { encrypt } from "@/lib/crypto";
-import { copyTemplate } from "@/lib/google/drive";
-import { refreshAccessToken } from "@/lib/google/oauth";
 
+/**
+ * Fast OAuth callback: only exchanges code for session and saves refresh token.
+ * Spreadsheet creation is deferred to /api/sheets/setup (called from client).
+ */
 export async function GET(request: NextRequest) {
     const requestUrl = new URL(request.url);
     const code = requestUrl.searchParams.get("code");
@@ -40,7 +42,7 @@ export async function GET(request: NextRequest) {
     );
 
     try {
-        // Exchange code for session
+        // Exchange code for session (fast)
         const { data: sessionData, error: sessionError } = await supabase.auth.exchangeCodeForSession(code);
 
         if (sessionError || !sessionData.session) {
@@ -70,47 +72,15 @@ export async function GET(request: NextRequest) {
             .eq("user_id", user.id)
             .single();
 
-        let spreadsheetId = existingIntegration?.spreadsheet_id;
+        const hasSpreadsheet = !!existingIntegration?.spreadsheet_id;
 
-        // If no spreadsheet exists, create one
-        if (!spreadsheetId) {
-            try {
-                // Get access token to create spreadsheet
-                const accessToken = await refreshAccessToken(providerRefreshToken);
-                spreadsheetId = await copyTemplate(accessToken);
-            } catch (createError: any) {
-                console.error("Failed to create spreadsheet:", createError);
-                // Still save the user integration without spreadsheet
-                // They can try again later
-                const errorMessage = encodeURIComponent(
-                    createError?.message || "No pudimos crear tu copia de la planilla"
-                );
-                
-                // Save what we have
-                await supabase.from("user_integrations").upsert(
-                    {
-                        user_id: user.id,
-                        email: email || "",
-                        google_refresh_token_enc: encryptedRefreshToken,
-                        spreadsheet_id: null,
-                        updated_at: new Date().toISOString(),
-                    },
-                    { onConflict: "user_id" }
-                );
-
-                return NextResponse.redirect(
-                    `${origin}/?auth_success=true&setup_error=${errorMessage}`
-                );
-            }
-        }
-
-        // Upsert user integration with all data
+        // Upsert user integration with refresh token (preserve existing spreadsheet_id if any)
         const { error: upsertError } = await supabase.from("user_integrations").upsert(
             {
                 user_id: user.id,
                 email: email || "",
                 google_refresh_token_enc: encryptedRefreshToken,
-                spreadsheet_id: spreadsheetId,
+                spreadsheet_id: existingIntegration?.spreadsheet_id || null,
                 updated_at: new Date().toISOString(),
             },
             { onConflict: "user_id" }
@@ -121,9 +91,17 @@ export async function GET(request: NextRequest) {
             return NextResponse.redirect(`${origin}/?auth_error=db_error`);
         }
 
-        // Pass is_new_user flag if this was a new user (no previous spreadsheet)
-        const isNewUser = !existingIntegration?.spreadsheet_id;
-        return NextResponse.redirect(`${origin}/?auth_success=true${isNewUser ? '&is_new_user=true' : ''}`);
+        // Build redirect URL with flags
+        const params = new URLSearchParams();
+        params.set("auth_success", "true");
+
+        if (!hasSpreadsheet) {
+            // New user or user without spreadsheet: needs setup
+            params.set("setup_pending", "true");
+            params.set("is_new_user", "true");
+        }
+
+        return NextResponse.redirect(`${origin}/?${params.toString()}`);
     } catch (error) {
         console.error("Error in auth callback:", error);
         return NextResponse.redirect(`${origin}/?auth_error=callback_failed`);

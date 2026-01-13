@@ -1,7 +1,7 @@
 "use client";
 
-import { useMemo, useState, useEffect, useRef } from "react";
-import { saveExerciseSets, fetchExerciseSets, fetchExerciseSetsBulk, fetchWeekData, fetchWeeksList, saveSessionRating } from "@/lib/sheets-client";
+import { useMemo, useState, useEffect, useRef, useCallback } from "react";
+import { saveExerciseSets, fetchExerciseSets, fetchExerciseSetsBulk, fetchWeekData, fetchWeeksList, saveSessionRating, setupSpreadsheet, completeOnboarding, dismissOnboarding, resetOnboarding } from "@/lib/sheets-client";
 import { Week, PersonalRecord, Exercise, Set } from "@/types";
 import { ExerciseCard } from "@/components/ui/ExerciseCard";
 import Stack from "@/components/ui/Stack";
@@ -60,11 +60,41 @@ export function HomeScreen({ initialWeek, initialWeeks, initialPrs, initialSetup
     // Onboarding wizard for new users or empty routines
     const [showOnboardingWizard, setShowOnboardingWizard] = useState(false);
 
+    // Async setup state (runs in background while user does onboarding)
+    const [isSettingUp, setIsSettingUp] = useState(false);
+    const [setupComplete, setSetupComplete] = useState(false);
+    const [setupError, setSetupError] = useState<string | null>(null);
+    const setupStartedRef = useRef(false);
+
     // Check if routine is empty (all days have no exercises)
     const isRoutineEmpty = useMemo(() => {
         if (!week?.days?.length) return true;
         return week.days.every((d) => d.exercises.length === 0);
     }, [week]);
+
+    // Run setup in background (called once when setup_pending detected)
+    const runSetupInBackground = useCallback(async () => {
+        if (setupStartedRef.current) return;
+        setupStartedRef.current = true;
+        
+        setIsSettingUp(true);
+        setSetupError(null);
+        
+        try {
+            const result = await setupSpreadsheet();
+            if (result.ok) {
+                setSetupComplete(true);
+                // Refresh auth state to get new spreadsheet info
+                auth.refresh();
+            } else {
+                setSetupError(result.error || "Error al crear la planilla");
+            }
+        } catch (err: any) {
+            setSetupError(err?.message || "Error al crear la planilla");
+        } finally {
+            setIsSettingUp(false);
+        }
+    }, [auth]);
 
     // Check for new user flag in URL or empty routine
     useEffect(() => {
@@ -72,33 +102,41 @@ export function HomeScreen({ initialWeek, initialWeeks, initialPrs, initialSetup
         
         const urlParams = new URLSearchParams(window.location.search);
         const forceOnboarding = urlParams.get("force_onboarding") === "true";
+        const setupPending = urlParams.get("setup_pending") === "true";
+        const isNewUser = urlParams.get("is_new_user") === "true";
+        
+        // Clean URL params (auth_success, setup_pending, is_new_user) without reloading
+        if (urlParams.has("auth_success") || urlParams.has("setup_pending") || urlParams.has("is_new_user") || urlParams.has("force_onboarding")) {
+            const newUrl = window.location.pathname;
+            window.history.replaceState({}, "", newUrl);
+        }
+        
+        // Start background setup if pending (new user without spreadsheet)
+        if (setupPending || isNewUser) {
+            runSetupInBackground();
+        }
         
         // Force onboarding if explicitly requested (from redo)
         if (forceOnboarding) {
             setShowOnboardingWizard(true);
-            // Clean URL without reloading
-            const newUrl = window.location.pathname;
-            window.history.replaceState({}, "", newUrl);
             return;
         }
         
-        // Skip if already completed or dismissed onboarding
+        // Priority 1: Check server-side onboarding state (most reliable)
+        if (auth.onboarding.hasCompleted || auth.onboarding.hasDismissed) {
+            return;
+        }
+        
+        // Priority 2: Fallback to localStorage (for compat / offline)
         const hasCompletedOnboarding = localStorage.getItem("onboarding_completed_v1") === "true";
         const hasDismissedOnboarding = localStorage.getItem("onboarding_dismissed_v1") === "true";
         if (hasCompletedOnboarding || hasDismissedOnboarding) return;
         
-        const isNewUser = urlParams.get("is_new_user") === "true";
-        
-        // Show wizard if new user OR routine is empty
+        // Priority 3: Show wizard if new user OR routine is empty
         if (isNewUser || isRoutineEmpty) {
             setShowOnboardingWizard(true);
-            // Clean URL without reloading
-            if (isNewUser) {
-                const newUrl = window.location.pathname;
-                window.history.replaceState({}, "", newUrl);
-            }
         }
-    }, [isRoutineEmpty]);
+    }, [isRoutineEmpty, runSetupInBackground, auth.onboarding.hasCompleted, auth.onboarding.hasDismissed]);
 
     // Si el server detectó un problema de acceso (403/404) lo mostramos
     useEffect(() => {
@@ -106,6 +144,17 @@ export function HomeScreen({ initialWeek, initialWeeks, initialPrs, initialSetup
         if (!msg) return;
         setErrorMessage(msg);
     }, [initialSetupError?.message]);
+
+    // Auto-trigger setup if authenticated but no spreadsheet (returning user case)
+    useEffect(() => {
+        if (auth.isLoading) return;
+        if (!auth.isAuthenticated) return;
+        if (auth.hasSpreadsheet) return;
+        if (setupComplete) return;
+        
+        // User is authenticated but has no spreadsheet - run setup
+        runSetupInBackground();
+    }, [auth.isLoading, auth.isAuthenticated, auth.hasSpreadsheet, setupComplete, runSetupInBackground]);
 
     const handleSheetsError = (err: any) => {
         const code = err?.code as string | undefined;
@@ -656,9 +705,14 @@ export function HomeScreen({ initialWeek, initialWeeks, initialPrs, initialSetup
     }
 
     const handleOnboardingComplete = async () => {
+        // Persist to localStorage (immediate, for compat/offline)
         localStorage.setItem("onboarding_completed_v1", "true");
         localStorage.removeItem("onboarding_dismissed_v1");
         setShowOnboardingWizard(false);
+        
+        // Persist to server (reliable, cross-device)
+        completeOnboarding().catch((e) => console.error("Failed to persist onboarding complete:", e));
+        
         // Refresh week data after onboarding
         try {
             const data = await fetchWeekData(selectedWeekId);
@@ -672,8 +726,12 @@ export function HomeScreen({ initialWeek, initialWeeks, initialPrs, initialSetup
     };
 
     const handleOnboardingSkip = () => {
+        // Persist to localStorage (immediate, for compat/offline)
         localStorage.setItem("onboarding_dismissed_v1", "true");
         setShowOnboardingWizard(false);
+        
+        // Persist to server (reliable, cross-device)
+        dismissOnboarding().catch((e) => console.error("Failed to persist onboarding dismiss:", e));
     };
 
     return (
@@ -683,6 +741,9 @@ export function HomeScreen({ initialWeek, initialWeeks, initialPrs, initialSetup
                 isOpen={showOnboardingWizard} 
                 onComplete={handleOnboardingComplete}
                 onSkip={handleOnboardingSkip}
+                isSettingUp={isSettingUp}
+                setupComplete={setupComplete || auth.hasSpreadsheet}
+                setupError={setupError}
             />
 
             {/* Error banner */}

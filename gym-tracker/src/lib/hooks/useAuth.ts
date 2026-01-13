@@ -3,6 +3,15 @@
 import { useState, useEffect, useCallback } from "react";
 import { createClient, GOOGLE_SCOPES } from "@/lib/supabase/client";
 
+interface OnboardingState {
+    version: number;
+    completedAt: string | null;
+    dismissedAt: string | null;
+    hasCompleted: boolean;
+    hasDismissed: boolean;
+    shouldShow: boolean;
+}
+
 interface AuthState {
     isLoading: boolean;
     isAuthenticated: boolean;
@@ -10,7 +19,17 @@ interface AuthState {
     spreadsheetId: string | null;
     userId: string | null;
     email: string | null;
+    onboarding: OnboardingState;
 }
+
+const defaultOnboarding: OnboardingState = {
+    version: 1,
+    completedAt: null,
+    dismissedAt: null,
+    hasCompleted: false,
+    hasDismissed: false,
+    shouldShow: true,
+};
 
 export function useAuth() {
     const [state, setState] = useState<AuthState>({
@@ -20,6 +39,7 @@ export function useAuth() {
         spreadsheetId: null,
         userId: null,
         email: null,
+        onboarding: defaultOnboarding,
     });
 
     const fetchAuthState = useCallback(async () => {
@@ -34,6 +54,7 @@ export function useAuth() {
                 spreadsheetId: data.spreadsheetId ?? null,
                 userId: data.userId ?? null,
                 email: data.email ?? null,
+                onboarding: data.onboarding ?? defaultOnboarding,
             });
         } catch (error) {
             console.error("Error fetching auth state:", error);
@@ -44,6 +65,7 @@ export function useAuth() {
                 spreadsheetId: null,
                 userId: null,
                 email: null,
+                onboarding: defaultOnboarding,
             });
         }
     }, []);
@@ -86,6 +108,7 @@ export function useAuth() {
                 spreadsheetId: null,
                 userId: null,
                 email: null,
+                onboarding: defaultOnboarding,
             });
         } catch (error) {
             console.error("Error logging out:", error);
