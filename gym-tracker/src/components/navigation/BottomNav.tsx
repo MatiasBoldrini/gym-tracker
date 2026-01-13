@@ -48,12 +48,27 @@ export function BottomNav() {
                         key={item.name}
                         href={item.href}
                         prefetch={true}
+                        onClick={(e) => {
+                            // Fix: Evitar conflictos con dnd-kit usando navegación explícita
+                            // El Link de Next.js a veces falla cuando hay DndContext activo
+                            if (pathname !== item.href) {
+                                e.preventDefault();
+                                e.stopPropagation();
+                                // Usar setTimeout para desacoplar del ciclo de eventos actual
+                                // Esto evita conflictos con dnd-kit sensors
+                                setTimeout(() => {
+                                    router.push(item.href);
+                                }, 0);
+                            }
+                        }}
                         onMouseEnter={() => {
                             try {
                                 router.prefetch(item.href);
                             } catch { }
                         }}
-                        onTouchStart={() => {
+                        onTouchStart={(e) => {
+                            // Detener propagación para evitar que dnd-kit capture el evento
+                            e.stopPropagation();
                             try {
                                 router.prefetch(item.href);
                             } catch { }

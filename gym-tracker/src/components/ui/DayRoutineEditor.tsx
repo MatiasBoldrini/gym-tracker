@@ -189,18 +189,20 @@ export function DayRoutineEditor({
     }, [exercises.length]);
 
     // Sensores:
+    // - Pointer: unificado para mouse y touch, más confiable con Next.js
     // - Touch: long-press para activar reordenamiento (iOS-like) y dejar scroll libre si el gesto es scroll.
     // - Mouse: drag normal en desktop.
+    // IMPORTANTE: Usamos activationConstraint más estrictos para evitar conflictos con Next.js Link
     const sensors = useSensors(
         useSensor(TouchSensor, {
             activationConstraint: {
-                delay: 260,
-                tolerance: 8,
+                delay: 300, // Increased delay to avoid conflicts
+                tolerance: 5,
             },
         }),
         useSensor(MouseSensor, {
             activationConstraint: {
-                distance: 6,
+                distance: 10, // Increased distance to avoid accidental activation
             },
         }),
         useSensor(KeyboardSensor, {
