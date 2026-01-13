@@ -11,7 +11,7 @@ interface ExerciseSearchModalProps {
     onClose: () => void;
     exercises: ExerciseItem[];
     seriesOptions: string[];
-    onAddExercise: (exercise: { name: string; prescribedSeries: string; image: string }) => void;
+    onAddExercise: (exercise: { name: string; prescribedSeries: string; image: string; muscle?: string }) => void;
     existingExerciseNames: string[];
     /** Optional: pre-select multiple muscles for OR filtering (for onboarding) */
     defaultSelectedMuscles?: string[];
@@ -179,6 +179,7 @@ export function ExerciseSearchModal({
             name: selectedExercise.name,
             prescribedSeries: series,
             image: selectedExercise.image,
+            muscle: selectedExercise.muscle,
         });
         
         setSelectedExercise(null);

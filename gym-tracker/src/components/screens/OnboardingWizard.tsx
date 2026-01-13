@@ -13,6 +13,8 @@ import {
     RoutineExercise,
 } from "@/lib/sheets-client";
 import { ExerciseSearchModal } from "@/components/ui/ExerciseSearchModal";
+import { BodyMapInteractive } from "@/components/ui/BodyMapInteractive";
+import { MUSCLE_MAPPING, parseSeriesCount, getCategoryFromSvgId } from "@/lib/fatiga";
 
 type Step = "days" | "muscles" | "exercises" | "weeks" | "complete";
 
@@ -24,7 +26,7 @@ interface OnboardingWizardProps {
 interface DayConfig {
     dayId: number;
     muscles: string[];
-    exercises: (RoutineExercise & { image?: string })[];
+    exercises: (RoutineExercise & { image?: string; muscle?: string })[];
 }
 
 export function OnboardingWizard({ isOpen, onComplete }: OnboardingWizardProps) {
@@ -45,6 +47,11 @@ export function OnboardingWizard({ isOpen, onComplete }: OnboardingWizardProps) 
     const [isSaving, setIsSaving] = useState(false);
     const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
+    // BodyMap popover state
+    const [selectedBodyMapMuscle, setSelectedBodyMapMuscle] = useState<string | null>(null);
+    const [isBodyMapPopoverOpen, setIsBodyMapPopoverOpen] = useState(false);
+    const [popoverPosition, setPopoverPosition] = useState<{ x: number; y: number } | null>(null);
+
     // Get unique muscles from exercises
     const availableMuscles = useMemo(() => {
         const set = new Set<string>();
@@ -56,6 +63,44 @@ export function OnboardingWizard({ isOpen, onComplete }: OnboardingWizardProps) 
 
     // Current day being configured
     const currentDay = daysConfig[currentDayIndex];
+
+    // Compute weekly series by category (across all days) for bodymap coloring
+    const { weeklySeriesByCategory, intensityByGroupId } = useMemo(() => {
+        const seriesByCategory: Record<string, number> = {};
+
+        // Sum series from all days
+        daysConfig.forEach((day) => {
+            day.exercises.forEach((exercise) => {
+                const muscle = exercise.muscle?.toLowerCase().trim();
+                if (!muscle) return;
+                const seriesCount = parseSeriesCount(exercise.prescribedSeries);
+                seriesByCategory[muscle] = (seriesByCategory[muscle] || 0) + seriesCount;
+            });
+        });
+
+        // Map category series to SVG group IDs
+        const intensities: Record<string, number> = {};
+        Object.entries(seriesByCategory).forEach(([category, series]) => {
+            const svgIds = MUSCLE_MAPPING[category] || [];
+            svgIds.forEach((id) => {
+                // Accumulate if multiple categories map to same ID (unlikely but safe)
+                intensities[id] = (intensities[id] || 0) + series;
+            });
+        });
+
+        return { weeklySeriesByCategory: seriesByCategory, intensityByGroupId: intensities };
+    }, [daysConfig]);
+
+    // Get SVG IDs that are selected for the current day (for highlighting)
+    const currentDayHighlightedIds = useMemo(() => {
+        if (!currentDay) return [];
+        const ids: string[] = [];
+        currentDay.muscles.forEach((muscle) => {
+            const svgIds = MUSCLE_MAPPING[muscle.toLowerCase().trim()] || [];
+            ids.push(...svgIds);
+        });
+        return ids;
+    }, [currentDay]);
 
     // Load initial data
     useEffect(() => {
@@ -114,8 +159,36 @@ export function OnboardingWizard({ isOpen, onComplete }: OnboardingWizardProps) 
         });
     };
 
+    // Handle bodymap muscle click
+    const handleBodyMapMuscleClick = (muscleId: string, e: React.MouseEvent) => {
+        const category = getCategoryFromSvgId(muscleId);
+        if (!category) return;
+
+        // Calculate position for popover
+        const rect = e.currentTarget.getBoundingClientRect();
+        const x = rect.left + rect.width / 2;
+        const y = rect.top;
+
+        setSelectedBodyMapMuscle(category);
+        setPopoverPosition({ x, y });
+        setIsBodyMapPopoverOpen(true);
+    };
+
+    // Get series count for a category
+    const getSeriesForCategory = (category: string): number => {
+        return weeklySeriesByCategory[category.toLowerCase().trim()] || 0;
+    };
+
+    // Check if a category is selected for the current day
+    const isCategorySelectedForCurrentDay = (category: string): boolean => {
+        if (!currentDay) return false;
+        return currentDay.muscles.some(
+            (m) => m.toLowerCase().trim() === category.toLowerCase().trim()
+        );
+    };
+
     // Add exercise to current day
-    const handleAddExercise = useCallback((exercise: { name: string; prescribedSeries: string; image: string }) => {
+    const handleAddExercise = useCallback((exercise: { name: string; prescribedSeries: string; image: string; muscle?: string }) => {
         setDaysConfig((prev) => {
             const updated = [...prev];
             const day = updated[currentDayIndex];
@@ -125,6 +198,7 @@ export function OnboardingWizard({ isOpen, onComplete }: OnboardingWizardProps) 
                     name: exercise.name,
                     prescribedSeries: exercise.prescribedSeries,
                     image: exercise.image || undefined,
+                    muscle: exercise.muscle,
                 },
             ];
             return updated;
@@ -285,7 +359,7 @@ export function OnboardingWizard({ isOpen, onComplete }: OnboardingWizardProps) 
                         className="flex-1 flex flex-col pt-[calc(env(safe-area-inset-top)+1.5rem)]"
                     >
                         {/* Header */}
-                        <div className="px-6 mb-6">
+                        <div className="px-6 mb-4">
                             <p className="text-ios-blue font-bold text-sm mb-1">
                                 Día {currentDay.dayId} de {totalDays}
                             </p>
@@ -293,15 +367,115 @@ export function OnboardingWizard({ isOpen, onComplete }: OnboardingWizardProps) 
                                 ¿Qué vas a entrenar?
                             </h1>
                             <p className="text-gray-500 mt-1">
-                                Seleccioná los músculos para el Día {currentDay.dayId}
+                                Tocá el gráfico o las tarjetas para seleccionar
                             </p>
                         </div>
 
+                        {/* Body Map Section */}
+                        <div className="px-6 mb-4">
+                            <div className="bg-white rounded-2xl p-4 border border-black/5 shadow-sm">
+                                <div className="flex gap-4 w-full h-[280px]">
+                                    <div className="flex-1 flex flex-col items-center justify-center relative">
+                                        <BodyMapInteractive
+                                            view="front"
+                                            intensityByGroupId={intensityByGroupId}
+                                            onMuscleClick={handleBodyMapMuscleClick}
+                                            highlightGroupIds={currentDayHighlightedIds}
+                                            className="h-full w-full"
+                                        />
+                                        <span className="absolute bottom-0 text-[10px] font-black text-gray-300 uppercase tracking-widest pointer-events-none">
+                                            Frente
+                                        </span>
+                                    </div>
+                                    <div className="flex-1 flex flex-col items-center justify-center relative">
+                                        <BodyMapInteractive
+                                            view="back"
+                                            intensityByGroupId={intensityByGroupId}
+                                            onMuscleClick={handleBodyMapMuscleClick}
+                                            highlightGroupIds={currentDayHighlightedIds}
+                                            className="h-full w-full"
+                                        />
+                                        <span className="absolute bottom-0 text-[10px] font-black text-gray-300 uppercase tracking-widest pointer-events-none">
+                                            Espalda
+                                        </span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* BodyMap Popover */}
+                        <AnimatePresence>
+                            {isBodyMapPopoverOpen && selectedBodyMapMuscle && popoverPosition && (
+                                <>
+                                    {/* Backdrop */}
+                                    <div
+                                        className="fixed inset-0 z-40 bg-transparent"
+                                        onClick={() => setIsBodyMapPopoverOpen(false)}
+                                    />
+                                    <motion.div
+                                        initial={{ opacity: 0, scale: 0.8, y: 10 }}
+                                        animate={{ opacity: 1, scale: 1, y: 0 }}
+                                        exit={{ opacity: 0, scale: 0.8, y: 10 }}
+                                        onClick={(e) => e.stopPropagation()}
+                                        style={{
+                                            position: "fixed",
+                                            left: popoverPosition.x,
+                                            top: popoverPosition.y - 10,
+                                            transform: "translate(-50%, -100%)",
+                                        }}
+                                        className="z-50 w-56"
+                                    >
+                                        <div className="bg-white/95 backdrop-blur-md rounded-2xl shadow-xl border border-black/5 p-4">
+                                            <div className="text-center mb-3">
+                                                <h3 className="text-sm font-black uppercase tracking-tight mb-0.5 capitalize">
+                                                    {selectedBodyMapMuscle}
+                                                </h3>
+                                                <p className="text-gray-400 text-[10px] font-bold uppercase tracking-wider">
+                                                    {getSeriesForCategory(selectedBodyMapMuscle)} series semanales
+                                                </p>
+                                            </div>
+
+                                            <button
+                                                onClick={() => {
+                                                    // Find the matching muscle name from availableMuscles
+                                                    const matchingMuscle = availableMuscles.find(
+                                                        (m) => m.toLowerCase().trim() === selectedBodyMapMuscle.toLowerCase().trim()
+                                                    );
+                                                    if (matchingMuscle) {
+                                                        toggleMuscle(matchingMuscle);
+                                                    }
+                                                    setIsBodyMapPopoverOpen(false);
+                                                }}
+                                                className={`w-full py-3 rounded-xl font-bold text-sm transition-all ${
+                                                    isCategorySelectedForCurrentDay(selectedBodyMapMuscle)
+                                                        ? "bg-red-50 text-red-600 border border-red-200"
+                                                        : "bg-ios-blue text-white"
+                                                }`}
+                                            >
+                                                {isCategorySelectedForCurrentDay(selectedBodyMapMuscle)
+                                                    ? `Quitar del Día ${currentDay.dayId}`
+                                                    : `Agregar al Día ${currentDay.dayId}`}
+                                            </button>
+
+                                            {/* Arrow pointing down */}
+                                            <div className="absolute left-1/2 bottom-0 transform -translate-x-1/2 translate-y-full">
+                                                <div className="w-0 h-0 border-l-[6px] border-l-transparent border-r-[6px] border-r-transparent border-t-[6px] border-t-white/95 drop-shadow-sm"></div>
+                                            </div>
+                                        </div>
+                                    </motion.div>
+                                </>
+                            )}
+                        </AnimatePresence>
+
                         {/* Muscle Grid */}
                         <div className="flex-1 overflow-y-auto px-6 pb-4">
+                            <p className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-3">
+                                O seleccioná por tarjetas
+                            </p>
                             <div className="grid grid-cols-2 gap-3">
                                 {availableMuscles.map((muscle) => {
                                     const isSelected = currentDay.muscles.includes(muscle);
+                                    const seriesCount = getSeriesForCategory(muscle);
                                     return (
                                         <button
                                             key={muscle}
@@ -313,6 +487,11 @@ export function OnboardingWizard({ isOpen, onComplete }: OnboardingWizardProps) 
                                             }`}
                                         >
                                             <span className="text-lg">{muscle}</span>
+                                            {seriesCount > 0 && (
+                                                <span className={`ml-2 text-xs ${isSelected ? "text-white/70" : "text-gray-400"}`}>
+                                                    ({seriesCount}s)
+                                                </span>
+                                            )}
                                             {isSelected && (
                                                 <Check size={18} className="inline ml-2" />
                                             )}

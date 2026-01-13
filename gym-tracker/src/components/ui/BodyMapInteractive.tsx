@@ -9,6 +9,8 @@ type BodyMapProps = {
     intensityByGroupId: Record<string, number>;
     onMuscleClick?: (muscleId: string, e: React.MouseEvent) => void;
     className?: string;
+    /** Optional: IDs of muscle groups to highlight with a stroke/outline */
+    highlightGroupIds?: string[];
 };
 
 // Colors matching iOS design system
@@ -31,15 +33,18 @@ const getFillColor = (intensity: number) => {
     return COLORS.empty;
 };
 
-export function BodyMapInteractive({ view, intensityByGroupId, onMuscleClick, className }: BodyMapProps) {
+export function BodyMapInteractive({ view, intensityByGroupId, onMuscleClick, className, highlightGroupIds = [] }: BodyMapProps) {
     const handleClick = (id: string, e: React.MouseEvent) => {
         e.stopPropagation();
         if (onMuscleClick) onMuscleClick(id, e);
     };
 
+    const highlightSet = new Set(highlightGroupIds);
+
     const MusclePath = ({ id, d, children }: { id: string; d?: string; children?: React.ReactNode }) => {
         const intensity = intensityByGroupId[id] || 0;
         const fill = getFillColor(intensity);
+        const isHighlighted = highlightSet.has(id);
 
         return (
             <g
@@ -48,7 +53,36 @@ export function BodyMapInteractive({ view, intensityByGroupId, onMuscleClick, cl
                 className="cursor-pointer transition-opacity hover:opacity-80"
                 style={{ fill }}
             >
-                {d ? <path d={d} /> : children}
+                {d ? (
+                    <>
+                        <path d={d} />
+                        {isHighlighted && (
+                            <path
+                                d={d}
+                                fill="none"
+                                stroke="#007AFF"
+                                strokeWidth="3"
+                                strokeLinejoin="round"
+                                className="pointer-events-none"
+                            />
+                        )}
+                    </>
+                ) : (
+                    <>
+                        {children}
+                        {isHighlighted && (
+                            <g
+                                fill="none"
+                                stroke="#007AFF"
+                                strokeWidth="3"
+                                strokeLinejoin="round"
+                                className="pointer-events-none"
+                            >
+                                {children}
+                            </g>
+                        )}
+                    </>
+                )}
             </g>
         );
     };

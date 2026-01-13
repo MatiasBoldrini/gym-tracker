@@ -10,7 +10,28 @@ export const MUSCLE_MAPPING: Record<string, string[]> = {
     gemelos: ["calves"],
     espalda: ["lats", "lowerback", "traps", "traps-middle"],
     hombro: ["front-shoulders", "rear-shoulders"],
+    // Categorías sin representación en el SVG (solo disponibles en tarjetas/lista)
+    aductores: [],
+    cuello: [],
 };
+
+// Helper inverso: dado un svgId, devuelve la categoría canónica
+export function getCategoryFromSvgId(svgId: string): string | null {
+    for (const [category, ids] of Object.entries(MUSCLE_MAPPING)) {
+        if (ids.includes(svgId)) {
+            return category;
+        }
+    }
+    return null;
+}
+
+// Helper: parsea el número de series desde prescribedSeries (ej: "3 x 10-12" -> 3)
+export function parseSeriesCount(prescribedSeries: string): number {
+    if (!prescribedSeries) return 0;
+    const match = prescribedSeries.toString().split(/[\sxX]+/)[0];
+    const num = parseInt(match, 10);
+    return Number.isFinite(num) && num > 0 ? num : 0;
+}
 
 export const MUSCLE_ALIASES: Record<string, string> = {
     "deltoides anterior": "hombro",
