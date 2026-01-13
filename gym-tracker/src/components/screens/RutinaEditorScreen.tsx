@@ -87,6 +87,11 @@ export function RutinaEditorScreen() {
     // Modal state
     const [isSearchModalOpen, setIsSearchModalOpen] = useState(false);
 
+    // Log modal state changes
+    useEffect(() => {
+        console.log('🟢 [RutinaEditor] Search modal state:', isSearchModalOpen);
+    }, [isSearchModalOpen]);
+
     // Toast state
     const [toastMessage, setToastMessage] = useState<string | null>(null);
 

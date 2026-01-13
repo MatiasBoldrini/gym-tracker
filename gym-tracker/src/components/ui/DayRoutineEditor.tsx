@@ -211,16 +211,34 @@ export function DayRoutineEditor({
         })
     );
 
+    // Log when sensors are initialized
+    useEffect(() => {
+        console.log('🟣 [DnD] DayRoutineEditor mounted with', exercises.length, 'exercises');
+        return () => {
+            console.log('🟣 [DnD] DayRoutineEditor unmounted');
+        };
+    }, []);
+
     const handleDragStart = (event: DragStartEvent) => {
+        console.log('🟢 [DnD] Drag started:', {
+            activeId: event.active.id,
+            timestamp: new Date().toISOString()
+        });
         setActiveId(event.active.id as string);
     };
 
     const handleDragCancel = (_event: DragCancelEvent) => {
+        console.log('🔴 [DnD] Drag cancelled');
         setActiveId(null);
     };
 
     const handleDragEnd = (event: DragEndEvent) => {
         const { active, over } = event;
+        console.log('🟢 [DnD] Drag ended:', {
+            activeId: active.id,
+            overId: over?.id,
+            timestamp: new Date().toISOString()
+        });
         setActiveId(null);
 
         if (over && active.id !== over.id) {
@@ -257,7 +275,13 @@ export function DayRoutineEditor({
                         No hay ejercicios en este día
                     </div>
                     <motion.button
-                        onClick={onAddExercise}
+                        onClick={(e) => {
+                            console.log('🟠 [DnD] Add Exercise button (empty) clicked:', {
+                                defaultPrevented: e.defaultPrevented,
+                                timestamp: new Date().toISOString()
+                            });
+                            onAddExercise();
+                        }}
                         whileTap={{ scale: 0.95 }}
                         className="inline-flex items-center gap-2 px-6 py-3 bg-ios-blue text-white rounded-2xl font-bold"
                     >
@@ -313,7 +337,13 @@ export function DayRoutineEditor({
 
                     {exercises.length < maxExercises && (
                         <motion.button
-                            onClick={onAddExercise}
+                            onClick={(e) => {
+                                console.log('🟠 [DnD] Add Exercise button clicked:', {
+                                    defaultPrevented: e.defaultPrevented,
+                                    timestamp: new Date().toISOString()
+                                });
+                                onAddExercise();
+                            }}
                             whileTap={{ scale: 0.98 }}
                             initial={{ opacity: 0 }}
                             animate={{ opacity: 1 }}

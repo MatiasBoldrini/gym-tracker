@@ -10,6 +10,11 @@ export function BottomNav() {
     const router = useRouter();
     const { isAuthenticated, isLoading } = useAuth();
 
+    // Log pathname changes
+    useEffect(() => {
+        console.log('🔵 [BottomNav] Pathname changed to:', pathname);
+    }, [pathname]);
+
     const navItems = [
         { name: "Rutina", icon: Home, href: "/" },
         { name: "Crear", icon: PenSquare, href: "/rutina" },
@@ -47,13 +52,39 @@ export function BottomNav() {
                         key={item.name}
                         type="button"
                         onPointerDown={(e) => {
+                            console.log('🔵 [BottomNav] PointerDown:', {
+                                name: item.name,
+                                href: item.href,
+                                currentPath: pathname,
+                                eventType: e.type,
+                                pointerType: e.pointerType,
+                                defaultPrevented: e.defaultPrevented,
+                                isPropagationStopped: e.isPropagationStopped(),
+                                timestamp: new Date().toISOString()
+                            });
+                            
                             // En mobile (y con dnd/gestos), onClick puede quedar "tarde" o encolarse.
                             // PointerDown es inmediato y evita el síntoma de "clickeo navbar, recién navega
                             // cuando clickeo otro botón".
-                            if (pathname === item.href) return;
+                            if (pathname === item.href) {
+                                console.log('🔵 [BottomNav] Same path, ignoring');
+                                return;
+                            }
+                            
                             e.preventDefault();
                             e.stopPropagation();
+                            
+                            console.log('🔵 [BottomNav] Calling router.push:', item.href);
                             router.push(item.href);
+                            console.log('🔵 [BottomNav] router.push called');
+                        }}
+                        onClick={(e) => {
+                            console.log('🟡 [BottomNav] Click event fired:', {
+                                name: item.name,
+                                href: item.href,
+                                defaultPrevented: e.defaultPrevented,
+                                timestamp: new Date().toISOString()
+                            });
                         }}
                         onMouseEnter={() => {
                             try {
