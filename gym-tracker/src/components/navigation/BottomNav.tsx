@@ -77,8 +77,9 @@ export function BottomNav() {
                                 return;
                             }
                             
-                            // Usar stopImmediatePropagation para evitar que DndContext interfiera
-                            e.stopImmediatePropagation();
+                            // Acceder al evento nativo para usar stopImmediatePropagation
+                            e.nativeEvent.stopImmediatePropagation();
+                            e.stopPropagation();
                             
                             addDebugLog(`🟡 Calling router.push: ${item.href}`);
                             // Usar startTransition para que React priorice esta navegación
