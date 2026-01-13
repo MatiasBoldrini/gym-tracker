@@ -77,12 +77,16 @@ export function BottomNav() {
                                 return;
                             }
                             
-                            // NO usar preventDefault - permite que Next.js maneje la navegación correctamente
-                            e.stopPropagation();
+                            // Usar stopImmediatePropagation para evitar que DndContext interfiera
+                            e.stopImmediatePropagation();
                             
                             addDebugLog(`🟡 Calling router.push: ${item.href}`);
-                            router.push(item.href);
-                            addDebugLog(`🟡 router.push called`);
+                            // Usar queueMicrotask para asegurar que la navegación ocurre después del evento
+                            queueMicrotask(() => {
+                                router.push(item.href);
+                                addDebugLog(`🟡 router.push executed`);
+                            });
+                            addDebugLog(`🟡 router.push queued`);
                         }}
                         onMouseEnter={() => {
                             try {
