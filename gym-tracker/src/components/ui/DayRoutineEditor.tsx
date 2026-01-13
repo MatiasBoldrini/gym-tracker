@@ -51,14 +51,15 @@ function ExerciseItemContent({
 }) {
     return (
         <>
-            {/* Drag Handle */}
+            {/* Drag Handle - solo este elemento tiene los listeners de DnD */}
             <div
                 {...dragHandleProps}
-                className={`p-1.5 -m-1 transition-colors select-none ${
+                className={`p-1.5 -m-1 transition-colors select-none touch-manipulation ${
                     isOverlay 
                         ? "text-gray-500" 
                         : "cursor-grab active:cursor-grabbing text-gray-300 hover:text-gray-500"
                 }`}
+                style={{ touchAction: "none" }}
             >
                 <GripVertical size={20} />
             </div>
@@ -128,7 +129,6 @@ function SortableExerciseItem({
         transform,
         transition,
         isDragging,
-        isSorting,
     } = useSortable({ id: exerciseId });
 
     const style = {
@@ -137,9 +137,12 @@ function SortableExerciseItem({
             ? undefined
             : (transition ?? "transform 220ms cubic-bezier(0.2, 0.8, 0.2, 1)"),
         opacity: isDragging ? 0.4 : 1,
-        // Importante: no bloquear scroll por defecto. En touch, el sensor con delay se encarga de capturar
-        // el gesto sólo cuando corresponde (long-press + move).
-        touchAction: (isDragging || isSorting ? "none" : "auto"),
+    };
+
+    // Pasamos los listeners solo al drag handle para evitar conflictos con otros elementos de la UI
+    const dragHandleProps = {
+        ...attributes,
+        ...listeners,
     };
 
     return (
@@ -151,13 +154,11 @@ function SortableExerciseItem({
                 ${isDragging ? "z-10 shadow-lg" : ""}
                 select-none
             `}
-            // Long-press / drag: listeners en toda la tarjeta para UX estilo iOS.
-            {...attributes}
-            {...listeners}
         >
             <ExerciseItemContent
                 exercise={exercise}
                 onRemove={onRemove}
+                dragHandleProps={dragHandleProps}
             />
         </div>
     );
