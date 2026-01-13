@@ -69,26 +69,20 @@ export function BottomNav() {
                     <button
                         key={item.name}
                         type="button"
-                        onPointerDown={(e) => {
-                            addDebugLog(`🔵 PointerDown: ${item.name} -> ${item.href}`);
+                        onClick={(e) => {
+                            addDebugLog(`🟡 Click: ${item.name} -> ${item.href}`);
                             
-                            // En mobile (y con dnd/gestos), onClick puede quedar "tarde" o encolarse.
-                            // PointerDown es inmediato y evita el síntoma de "clickeo navbar, recién navega
-                            // cuando clickeo otro botón".
                             if (pathname === item.href) {
-                                addDebugLog(`🔵 Same path, ignoring`);
+                                addDebugLog(`🟡 Same path, ignoring`);
                                 return;
                             }
                             
-                            e.preventDefault();
+                            // NO usar preventDefault - permite que Next.js maneje la navegación correctamente
                             e.stopPropagation();
                             
-                            addDebugLog(`🔵 Calling router.push: ${item.href}`);
+                            addDebugLog(`🟡 Calling router.push: ${item.href}`);
                             router.push(item.href);
-                            addDebugLog(`🔵 router.push called`);
-                        }}
-                        onClick={(e) => {
-                            addDebugLog(`🟡 Click: ${item.name}`);
+                            addDebugLog(`🟡 router.push called`);
                         }}
                         onMouseEnter={() => {
                             try {
