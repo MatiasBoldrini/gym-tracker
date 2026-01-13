@@ -48,6 +48,24 @@ export async function GET() {
             );
         }
 
+        // Best-effort: ensure a row exists so future writes/reads are consistent cross-device
+        if (error?.code === "PGRST116") {
+            const now = new Date().toISOString();
+            const { error: ensureError } = await supabase
+                .from("user_preferences")
+                .upsert(
+                    {
+                        user_id: user.id,
+                        onboarding_version: CURRENT_ONBOARDING_VERSION,
+                        updated_at: now,
+                    },
+                    { onConflict: "user_id" }
+                );
+            if (ensureError) {
+                console.error("Error ensuring preferences row:", ensureError);
+            }
+        }
+
         // Return preferences or defaults
         return NextResponse.json({
             onboarding_version: prefs?.onboarding_version ?? CURRENT_ONBOARDING_VERSION,

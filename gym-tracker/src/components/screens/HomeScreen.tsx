@@ -59,6 +59,7 @@ export function HomeScreen({ initialWeek, initialWeeks, initialPrs, initialSetup
 
     // Onboarding wizard for new users or empty routines
     const [showOnboardingWizard, setShowOnboardingWizard] = useState(false);
+    const ONBOARDING_SYNC_ACTION_KEY = "onboarding_sync_action_v1";
 
     // Async setup state (runs in background while user does onboarding)
     const [isSettingUp, setIsSettingUp] = useState(false);
@@ -141,6 +142,64 @@ export function HomeScreen({ initialWeek, initialWeeks, initialPrs, initialSetup
             setShowOnboardingWizard(true);
         }
     }, [isRoutineEmpty, runSetupInBackground, auth.onboarding.hasCompleted, auth.onboarding.hasDismissed, auth.onboarding.hasProgress]);
+
+    // Retry onboarding sync if we ever completed/dismissed offline or if the server write failed.
+    useEffect(() => {
+        if (typeof window === "undefined") return;
+        if (auth.isLoading) return;
+        if (!auth.isAuthenticated) return;
+
+        const pending = localStorage.getItem(ONBOARDING_SYNC_ACTION_KEY);
+        if (!pending) return;
+
+        let cancelled = false;
+
+        const run = async () => {
+            try {
+                const res =
+                    pending === "complete"
+                        ? await completeOnboarding()
+                        : pending === "dismiss"
+                            ? await dismissOnboarding()
+                            : { ok: true };
+
+                if (cancelled) return;
+
+                if (res.ok) {
+                    localStorage.removeItem(ONBOARDING_SYNC_ACTION_KEY);
+                    auth.refresh();
+                } else {
+                    console.warn("Onboarding sync pending (will retry):", res.error);
+                }
+            } catch (e) {
+                if (!cancelled) console.warn("Onboarding sync pending (will retry):", e);
+            }
+        };
+
+        run();
+        return () => {
+            cancelled = true;
+        };
+    }, [auth.isLoading, auth.isAuthenticated, auth.refresh]);
+
+    // Backfill: if localStorage says completed/dismissed but server still says "shouldShow",
+    // we persist it to Supabase so it works across devices.
+    useEffect(() => {
+        if (typeof window === "undefined") return;
+        if (auth.isLoading) return;
+        if (!auth.isAuthenticated) return;
+        if (!auth.onboarding.shouldShow) return;
+
+        // If there is already a pending sync, let the other effect handle it.
+        if (localStorage.getItem(ONBOARDING_SYNC_ACTION_KEY)) return;
+
+        const hasCompletedLocal = localStorage.getItem("onboarding_completed_v1") === "true";
+        const hasDismissedLocal = localStorage.getItem("onboarding_dismissed_v1") === "true";
+        if (!hasCompletedLocal && !hasDismissedLocal) return;
+
+        const action = hasCompletedLocal ? "complete" : "dismiss";
+        localStorage.setItem(ONBOARDING_SYNC_ACTION_KEY, action);
+    }, [auth.isLoading, auth.isAuthenticated, auth.onboarding.shouldShow]);
 
     // Si el server detectó un problema de acceso (403/404) lo mostramos
     useEffect(() => {
@@ -712,10 +771,18 @@ export function HomeScreen({ initialWeek, initialWeeks, initialPrs, initialSetup
         // Persist to localStorage (immediate, for compat/offline)
         localStorage.setItem("onboarding_completed_v1", "true");
         localStorage.removeItem("onboarding_dismissed_v1");
+        localStorage.setItem(ONBOARDING_SYNC_ACTION_KEY, "complete");
         setShowOnboardingWizard(false);
         
         // Persist to server (reliable, cross-device)
-        completeOnboarding().catch((e) => console.error("Failed to persist onboarding complete:", e));
+        completeOnboarding()
+            .then((res) => {
+                if (res.ok) {
+                    localStorage.removeItem(ONBOARDING_SYNC_ACTION_KEY);
+                    auth.refresh();
+                }
+            })
+            .catch((e) => console.error("Failed to persist onboarding complete:", e));
         
         // Refresh week data after onboarding
         try {
@@ -732,10 +799,18 @@ export function HomeScreen({ initialWeek, initialWeeks, initialPrs, initialSetup
     const handleOnboardingSkip = () => {
         // Persist to localStorage (immediate, for compat/offline)
         localStorage.setItem("onboarding_dismissed_v1", "true");
+        localStorage.setItem(ONBOARDING_SYNC_ACTION_KEY, "dismiss");
         setShowOnboardingWizard(false);
         
         // Persist to server (reliable, cross-device)
-        dismissOnboarding().catch((e) => console.error("Failed to persist onboarding dismiss:", e));
+        dismissOnboarding()
+            .then((res) => {
+                if (res.ok) {
+                    localStorage.removeItem(ONBOARDING_SYNC_ACTION_KEY);
+                    auth.refresh();
+                }
+            })
+            .catch((e) => console.error("Failed to persist onboarding dismiss:", e));
     };
 
     return (
