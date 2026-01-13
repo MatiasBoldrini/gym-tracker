@@ -125,7 +125,11 @@ export function OnboardingWizard({
         if (!currentDay) return [];
         const ids: string[] = [];
         currentDay.muscles.forEach((muscle) => {
-            const svgIds = MUSCLE_MAPPING[muscle.toLowerCase().trim()] || [];
+            const normalized = normalizeMuscleKey(muscle);
+            const mappingKey = Object.keys(MUSCLE_MAPPING).find(
+                (k) => normalizeMuscleKey(k) === normalized
+            );
+            const svgIds = mappingKey ? MUSCLE_MAPPING[mappingKey] : [];
             ids.push(...svgIds);
         });
         return ids;

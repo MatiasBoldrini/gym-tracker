@@ -482,8 +482,6 @@ export function ExerciseSearchModal({
                     </div>
                 )}
 
-                {/* Safe area padding for iOS + BottomNav */}
-                <div className="h-[calc(var(--bottom-nav-base)+env(safe-area-inset-bottom))]" />
             </div>
         </div>
     );

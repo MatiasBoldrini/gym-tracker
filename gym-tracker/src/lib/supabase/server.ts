@@ -70,12 +70,16 @@ export async function upsertUserIntegration(
 ): Promise<UserIntegration | null> {
     const supabase = await createClient();
 
+    const { data: { user } } = await supabase.auth.getUser();
+    const ensuredEmail = data.email ?? user?.email ?? "";
+
     const { data: result, error } = await supabase
         .from("user_integrations")
         .upsert(
             {
                 user_id: userId,
                 ...data,
+                email: ensuredEmail,
                 updated_at: new Date().toISOString(),
             },
             { onConflict: "user_id" }

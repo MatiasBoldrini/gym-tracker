@@ -53,7 +53,7 @@ export function BodyMapInteractive({
 
     const MusclePath = ({ id, d, children }: { id: string; d?: string; children?: React.ReactNode }) => {
         const intensity = intensityByGroupId[id] || 0;
-        const fill = getFillColor(intensity);
+        const baseFill = highlightSet.has(id) ? "#007AFF" : getFillColor(intensity);
         const isHighlighted = highlightSet.has(id);
         const isActive = activeSet.has(id);
 
@@ -62,25 +62,11 @@ export function BodyMapInteractive({
                 id={id}
                 onClick={(e) => handleClick(id, e)}
                 className="cursor-pointer transition-opacity hover:opacity-80"
-                style={{ fill }}
+                style={{ fill: baseFill }}
             >
                 {d ? (
                     <>
                         <path d={d} />
-                        {isHighlighted && (
-                            <path
-                                d={d}
-                                fill="rgba(0, 122, 255, 0.16)"
-                                className="pointer-events-none"
-                            />
-                        )}
-                        {isActive && (
-                            <path
-                                d={d}
-                                fill="rgba(0, 122, 255, 0.25)"
-                                className="pointer-events-none"
-                            />
-                        )}
                         {isHighlighted && (
                             <path
                                 d={d}
@@ -95,7 +81,7 @@ export function BodyMapInteractive({
                             <path
                                 d={d}
                                 fill="none"
-                                stroke="#007AFF"
+                                stroke="#004FC4"
                                 strokeWidth="4"
                                 strokeLinejoin="round"
                                 className="pointer-events-none"
@@ -105,16 +91,6 @@ export function BodyMapInteractive({
                 ) : (
                     <>
                         {children}
-                        {isHighlighted && (
-                            <g fill="rgba(0, 122, 255, 0.16)" className="pointer-events-none">
-                                {children}
-                            </g>
-                        )}
-                        {isActive && (
-                            <g fill="rgba(0, 122, 255, 0.25)" className="pointer-events-none">
-                                {children}
-                            </g>
-                        )}
                         {isHighlighted && (
                             <g
                                 fill="none"
