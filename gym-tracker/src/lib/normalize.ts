@@ -16,5 +16,14 @@ export function normalizeExerciseKey(input: unknown): string {
         .replace(/\s+/g, " ");
 }
 
+/**
+ * Normalizador genérico para claves de músculo (tildes/case/espacios).
+ * Útil para matchear datos provenientes de Sheets, UI y el BodyMap.
+ */
+export function normalizeMuscleKey(input: unknown): string {
+    // Reutilizamos la misma lógica estable para mantener consistencia.
+    return normalizeExerciseKey(input);
+}
+
 
 

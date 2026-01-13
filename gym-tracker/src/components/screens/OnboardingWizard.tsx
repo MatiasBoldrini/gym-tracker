@@ -14,6 +14,7 @@ import {
 import { ExerciseSearchModal } from "@/components/ui/ExerciseSearchModal";
 import { BodyMapInteractive } from "@/components/ui/BodyMapInteractive";
 import { MUSCLE_MAPPING, parseSeriesCount, getCategoryFromSvgId } from "@/lib/fatiga";
+import { normalizeMuscleKey } from "@/lib/normalize";
 import { useAuth } from "@/lib/hooks/useAuth";
 
 type Step = "days" | "muscles" | "exercises" | "weeks" | "complete";
@@ -72,10 +73,21 @@ export function OnboardingWizard({
     // Get unique muscles from exercises
     const availableMuscles = useMemo(() => {
         const set = new Set<string>();
+
+        // Preferir datos reales de Sheets cuando existen.
         availableExercises.forEach((e) => {
             if (e.muscle) set.add(e.muscle);
         });
-        return Array.from(set).sort();
+
+        // Fallback: mostrar todas las categorías conocidas aunque la data aún no cargue.
+        if (set.size === 0) {
+            Object.keys(MUSCLE_MAPPING).forEach((muscle) => set.add(muscle));
+        }
+
+        // Orden alfabético robusto (ignora tildes/case).
+        return Array.from(set).sort((a, b) =>
+            a.localeCompare(b, "es", { sensitivity: "base" })
+        );
     }, [availableExercises]);
 
     // Current day being configured
@@ -514,13 +526,15 @@ export function OnboardingWizard({
 
                                             <button
                                                 onClick={() => {
-                                                    // Find the matching muscle name from availableMuscles
-                                                    const matchingMuscle = availableMuscles.find(
-                                                        (m) => m.toLowerCase().trim() === selectedBodyMapMuscle.toLowerCase().trim()
-                                                    );
-                                                    if (matchingMuscle) {
-                                                        toggleMuscle(matchingMuscle);
-                                                    }
+                                                    // Buscar match robusto (case/tildes) y fallback a la categoría tocada.
+                                                    const matchingMuscle =
+                                                        availableMuscles.find(
+                                                            (m) =>
+                                                                normalizeMuscleKey(m) ===
+                                                                normalizeMuscleKey(selectedBodyMapMuscle)
+                                                        ) || selectedBodyMapMuscle;
+
+                                                    toggleMuscle(matchingMuscle);
                                                     setIsBodyMapPopoverOpen(false);
                                                     setSelectedBodyMapMuscle(null);
                                                     setSelectedBodyMapGroupId(null);
