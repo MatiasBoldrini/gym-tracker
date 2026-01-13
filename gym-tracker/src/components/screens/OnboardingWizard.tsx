@@ -356,7 +356,7 @@ export function OnboardingWizard({ isOpen, onComplete }: OnboardingWizardProps) 
                         initial={{ opacity: 0, x: 50 }}
                         animate={{ opacity: 1, x: 0 }}
                         exit={{ opacity: 0, x: -50 }}
-                        className="flex-1 flex flex-col pt-[calc(env(safe-area-inset-top)+1.5rem)]"
+                        className="flex-1 flex flex-col min-h-0 pt-[calc(env(safe-area-inset-top)+1.5rem)]"
                     >
                         {/* Header */}
                         <div className="px-6 mb-4">
@@ -468,7 +468,11 @@ export function OnboardingWizard({ isOpen, onComplete }: OnboardingWizardProps) 
                         </AnimatePresence>
 
                         {/* Muscle Grid */}
-                        <div className="flex-1 overflow-y-auto px-6 pb-4">
+                        <div
+                            className="flex-1 min-h-0 overflow-y-auto px-6 pb-4"
+                            // iOS: scroll con inercia + permite pan vertical dentro del contenedor
+                            style={{ WebkitOverflowScrolling: "touch", overscrollBehavior: "contain", touchAction: "pan-y" }}
+                        >
                             <p className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-3">
                                 O seleccioná por tarjetas
                             </p>
@@ -527,7 +531,7 @@ export function OnboardingWizard({ isOpen, onComplete }: OnboardingWizardProps) 
                         initial={{ opacity: 0, x: 50 }}
                         animate={{ opacity: 1, x: 0 }}
                         exit={{ opacity: 0, x: -50 }}
-                        className="flex-1 flex flex-col pt-[calc(env(safe-area-inset-top)+1.5rem)]"
+                        className="flex-1 flex flex-col min-h-0 pt-[calc(env(safe-area-inset-top)+1.5rem)]"
                     >
                         {/* Header */}
                         <div className="px-6 mb-4">
@@ -550,7 +554,10 @@ export function OnboardingWizard({ isOpen, onComplete }: OnboardingWizardProps) 
                         )}
 
                         {/* Exercise List */}
-                        <div className="flex-1 overflow-y-auto px-6 pb-4">
+                        <div
+                            className="flex-1 min-h-0 overflow-y-auto px-6 pb-4"
+                            style={{ WebkitOverflowScrolling: "touch", overscrollBehavior: "contain", touchAction: "pan-y" }}
+                        >
                             {currentDay.exercises.length === 0 ? (
                                 <div className="text-center py-12">
                                     <p className="text-gray-400 font-medium mb-4">

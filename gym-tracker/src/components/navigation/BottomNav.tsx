@@ -49,17 +49,27 @@ export function BottomNav() {
                         href={item.href}
                         prefetch={true}
                         onClick={(e) => {
-                            // Fix: Evitar conflictos con dnd-kit usando navegación explícita
-                            // El Link de Next.js a veces falla cuando hay DndContext activo
-                            if (pathname !== item.href) {
-                                e.preventDefault();
-                                e.stopPropagation();
-                                // Usar setTimeout para desacoplar del ciclo de eventos actual
-                                // Esto evita conflictos con dnd-kit sensors
-                                setTimeout(() => {
-                                    router.push(item.href);
-                                }, 0);
-                            }
+                            // Fix robusto: en /rutina (DndContext) a veces la navegación client-side queda "pendiente"
+                            // y recién se aplica tras el siguiente click. Forzamos router.push y, si no cambia la URL,
+                            // hacemos fallback a navegación hard para no dejar la app "trabada".
+                            if (pathname === item.href) return;
+
+                            e.preventDefault();
+                            e.stopPropagation();
+
+                            const target = item.href;
+                            const beforePath = window.location.pathname;
+
+                            requestAnimationFrame(() => {
+                                router.push(target);
+
+                                // Fallback: si el router no llega a cambiar la URL rápidamente, forzamos reload.
+                                window.setTimeout(() => {
+                                    if (window.location.pathname === beforePath) {
+                                        window.location.href = target;
+                                    }
+                                }, 200);
+                            });
                         }}
                         onMouseEnter={() => {
                             try {
