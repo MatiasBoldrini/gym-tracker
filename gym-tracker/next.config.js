@@ -2,6 +2,11 @@ const withPWA = require("next-pwa")({
     dest: "public",
     register: true,
     skipWaiting: true,
+    // Next App Router usa requests tipo "/?_rsc=..." para navegar (RSC).
+    // next-pwa por defecto cachea el start-url "/" y puede interceptar esos requests,
+    // causando navegaciones que quedan "pendientes" si el SW/caché está stale/corrupto.
+    // Deshabilitamos el start-url caching y dejamos que "/" vaya siempre a red.
+    cacheStartUrl: false,
     disable: process.env.NODE_ENV === "development",
     // Importante (iOS): NO precachear todo el catálogo de imágenes.
     // Se cachean on-demand por runtimeCaching, y precacheamos selectivamente las de la rutina vía postMessage.

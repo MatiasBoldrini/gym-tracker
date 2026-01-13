@@ -2,26 +2,13 @@
 
 import { Home, LineChart, Activity, User, PenSquare } from "lucide-react";
 import { usePathname, useRouter } from "next/navigation";
-import { useEffect, useState, useRef, startTransition } from "react";
+import { useEffect } from "react";
 import { useAuth } from "@/lib/hooks/useAuth";
 
 export function BottomNav() {
     const pathname = usePathname();
     const router = useRouter();
     const { isAuthenticated, isLoading } = useAuth();
-    const [debugLog, setDebugLog] = useState<string[]>([]);
-    const logCountRef = useRef(0);
-
-    const addDebugLog = (message: string) => {
-        logCountRef.current++;
-        setDebugLog(prev => [...prev.slice(-4), `${logCountRef.current}. ${message}`]);
-        console.log(message);
-    };
-
-    // Log pathname changes
-    useEffect(() => {
-        addDebugLog(`🔵 Pathname: ${pathname}`);
-    }, [pathname]);
 
     const navItems = [
         { name: "Rutina", icon: Home, href: "/" },
@@ -50,16 +37,6 @@ export function BottomNav() {
     }
 
     return (
-        <>
-            {/* Debug Log */}
-            {debugLog.length > 0 && (
-                <div className="fixed bottom-[calc(var(--bottom-nav-base)+env(safe-area-inset-bottom)+0.5rem)] left-2 right-2 bg-black/90 text-white text-[10px] p-2 rounded-lg z-[1001] font-mono max-h-32 overflow-auto">
-                    {debugLog.map((log, i) => (
-                        <div key={i}>{log}</div>
-                    ))}
-                </div>
-            )}
-        
         <nav className="fixed bottom-0 left-0 right-0 bg-white/70 backdrop-blur-md border-t border-black/5 px-4 flex justify-around items-center z-[1000] pointer-events-auto h-[calc(var(--bottom-nav-base)+env(safe-area-inset-bottom))] pt-2 pb-[env(safe-area-inset-bottom)]">
             {navItems.map((item) => {
                 const isActive = pathname === item.href;
@@ -70,24 +47,12 @@ export function BottomNav() {
                         key={item.name}
                         type="button"
                         onClick={(e) => {
-                            addDebugLog(`🟡 Click: ${item.name} -> ${item.href}`);
-                            
                             if (pathname === item.href) {
-                                addDebugLog(`🟡 Same path, ignoring`);
                                 return;
                             }
-                            
-                            // Acceder al evento nativo para usar stopImmediatePropagation
-                            e.nativeEvent.stopImmediatePropagation();
-                            e.stopPropagation();
-                            
-                            addDebugLog(`🟡 Calling router.push: ${item.href}`);
-                            // Usar startTransition para que React priorice esta navegación
-                            startTransition(() => {
-                                router.push(item.href);
-                                addDebugLog(`🟡 router.push executed in transition`);
-                            });
-                            addDebugLog(`🟡 router.push started`);
+                            // Importante: NO usar preventDefault / stopPropagation acá, para no interferir
+                            // con la navegación de Next (App Router / RSC).
+                            router.push(item.href);
                         }}
                         onMouseEnter={() => {
                             try {
@@ -109,6 +74,5 @@ export function BottomNav() {
                 );
             })}
         </nav>
-        </>
     );
 }
