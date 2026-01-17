@@ -1,7 +1,11 @@
 import { type NextRequest } from "next/server";
 import { updateSession } from "@/lib/supabase/middleware";
 
-export async function middleware(request: NextRequest) {
+/**
+ * Next 16: `middleware.ts` está deprecado → usar `proxy.ts`.
+ * Proxy corre en runtime Node.js y se ejecuta por request según el matcher.
+ */
+export async function proxy(request: NextRequest) {
     return await updateSession(request);
 }
 
@@ -18,3 +22,4 @@ export const config = {
         "/((?!_next/static|_next/image|favicon.ico|icons|images|api|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)",
     ],
 };
+
