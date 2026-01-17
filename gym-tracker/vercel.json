@@ -2,11 +2,6 @@
     "installCommand": "npm install && npm --prefix apps/web install",
     "buildCommand": "npm --prefix apps/web run build",
     "outputDirectory": "apps/web/dist",
-    "functions": {
-        "api/**/*.ts": {
-            "runtime": "@vercel/node@3"
-        }
-    },
     "rewrites": [
         {
             "source": "/((?!api/).*)",
