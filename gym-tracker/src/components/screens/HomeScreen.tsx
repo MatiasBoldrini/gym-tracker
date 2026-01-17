@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState, useEffect, useRef, useCallback } from "react";
-import { saveExerciseSets, fetchExerciseSets, fetchExerciseSetsBulk, fetchWeekData, fetchWeeksList, saveSessionRating, setupSpreadsheet, completeOnboarding, dismissOnboarding, resetOnboarding } from "@/lib/sheets-client";
+import { saveExerciseSets, fetchExerciseSets, fetchExerciseSetsBulk, fetchWeekData, fetchWeeksList, saveSessionRating, setupSpreadsheet, completeOnboarding, dismissOnboarding, resetOnboarding, fetchOnboardingData } from "@/lib/sheets-client";
 import { Week, PersonalRecord, Exercise, Set } from "@/types";
 import { ExerciseCard } from "@/components/ui/ExerciseCard";
 import Stack from "@/components/ui/Stack";
@@ -56,6 +56,7 @@ export function HomeScreen({ initialWeek, initialWeeks, initialPrs, initialSetup
     // Track if we've consumed initial server data (to avoid duplicate fetches only on first mount)
     const hasConsumedInitialWeeksRef = useRef(initialWeeks.length > 0);
     const hasConsumedInitialWeekRef = useRef(initialWeek?.days?.length > 0);
+    const hasEnrichedImagesRef = useRef(false);
 
     // Onboarding wizard for new users or empty routines
     const [showOnboardingWizard, setShowOnboardingWizard] = useState(false);
@@ -329,6 +330,61 @@ export function HomeScreen({ initialWeek, initialWeeks, initialPrs, initialSetup
         // Fire-and-forget: el SW cachea en background.
         void cacheUrls(urls);
     }, [auth.isAuthenticated, week]);
+
+    // Enriquecer imágenes en background sin bloquear el primer paint.
+    // SSR ya trae la semana, pero puede venir sin `exercise.image` para evitar leer la hoja "Ejercicios" en el server.
+    useEffect(() => {
+        if (!auth.isAuthenticated) return;
+        if (!week?.days?.length) return;
+        if (hasEnrichedImagesRef.current) return;
+
+        const hasMissingImages = week.days.some((d) => d.exercises.some((e) => !e.image));
+        if (!hasMissingImages) {
+            hasEnrichedImagesRef.current = true;
+            return;
+        }
+
+        let cancelled = false;
+
+        const run = async () => {
+            try {
+                const { exercises } = await fetchOnboardingData();
+                if (cancelled) return;
+
+                const map = new Map<string, string>();
+                exercises.forEach((e) => {
+                    if (e.image) map.set(e.name.toLowerCase(), e.image);
+                });
+
+                setWeek((prev) => {
+                    if (!prev?.days?.length) return prev;
+                    const nextDays = prev.days.map((d) => ({
+                        ...d,
+                        exercises: d.exercises.map((ex) =>
+                            ex.image ? ex : { ...ex, image: map.get(ex.name.toLowerCase()) || undefined }
+                        ),
+                    }));
+                    return { ...prev, days: nextDays };
+                });
+
+                hasEnrichedImagesRef.current = true;
+            } catch (e) {
+                console.warn("No se pudieron enriquecer imágenes (no bloqueante):", e);
+            }
+        };
+
+        const anyWindow = typeof window !== "undefined" ? (window as any) : null;
+        if (anyWindow?.requestIdleCallback) {
+            anyWindow.requestIdleCallback(() => void run(), { timeout: 2000 });
+        } else {
+            setTimeout(() => void run(), 350);
+        }
+
+        return () => {
+            cancelled = true;
+        };
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [auth.isAuthenticated, week?.days?.length]);
 
     const prByExercise = useMemo(() => {
         const map = new Map<string, PersonalRecord>();

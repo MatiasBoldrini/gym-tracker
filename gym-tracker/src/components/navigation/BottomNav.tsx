@@ -1,6 +1,7 @@
 "use client";
 
 import { Home, LineChart, Activity, User, PenSquare } from "lucide-react";
+import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect } from "react";
 import { useAuth } from "@/lib/hooks/useAuth";
@@ -37,22 +38,19 @@ export function BottomNav() {
     }
 
     return (
-        <nav className="fixed bottom-0 left-0 right-0 bg-white/70 backdrop-blur-md border-t border-black/5 px-4 flex justify-around items-center z-[1000] pointer-events-auto h-[calc(var(--bottom-nav-base)+env(safe-area-inset-bottom))] pt-2 pb-[env(safe-area-inset-bottom)]">
+        <nav className="fixed bottom-0 left-0 right-0 bg-white/70 backdrop-blur-md border-t border-black/5 px-4 flex justify-around items-center z-[9999] pointer-events-auto h-[calc(var(--bottom-nav-base)+env(safe-area-inset-bottom))] pt-2 pb-[env(safe-area-inset-bottom)]">
             {navItems.map((item) => {
                 const isActive = pathname === item.href;
                 const Icon = item.icon;
 
                 return (
-                    <button
+                    <Link
                         key={item.name}
-                        type="button"
+                        href={item.href}
                         onClick={(e) => {
-                            if (pathname === item.href) {
-                                return;
+                            if (isActive) {
+                                e.preventDefault();
                             }
-                            // Importante: NO usar preventDefault / stopPropagation acá, para no interferir
-                            // con la navegación de Next (App Router / RSC).
-                            router.push(item.href);
                         }}
                         onMouseEnter={() => {
                             try {
@@ -70,7 +68,7 @@ export function BottomNav() {
                     >
                         <Icon size={24} />
                         <span className="text-[10px] font-medium">{item.name}</span>
-                    </button>
+                    </Link>
                 );
             })}
         </nav>

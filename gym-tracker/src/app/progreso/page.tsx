@@ -4,6 +4,7 @@ import { decrypt } from "@/lib/crypto";
 import { refreshAccessToken } from "@/lib/google/oauth";
 import { readSheetValues } from "@/lib/google/sheets";
 import { parsePRData } from "@/lib/sheets-parse";
+import { DEMO_MODE, demoPrs } from "@/lib/demo-data";
 
 export const dynamic = "force-dynamic";
 
@@ -21,6 +22,9 @@ async function readPrSheet(accessToken: string, spreadsheetId: string) {
 }
 
 export default async function ProgresoPage() {
+    if (DEMO_MODE) {
+        return <ProgresoScreen initialPrs={demoPrs} />;
+    }
     try {
         const supabase = await createClient();
         

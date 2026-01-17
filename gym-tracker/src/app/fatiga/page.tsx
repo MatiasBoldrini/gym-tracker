@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { FatigaScreen } from "@/components/screens/FatigaScreen";
 import { Loader2 } from "lucide-react";
 import type { FatigaDaySummaryRow, FatigaMuscleRow } from "@/lib/fatiga";
+import { DEMO_MODE, getDemoFatigaData } from "@/lib/demo-data";
 
 interface FatigaData {
     muscleRows: FatigaMuscleRow[];
@@ -18,6 +19,11 @@ export default function FatigaPage() {
     const [error, setError] = useState<string | null>(null);
 
     useEffect(() => {
+        if (DEMO_MODE) {
+            setData(getDemoFatigaData());
+            setIsLoading(false);
+            return;
+        }
         async function loadFatiga() {
             try {
                 const response = await fetch("/api/fatiga");

@@ -1,8 +1,28 @@
 import { NextResponse } from "next/server";
 import { createClient, getUserIntegration } from "@/lib/supabase/server";
+import { DEMO_MODE } from "@/lib/demo-data";
 
 export async function GET() {
     try {
+        if (DEMO_MODE) {
+            return NextResponse.json({
+                authenticated: true,
+                hasSpreadsheet: true,
+                spreadsheetId: "demo-sheet",
+                email: "demo@gymtracker.app",
+                userId: "demo-user",
+                onboarding: {
+                    version: 1,
+                    completedAt: new Date().toISOString(),
+                    dismissedAt: null,
+                    hasCompleted: true,
+                    hasDismissed: false,
+                    shouldShow: false,
+                    progress: null,
+                    hasProgress: false,
+                },
+            });
+        }
         const supabase = await createClient();
         const { data: { user }, error: authError } = await supabase.auth.getUser();
 

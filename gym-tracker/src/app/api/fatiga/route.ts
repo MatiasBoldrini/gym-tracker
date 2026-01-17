@@ -4,9 +4,13 @@ import { refreshAccessToken } from "@/lib/google/oauth";
 import { readSheetValues } from "@/lib/google/sheets";
 import { computeFatigaFromSheet } from "@/lib/fatiga";
 import { normalizeSheetsError } from "@/lib/google/sheets-errors";
+import { DEMO_MODE, getDemoFatigaData } from "@/lib/demo-data";
 
 export async function GET() {
     try {
+        if (DEMO_MODE) {
+            return NextResponse.json(getDemoFatigaData());
+        }
         // Get auth context from Supabase + DB
         const auth = await getAuthContext();
         

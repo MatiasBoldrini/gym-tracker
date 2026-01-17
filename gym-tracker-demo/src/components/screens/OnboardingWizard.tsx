@@ -1,0 +1,1161 @@
+"use client";
+
+import { useState, useEffect, useMemo, useCallback } from "react";
+import { motion, AnimatePresence } from "framer-motion";
+import { ChevronRight, Check, Loader2, X, Plus, Trash2 } from "lucide-react";
+import Image from "next/image";
+import {
+    fetchOnboardingData,
+    saveRoutine,
+    createMesociclo,
+    ExerciseItem,
+    RoutineExercise,
+    fetchRoutineDaysSummary,
+    saveOnboardingProgress,
+    loadOnboardingProgress,
+} from "@/lib/sheets-client";
+import { ExerciseSearchModal } from "@/components/ui/ExerciseSearchModal";
+import { BodyMapInteractive } from "@/components/ui/BodyMapInteractive";
+import { MUSCLE_MAPPING, parseSeriesCount, getCategoryFromSvgId } from "@/lib/fatiga";
+import { normalizeMuscleKey } from "@/lib/normalize";
+import { useAuth } from "@/lib/hooks/useAuth";
+
+type Step = "days" | "muscles" | "exercises" | "weeks" | "complete";
+
+type MuscleGroup = "upper" | "lower" | "other";
+
+type MuscleOption = {
+    key: string; // clave canónica (normalizada, sin tildes/case extra)
+    label: string; // display capitalizado
+    group: MuscleGroup;
+};
+
+const MUSCLE_GROUP_ORDER: Record<MuscleGroup, number> = {
+    upper: 0,
+    lower: 1,
+    other: 2,
+};
+
+const UPPER_MUSCLES = new Set<string>([
+    "pecho",
+    "espalda",
+    "hombro",
+    "biceps",
+    "triceps",
+    "antebrazos",
+    "cuello",
+]);
+
+const LOWER_MUSCLES = new Set<string>([
+    "cuadriceps",
+    "isquiotibiales",
+    "gluteos",
+    "gemelos",
+    "aductores",
+]);
+
+const OTHER_MUSCLES = new Set<string>([
+    "abdominales",
+]);
+
+const getMuscleGroup = (normalizedMuscle: string): MuscleGroup => {
+    if (UPPER_MUSCLES.has(normalizedMuscle)) return "upper";
+    if (LOWER_MUSCLES.has(normalizedMuscle)) return "lower";
+    if (OTHER_MUSCLES.has(normalizedMuscle)) return "other";
+    return "other";
+};
+
+const capitalizeFirst = (input: string): string => {
+    const value = String(input ?? "").trim();
+    if (!value) return "";
+    return value.charAt(0).toUpperCase() + value.slice(1);
+};
+
+interface OnboardingWizardProps {
+    isOpen: boolean;
+    onComplete: () => void;
+    onSkip?: () => void;
+    /** Whether spreadsheet setup is running in background */
+    isSettingUp?: boolean;
+    /** Whether spreadsheet setup completed successfully */
+    setupComplete?: boolean;
+    /** Error from spreadsheet setup (if any) */
+    setupError?: string | null;
+}
+
+interface DayConfig {
+    dayId: number;
+    muscles: string[];
+    exercises: (RoutineExercise & { image?: string; muscle?: string })[];
+}
+
+export function OnboardingWizard({ 
+    isOpen, 
+    onComplete, 
+    onSkip,
+    isSettingUp = false,
+    setupComplete = false,
+    setupError = null,
+}: OnboardingWizardProps) {
+    const auth = useAuth();
+    // Wizard state
+    const [step, setStep] = useState<Step>("days");
+    const [totalDays, setTotalDays] = useState<number>(0);
+    const [currentDayIndex, setCurrentDayIndex] = useState(0);
+    const [daysConfig, setDaysConfig] = useState<DayConfig[]>([]);
+    const [totalWeeks, setTotalWeeks] = useState<number>(0);
+
+    // Data state
+    const [availableExercises, setAvailableExercises] = useState<ExerciseItem[]>([]);
+    const [seriesOptions, setSeriesOptions] = useState<string[]>([]);
+    const [isLoadingData, setIsLoadingData] = useState(true);
+    const [isRehydrating, setIsRehydrating] = useState(false);
+
+    // UI state
+    const [isSearchModalOpen, setIsSearchModalOpen] = useState(false);
+    const [isSaving, setIsSaving] = useState(false);
+    const [errorMessage, setErrorMessage] = useState<string | null>(null);
+    const [isSkipModalOpen, setIsSkipModalOpen] = useState(false);
+
+    // BodyMap popover state
+    const [selectedBodyMapMuscle, setSelectedBodyMapMuscle] = useState<string | null>(null);
+    const [selectedBodyMapGroupId, setSelectedBodyMapGroupId] = useState<string | null>(null);
+    const [isBodyMapPopoverOpen, setIsBodyMapPopoverOpen] = useState(false);
+    const [popoverPosition, setPopoverPosition] = useState<{ x: number; y: number } | null>(null);
+
+    // Get unique muscles from exercises (dedupe por normalización + grupo)
+    const availableMuscles = useMemo<MuscleOption[]>(() => {
+        const map = new Map<string, MuscleOption>();
+
+        const addMuscle = (rawMuscle: string | undefined | null) => {
+            if (!rawMuscle) return;
+            const normalized = normalizeMuscleKey(rawMuscle);
+            if (!normalized) return;
+            if (map.has(normalized)) return;
+
+            const labelSource = rawMuscle.trim() || normalized;
+            map.set(normalized, {
+                key: normalized,
+                label: capitalizeFirst(labelSource),
+                group: getMuscleGroup(normalized),
+            });
+        };
+
+        // Preferir datos reales de Sheets cuando existen.
+        availableExercises.forEach((e) => addMuscle(e.muscle));
+
+        // Mantener lo que ya está seleccionado aunque no esté en la data (progreso previo).
+        daysConfig.forEach((day) => {
+            day.muscles.forEach((m) => addMuscle(m));
+        });
+
+        // Fallback: mostrar todas las categorías conocidas aunque la data aún no cargue.
+        if (map.size === 0) {
+            Object.keys(MUSCLE_MAPPING).forEach(addMuscle);
+        } else {
+            Object.keys(MUSCLE_MAPPING).forEach(addMuscle);
+        }
+
+        const values = Array.from(map.values());
+        return values.sort((a, b) => {
+            const groupOrder = MUSCLE_GROUP_ORDER[a.group] - MUSCLE_GROUP_ORDER[b.group];
+            if (groupOrder !== 0) return groupOrder;
+            return a.label.localeCompare(b.label, "es", { sensitivity: "base" });
+        });
+    }, [availableExercises, daysConfig]);
+
+    // Current day being configured
+    const currentDay = daysConfig[currentDayIndex];
+
+    // Compute weekly series by category (across all days) for bodymap coloring
+    const { weeklySeriesByCategory, intensityByGroupId } = useMemo(() => {
+        const seriesByCategory: Record<string, number> = {};
+
+        // Sum series from all days
+        daysConfig.forEach((day) => {
+            day.exercises.forEach((exercise) => {
+                const muscle = normalizeMuscleKey(exercise.muscle);
+                if (!muscle) return;
+                const seriesCount = parseSeriesCount(exercise.prescribedSeries);
+                seriesByCategory[muscle] = (seriesByCategory[muscle] || 0) + seriesCount;
+            });
+        });
+
+        // Map category series to SVG group IDs
+        const intensities: Record<string, number> = {};
+        Object.entries(seriesByCategory).forEach(([category, series]) => {
+            const svgIds = MUSCLE_MAPPING[category] || [];
+            svgIds.forEach((id) => {
+                // Accumulate if multiple categories map to same ID (unlikely but safe)
+                intensities[id] = (intensities[id] || 0) + series;
+            });
+        });
+
+        return { weeklySeriesByCategory: seriesByCategory, intensityByGroupId: intensities };
+    }, [daysConfig]);
+
+    // Get SVG IDs that are selected for the current day (for highlighting)
+    const currentDayHighlightedIds = useMemo(() => {
+        if (!currentDay) return [];
+        const ids: string[] = [];
+        currentDay.muscles.forEach((muscle) => {
+            const normalized = normalizeMuscleKey(muscle);
+            const mappingKey = Object.keys(MUSCLE_MAPPING).find(
+                (k) => normalizeMuscleKey(k) === normalized
+            );
+            const svgIds = mappingKey ? MUSCLE_MAPPING[mappingKey] : [];
+            ids.push(...svgIds);
+        });
+        return ids;
+    }, [currentDay]);
+
+    // Reset wizard state when opened
+    useEffect(() => {
+        if (isOpen) {
+            setStep("days");
+            setTotalDays(0);
+            setCurrentDayIndex(0);
+            setDaysConfig([]);
+            setTotalWeeks(0);
+            setErrorMessage(null);
+        }
+    }, [isOpen]);
+
+    // Load initial data - deferred until setup is complete
+    // This allows user to start onboarding (select days) while spreadsheet is being created
+    useEffect(() => {
+        if (!isOpen) return;
+        // Wait for setup to complete before loading Sheets data
+        if (!setupComplete && !auth.hasSpreadsheet) {
+            // Mark as loading but don't fetch yet
+            setIsLoadingData(true);
+            return;
+        }
+
+        let cancelled = false;
+
+        const loadData = async () => {
+            setIsLoadingData(true);
+            try {
+                // Use batched endpoint (single request instead of 2)
+                const { exercises, series } = await fetchOnboardingData();
+
+                if (cancelled) return;
+
+                setAvailableExercises(exercises);
+                setSeriesOptions(series);
+            } catch (error: any) {
+                console.error("Error loading data:", error);
+                setErrorMessage(error.message || "Error al cargar datos");
+            } finally {
+                if (!cancelled) setIsLoadingData(false);
+            }
+        };
+
+        loadData();
+        return () => {
+            cancelled = true;
+        };
+    }, [isOpen, setupComplete, auth.hasSpreadsheet]);
+
+    // Ensure daysConfig stays aligned with totalDays (expand/trim) and keep index in range
+    useEffect(() => {
+        if (totalDays <= 0) return;
+        setDaysConfig((prev) => {
+            let next = [...prev];
+            if (next.length < totalDays) {
+                for (let i = next.length; i < totalDays; i++) {
+                    next.push({ dayId: i + 1, muscles: [], exercises: [] });
+                }
+            } else if (next.length > totalDays) {
+                next = next.slice(0, totalDays);
+            }
+
+            // Re-number dayId to stay consistent
+            next = next.map((day, idx) => ({ ...day, dayId: idx + 1 }));
+
+            // Avoid state updates if nothing changed
+            const unchanged = next.length === prev.length && next.every((d, idx) =>
+                prev[idx] &&
+                prev[idx].dayId === d.dayId &&
+                prev[idx].muscles === d.muscles &&
+                prev[idx].exercises === d.exercises
+            );
+            return unchanged ? prev : next;
+        });
+
+        setCurrentDayIndex((idx) => {
+            if (idx < 0) return 0;
+            if (idx > totalDays - 1) return Math.max(totalDays - 1, 0);
+            return idx;
+        });
+    }, [totalDays]);
+
+    // Persist onboarding progreso (best-effort)
+    const persistProgress = useCallback(
+        (partial: Partial<{ step: Step; currentDayIndex: number; totalDays: number }>) => {
+            const payload = {
+                totalDays: (partial.totalDays ?? totalDays) || undefined,
+                currentDayIndex: partial.currentDayIndex ?? currentDayIndex,
+                step: partial.step ?? step,
+            };
+            if (!payload.totalDays) return;
+            saveOnboardingProgress(payload).catch((e) =>
+                console.error("No se pudo guardar progreso de onboarding:", e)
+            );
+        },
+        [currentDayIndex, step, totalDays]
+    );
+
+    // Rehydrate progress when wizard opens
+    useEffect(() => {
+        if (!isOpen) return;
+        let cancelled = false;
+
+        const rehydrate = async () => {
+            setIsRehydrating(true);
+            try {
+                const [progress, summary] = await Promise.all([
+                    loadOnboardingProgress(),
+                    auth.hasSpreadsheet ? fetchRoutineDaysSummary().catch(() => []) : Promise.resolve([]),
+                ]);
+
+                const hasSavedExercises = Array.isArray(summary)
+                    ? summary.some((d) => d.exercisesCount > 0)
+                    : false;
+
+                // Determine totalDays: prefer saved progress, otherwise derive from summary length (cap 5)
+                const derivedTotalDays = progress?.totalDays && progress.totalDays > 0
+                    ? Math.min(5, progress.totalDays)
+                    : hasSavedExercises && Array.isArray(summary) && summary.length > 0
+                        ? Math.min(5, summary.length)
+                        : 0;
+
+                if (derivedTotalDays > 0) {
+                    setTotalDays(derivedTotalDays);
+                }
+
+                let nextDayIndex = typeof progress?.currentDayIndex === "number" && progress.currentDayIndex >= 0
+                    ? progress.currentDayIndex
+                    : 0;
+                let nextStep: Step = "muscles";
+
+                const isValidStep = (value: string | undefined | null): value is Step =>
+                    value === "days" || value === "muscles" || value === "exercises" || value === "weeks" || value === "complete";
+
+                if (isValidStep(progress?.step)) {
+                    nextStep = progress!.step;
+                }
+
+                if (hasSavedExercises && derivedTotalDays > 0 && Array.isArray(summary)) {
+                    const firstIncompleteIdx = summary.findIndex(
+                        (d, idx) => idx < derivedTotalDays && d.exercisesCount === 0
+                    );
+
+                    if (firstIncompleteIdx === -1) {
+                        // Todos los días con algo cargado: pasar a semanas
+                        nextDayIndex = Math.min(derivedTotalDays - 1, summary.length - 1);
+                        nextStep = "weeks";
+                    } else {
+                        nextDayIndex = firstIncompleteIdx;
+                        nextStep = "muscles";
+                    }
+                }
+
+                setCurrentDayIndex((idx) => {
+                    if (nextDayIndex < 0) return 0;
+                    return Math.min(nextDayIndex, Math.max((derivedTotalDays || totalDays) - 1, 0));
+                });
+
+                if (derivedTotalDays > 0) {
+                    setStep(nextStep);
+                }
+            } catch (error) {
+                console.error("Error rehidratando onboarding:", error);
+            } finally {
+                if (!cancelled) setIsRehydrating(false);
+            }
+        };
+
+        rehydrate();
+        return () => {
+            cancelled = true;
+        };
+    }, [auth.hasSpreadsheet, isOpen]);
+
+    // Toggle muscle selection for current day (usa clave normalizada)
+    const toggleMuscle = (muscle: string) => {
+        const key = normalizeMuscleKey(muscle);
+        if (!key) return;
+
+        setDaysConfig((prev) => {
+            const updated = [...prev];
+            const oldDay = updated[currentDayIndex];
+            // Create a new object reference so useMemo dependencies detect the change
+            const normalizedCurrent = new Set(oldDay.muscles.map(normalizeMuscleKey));
+            if (normalizedCurrent.has(key)) {
+                normalizedCurrent.delete(key);
+            } else {
+                normalizedCurrent.add(key);
+            }
+            const newDay = {
+                ...oldDay,
+                muscles: Array.from(normalizedCurrent),
+            };
+            updated[currentDayIndex] = newDay;
+            return updated;
+        });
+    };
+
+    // Handle bodymap muscle click
+    const handleBodyMapMuscleClick = (muscleId: string, e: React.MouseEvent) => {
+        const category = getCategoryFromSvgId(muscleId);
+        if (!category) return;
+
+        // Calculate position for popover
+        const rect = e.currentTarget.getBoundingClientRect();
+        const x = rect.left + rect.width / 2;
+        const y = rect.top;
+
+        setSelectedBodyMapMuscle(category);
+        setSelectedBodyMapGroupId(muscleId);
+        setPopoverPosition({ x, y });
+        setIsBodyMapPopoverOpen(true);
+    };
+
+    // Get series count for a category (usando clave normalizada)
+    const getSeriesForCategory = (category: string): number => {
+        const key = normalizeMuscleKey(category);
+        return weeklySeriesByCategory[key] || 0;
+    };
+
+    // Check if a category is selected for the current day
+    const isCategorySelectedForCurrentDay = (category: string): boolean => {
+        if (!currentDay) return false;
+        const key = normalizeMuscleKey(category);
+        return currentDay.muscles.some((m) => normalizeMuscleKey(m) === key);
+    };
+
+    // Add exercise to current day
+    const handleAddExercise = useCallback((exercise: { name: string; prescribedSeries: string; image: string; muscle?: string }) => {
+        setDaysConfig((prev) => {
+            const updated = [...prev];
+            const day = updated[currentDayIndex];
+            day.exercises = [
+                ...day.exercises,
+                {
+                    name: exercise.name,
+                    prescribedSeries: exercise.prescribedSeries,
+                    image: exercise.image || undefined,
+                    muscle: exercise.muscle,
+                },
+            ];
+            return updated;
+        });
+        setIsSearchModalOpen(false);
+    }, [currentDayIndex]);
+
+    // Remove exercise from current day
+    const handleRemoveExercise = (index: number) => {
+        setDaysConfig((prev) => {
+            const updated = [...prev];
+            const day = updated[currentDayIndex];
+            day.exercises = day.exercises.filter((_, i) => i !== index);
+            return updated;
+        });
+    };
+
+    // Save current day's routine and move to next
+    const saveCurrentDayAndContinue = async () => {
+        if (!currentDay || currentDay.exercises.length === 0) {
+            setErrorMessage("Agregá al menos un ejercicio");
+            return;
+        }
+
+        setIsSaving(true);
+        setErrorMessage(null);
+
+        try {
+            const result = await saveRoutine(
+                currentDay.dayId,
+                currentDay.exercises.map((e) => ({
+                    name: e.name,
+                    prescribedSeries: e.prescribedSeries,
+                }))
+            );
+
+            if (!result.ok) {
+                throw new Error(result.error || "Error al guardar");
+            }
+
+            // Move to next day or weeks step
+            if (currentDayIndex < totalDays - 1) {
+                const nextIndex = currentDayIndex + 1;
+                setCurrentDayIndex((prev) => prev + 1);
+                setStep("muscles");
+                persistProgress({ currentDayIndex: nextIndex, step: "muscles" });
+            } else {
+                setStep("weeks");
+                persistProgress({ step: "weeks" });
+            }
+        } catch (error: any) {
+            setErrorMessage(error.message || "Error al guardar la rutina");
+        } finally {
+            setIsSaving(false);
+        }
+    };
+
+    // Create mesociclo and complete onboarding
+    const handleCreateMesociclo = async () => {
+        if (totalWeeks < 1 || totalWeeks > 15) {
+            setErrorMessage("Ingresá un número entre 1 y 15");
+            return;
+        }
+
+        setIsSaving(true);
+        setErrorMessage(null);
+
+        try {
+            const result = await createMesociclo(totalWeeks);
+
+            if (!result.ok) {
+                throw new Error(result.error || "Error al crear mesociclo");
+            }
+
+            setStep("complete");
+            
+            // Wait a moment then close
+            setTimeout(() => {
+                onComplete();
+            }, 1500);
+        } catch (error: any) {
+            setErrorMessage(error.message || "Error al crear el mesociclo");
+        } finally {
+            setIsSaving(false);
+        }
+    };
+
+    if (!isOpen) return null;
+
+    // Fallback to avoid overlay vacío if state desincroniza
+    if ((step === "muscles" || step === "exercises") && !currentDay) {
+        return (
+            <div className="fixed inset-0 z-[200] bg-[#F2F2F7] flex flex-col items-center justify-center">
+                <Loader2 className="w-8 h-8 animate-spin text-ios-blue" />
+                <p className="mt-3 text-gray-500 font-medium">
+                    {isRehydrating ? "Recuperando tu rutina..." : "Preparando tu siguiente día..."}
+                </p>
+            </div>
+        );
+    }
+
+    // Check if we need Sheets data for the current step
+    // Steps "days" and "muscles" don't need Sheets data - user can proceed while setup runs
+    const stepNeedsSheetsData = step === "exercises" || step === "weeks";
+    const isWaitingForSetup = isSettingUp || (!setupComplete && !auth.hasSpreadsheet);
+    
+    // Show loading only if we're on a step that needs data AND we're still loading
+    if (stepNeedsSheetsData && (isLoadingData || isWaitingForSetup)) {
+        const message = isWaitingForSetup 
+            ? "Creando tu planilla de entrenamiento..." 
+            : "Cargando ejercicios...";
+        return (
+            <div className="fixed inset-0 z-[200] bg-[#F2F2F7] flex flex-col items-center justify-center">
+                <Loader2 className="w-10 h-10 animate-spin text-ios-blue" />
+                <p className="mt-4 text-gray-500 font-medium">{message}</p>
+                {setupError && (
+                    <p className="mt-2 text-red-500 text-sm font-medium text-center px-8">{setupError}</p>
+                )}
+            </div>
+        );
+    }
+
+    const handleSkip = () => {
+        setIsSkipModalOpen(true);
+    };
+
+    return (
+        <div className="fixed inset-0 z-[200] bg-[#F2F2F7] flex flex-col overflow-hidden">
+            {/* Skip button - visible on all steps except complete */}
+            {step !== "complete" && (
+                <div className="absolute top-[env(safe-area-inset-top)] right-0 p-6 z-10">
+                    <button
+                        onClick={handleSkip}
+                        className="text-gray-500 font-bold text-sm hover:text-gray-700 active:opacity-60 transition-all"
+                    >
+                        Omitir por ahora
+                    </button>
+                </div>
+            )}
+
+            <AnimatePresence mode="wait">
+                {/* Step 1: Number of Days */}
+                {step === "days" && (
+                    <motion.div
+                        key="days"
+                        initial={{ opacity: 0, x: 50 }}
+                        animate={{ opacity: 1, x: 0 }}
+                        exit={{ opacity: 0, x: -50 }}
+                        className="flex-1 flex flex-col items-center justify-center px-8"
+                    >
+                        <h1 className="text-4xl font-black text-black text-center mb-4">
+                            ¿Cuántos días querés entrenar?
+                        </h1>
+                        <p className="text-gray-500 text-center mb-12 max-w-xs">
+                            Elegí la cantidad de días por semana que vas a dedicar al gym
+                        </p>
+
+                        {/* Number counter */}
+                        <div className="flex items-center gap-6 mb-12">
+                            <button
+                                onClick={() => setTotalDays(Math.max(1, totalDays - 1))}
+                                disabled={totalDays <= 1}
+                                className="w-14 h-14 rounded-2xl bg-white text-black font-black text-2xl shadow-md border-2 border-gray-200 disabled:opacity-30 disabled:cursor-not-allowed active:scale-95 transition-all"
+                            >
+                                −
+                            </button>
+                            <div className="w-24 h-24 rounded-3xl bg-white shadow-lg border-2 border-gray-200 flex items-center justify-center">
+                                <span className="text-5xl font-black tabular-nums text-black">
+                                    {totalDays || 0}
+                                </span>
+                            </div>
+                            <button
+                                onClick={() => setTotalDays(Math.min(5, totalDays + 1))}
+                                disabled={totalDays >= 5}
+                                className="w-14 h-14 rounded-2xl bg-white text-black font-black text-2xl shadow-md border-2 border-gray-200 disabled:opacity-30 disabled:cursor-not-allowed active:scale-95 transition-all"
+                            >
+                                +
+                            </button>
+                        </div>
+
+                        <button
+                            onClick={() => {
+                                if (totalDays > 0) {
+                                    setStep("muscles");
+                                    persistProgress({ step: "muscles", currentDayIndex: 0, totalDays });
+                                }
+                            }}
+                            disabled={totalDays === 0}
+                            className="flex items-center gap-2 px-8 py-4 bg-black text-white rounded-2xl font-bold text-lg disabled:opacity-30"
+                        >
+                            Continuar
+                            <ChevronRight size={20} />
+                        </button>
+                    </motion.div>
+                )}
+
+                {/* Step 2: Muscle Selection */}
+                {step === "muscles" && currentDay && (
+                    <motion.div
+                        key={`muscles-${currentDay.dayId}`}
+                        initial={{ opacity: 0, x: 50 }}
+                        animate={{ opacity: 1, x: 0 }}
+                        exit={{ opacity: 0, x: -50 }}
+                        className="flex-1 flex flex-col min-h-0 pt-[calc(env(safe-area-inset-top)+1.5rem)]"
+                    >
+                        {/* Scrollable content (iOS-safe) */}
+                        <div
+                            className="flex-1 min-h-0 h-0 overflow-y-auto pb-4"
+                            style={{ WebkitOverflowScrolling: "touch", overscrollBehavior: "contain", touchAction: "pan-y" }}
+                        >
+                            {/* Header */}
+                            <div className="px-6 mb-4">
+                                <p className="text-ios-blue font-bold text-sm mb-1">
+                                    Día {currentDay.dayId} de {totalDays}
+                                </p>
+                                <h1 className="text-3xl font-black text-black">
+                                    ¿Qué vas a entrenar?
+                                </h1>
+                                <p className="text-gray-500 mt-1">
+                                    Tocá el gráfico o las tarjetas para seleccionar
+                                </p>
+                            </div>
+
+                            {/* Body Map Section */}
+                            <div className="px-6 mb-4">
+                                <div className="bg-white rounded-2xl p-4 border border-black/5 shadow-sm">
+                                    <div className="flex gap-4 w-full h-[280px]">
+                                        <div className="flex-1 flex flex-col items-center justify-center relative">
+                                            <BodyMapInteractive
+                                                view="front"
+                                                intensityByGroupId={intensityByGroupId}
+                                                onMuscleClick={handleBodyMapMuscleClick}
+                                                highlightGroupIds={currentDayHighlightedIds}
+                                                activeGroupIds={selectedBodyMapGroupId ? [selectedBodyMapGroupId] : []}
+                                                className="h-full w-full"
+                                            />
+                                            <span className="absolute bottom-0 text-[10px] font-black text-gray-300 uppercase tracking-widest pointer-events-none">
+                                                Frente
+                                            </span>
+                                        </div>
+                                        <div className="flex-1 flex flex-col items-center justify-center relative">
+                                            <BodyMapInteractive
+                                                view="back"
+                                                intensityByGroupId={intensityByGroupId}
+                                                onMuscleClick={handleBodyMapMuscleClick}
+                                                highlightGroupIds={currentDayHighlightedIds}
+                                                activeGroupIds={selectedBodyMapGroupId ? [selectedBodyMapGroupId] : []}
+                                                className="h-full w-full"
+                                            />
+                                            <span className="absolute bottom-0 text-[10px] font-black text-gray-300 uppercase tracking-widest pointer-events-none">
+                                                Espalda
+                                            </span>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                        {/* BodyMap Popover */}
+                        <AnimatePresence>
+                            {isBodyMapPopoverOpen && selectedBodyMapMuscle && popoverPosition && (
+                                <>
+                                    {/* Backdrop */}
+                                    <div
+                                        className="fixed inset-0 z-40 bg-transparent"
+                                        onClick={() => {
+                                            setIsBodyMapPopoverOpen(false);
+                                            setSelectedBodyMapMuscle(null);
+                                            setSelectedBodyMapGroupId(null);
+                                            setPopoverPosition(null);
+                                        }}
+                                    />
+                                    <motion.div
+                                        initial={{ opacity: 0, scale: 0.8, y: 10 }}
+                                        animate={{ opacity: 1, scale: 1, y: 0 }}
+                                        exit={{ opacity: 0, scale: 0.8, y: 10 }}
+                                        onClick={(e) => e.stopPropagation()}
+                                        style={{
+                                            position: "fixed",
+                                            left: popoverPosition.x,
+                                            top: popoverPosition.y - 10,
+                                            transform: "translate(-50%, -100%)",
+                                        }}
+                                        className="z-50 w-56"
+                                    >
+                                        <div className="bg-white/95 backdrop-blur-md rounded-2xl shadow-xl border border-black/5 p-4">
+                                            <div className="text-center mb-3">
+                                                <h3 className="text-sm font-black uppercase tracking-tight mb-0.5 capitalize">
+                                                    {selectedBodyMapMuscle}
+                                                </h3>
+                                                <p className="text-gray-400 text-[10px] font-bold uppercase tracking-wider">
+                                                    {getSeriesForCategory(selectedBodyMapMuscle)} series semanales
+                                                </p>
+                                            </div>
+
+                                            <button
+                                                onClick={() => {
+                                                    // Buscar match robusto (case/tildes) y fallback a la categoría tocada.
+                                                    const matchingMuscleKey =
+                                                        availableMuscles.find(
+                                                            (m) =>
+                                                                normalizeMuscleKey(m.key) ===
+                                                                normalizeMuscleKey(selectedBodyMapMuscle)
+                                                        )?.key || normalizeMuscleKey(selectedBodyMapMuscle);
+
+                                                    toggleMuscle(matchingMuscleKey);
+                                                    setIsBodyMapPopoverOpen(false);
+                                                    setSelectedBodyMapMuscle(null);
+                                                    setSelectedBodyMapGroupId(null);
+                                                    setPopoverPosition(null);
+                                                }}
+                                                className={`w-full py-3 rounded-xl font-bold text-sm transition-all ${
+                                                    isCategorySelectedForCurrentDay(selectedBodyMapMuscle)
+                                                        ? "bg-red-50 text-red-600 border border-red-200"
+                                                        : "bg-ios-blue text-white"
+                                                }`}
+                                            >
+                                                {isCategorySelectedForCurrentDay(selectedBodyMapMuscle)
+                                                    ? `Quitar del Día ${currentDay.dayId}`
+                                                    : `Agregar al Día ${currentDay.dayId}`}
+                                            </button>
+
+                                            {/* Arrow pointing down */}
+                                            <div className="absolute left-1/2 bottom-0 transform -translate-x-1/2 translate-y-full">
+                                                <div className="w-0 h-0 border-l-[6px] border-l-transparent border-r-[6px] border-r-transparent border-t-[6px] border-t-white/95 drop-shadow-sm"></div>
+                                            </div>
+                                        </div>
+                                    </motion.div>
+                                </>
+                            )}
+                        </AnimatePresence>
+
+                        {/* Muscle Grid */}
+                        <div className="px-6 pb-4">
+                            <p className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-3">
+                                O seleccioná por tarjetas
+                            </p>
+                            <div className="grid grid-cols-2 gap-3">
+                                {(() => {
+                                    const renderGroup = (group: MuscleGroup, title: string) => {
+                                        const muscles = availableMuscles.filter((m) => m.group === group);
+                                        if (muscles.length === 0) return null;
+
+                                        return (
+                                            <>
+                                                <div className="col-span-2 text-xs font-black text-gray-500 uppercase tracking-[0.14em]">
+                                                    {title}
+                                                </div>
+                                                {muscles.map((muscle) => {
+                                                    const isSelected = currentDay.muscles.some(
+                                                        (m) => normalizeMuscleKey(m) === muscle.key
+                                                    );
+                                                    const seriesCount = getSeriesForCategory(muscle.key);
+                                                    return (
+                                                        <button
+                                                            key={muscle.key}
+                                                            onClick={() => toggleMuscle(muscle.key)}
+                                                            // ayuda a que el gesto vertical se trate como scroll en mobile
+                                                            style={{ touchAction: "pan-y" }}
+                                                            className={`p-4 rounded-2xl text-left font-bold transition-all ${
+                                                                isSelected
+                                                                    ? "bg-ios-blue text-white shadow-lg"
+                                                                    : "bg-white text-gray-700 border border-gray-200"
+                                                            }`}
+                                                        >
+                                                            <span className="text-lg">{muscle.label}</span>
+                                                            {seriesCount > 0 && (
+                                                                <span
+                                                                    className={`ml-2 text-xs ${isSelected ? "text-white/70" : "text-gray-400"}`}
+                                                                >
+                                                                    ({seriesCount}s)
+                                                                </span>
+                                                            )}
+                                                        </button>
+                                                    );
+                                                })}
+                                            </>
+                                        );
+                                    };
+
+                                    return (
+                                        <>
+                                            {renderGroup("upper", "Tren Superior")}
+                                            {renderGroup("lower", "Tren Inferior")}
+                                            {renderGroup("other", "Otros")}
+                                        </>
+                                    );
+                                })()}
+                            </div>
+                        </div>
+                        </div>
+
+                        {/* Continue Button */}
+                        <div className="px-6 pt-4 pb-[calc(var(--bottom-nav-base)+env(safe-area-inset-bottom))] bg-white border-t border-gray-200">
+                            <button
+                                onClick={() => {
+                                    if (currentDay.muscles.length > 0) {
+                                        setStep("exercises");
+                                        persistProgress({ step: "exercises" });
+                                    }
+                                }}
+                                disabled={currentDay.muscles.length === 0}
+                                className="w-full flex items-center justify-center gap-2 py-4 bg-black text-white rounded-2xl font-bold text-lg disabled:opacity-30"
+                            >
+                                Elegir ejercicios
+                                <ChevronRight size={20} />
+                            </button>
+                            <div className="h-0" />
+                        </div>
+                    </motion.div>
+                )}
+
+                {/* Step 3: Exercise Selection */}
+                {step === "exercises" && currentDay && (
+                    <motion.div
+                        key={`exercises-${currentDay.dayId}`}
+                        initial={{ opacity: 0, x: 50 }}
+                        animate={{ opacity: 1, x: 0 }}
+                        exit={{ opacity: 0, x: -50 }}
+                        className="flex-1 flex flex-col min-h-0 pt-[calc(env(safe-area-inset-top)+1.5rem)]"
+                    >
+                        {/* Scrollable content (iOS-safe) */}
+                        <div
+                            className="flex-1 min-h-0 h-0 overflow-y-auto pb-4"
+                            style={{ WebkitOverflowScrolling: "touch", overscrollBehavior: "contain", touchAction: "pan-y" }}
+                        >
+                            {/* Header */}
+                            <div className="px-6 mb-4">
+                                <p className="text-ios-blue font-bold text-sm mb-1">
+                                    Día {currentDay.dayId} de {totalDays}
+                                </p>
+                                <h1 className="text-3xl font-black text-black">
+                                    Elegí tus ejercicios
+                                </h1>
+                                <p className="text-gray-500 mt-1">
+                                    {currentDay.muscles.join(", ")}
+                                </p>
+                            </div>
+
+                            {/* Error Message */}
+                            {errorMessage && (
+                                <div className="mx-6 mb-4 px-4 py-3 bg-red-50 border border-red-200 rounded-2xl">
+                                    <p className="text-sm text-red-700 font-medium">{errorMessage}</p>
+                                </div>
+                            )}
+
+                            {/* Exercise List */}
+                            <div className="px-6 pb-4">
+                                {currentDay.exercises.length === 0 ? (
+                                    <div className="text-center py-12">
+                                        <p className="text-gray-400 font-medium mb-4">
+                                            Aún no agregaste ejercicios
+                                        </p>
+                                        <button
+                                            onClick={() => setIsSearchModalOpen(true)}
+                                            className="inline-flex items-center gap-2 px-6 py-3 bg-ios-blue text-white rounded-2xl font-bold"
+                                        >
+                                            <Plus size={20} />
+                                            Agregar Ejercicio
+                                        </button>
+                                    </div>
+                                ) : (
+                                    <div className="space-y-2">
+                                        {currentDay.exercises.map((exercise, idx) => (
+                                            <div
+                                                key={`${exercise.name}-${idx}`}
+                                                className="flex items-center gap-3 p-3 bg-white rounded-2xl border border-black/5"
+                                            >
+                                                <div className="w-12 h-12 rounded-xl bg-gray-50 border border-black/5 overflow-hidden flex-shrink-0">
+                                                    {exercise.image ? (
+                                                        <Image
+                                                            src={`/images/exercises/${exercise.image}`}
+                                                            alt={exercise.name}
+                                                            width={48}
+                                                            height={48}
+                                                            className="w-full h-full object-contain"
+                                                        />
+                                                    ) : (
+                                                        <div className="w-full h-full flex items-center justify-center text-gray-300 text-[10px] font-bold">
+                                                            IMG
+                                                        </div>
+                                                    )}
+                                                </div>
+                                                <div className="flex-1 min-w-0">
+                                                    <div className="font-bold text-black text-sm truncate">
+                                                        {exercise.name}
+                                                    </div>
+                                                    <div className="text-xs text-gray-400 font-medium">
+                                                        {exercise.prescribedSeries}
+                                                    </div>
+                                                </div>
+                                                <button
+                                                    onClick={() => handleRemoveExercise(idx)}
+                                                    className="p-2 text-gray-300 hover:text-red-500 hover:bg-red-50 rounded-xl transition-colors"
+                                                >
+                                                    <Trash2 size={18} />
+                                                </button>
+                                            </div>
+                                        ))}
+
+                                        {currentDay.exercises.length < 7 && (
+                                            <button
+                                                onClick={() => setIsSearchModalOpen(true)}
+                                                className="w-full flex items-center justify-center gap-2 p-4 border-2 border-dashed border-gray-200 rounded-2xl text-gray-400 font-bold hover:border-ios-blue hover:text-ios-blue transition-colors"
+                                            >
+                                                <Plus size={20} />
+                                                Agregar Ejercicio ({currentDay.exercises.length}/7)
+                                            </button>
+                                        )}
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+
+                        {/* Save & Continue Button */}
+                        <div className="px-6 pt-4 pb-[calc(var(--bottom-nav-base)+env(safe-area-inset-bottom))] bg-white border-t border-gray-200">
+                            <button
+                                onClick={saveCurrentDayAndContinue}
+                                disabled={currentDay.exercises.length === 0 || isSaving}
+                                className="w-full flex items-center justify-center gap-2 py-4 bg-black text-white rounded-2xl font-bold text-lg disabled:opacity-30"
+                            >
+                                {isSaving ? (
+                                    <Loader2 size={20} className="animate-spin" />
+                                ) : (
+                                    <>
+                                        {currentDayIndex < totalDays - 1
+                                            ? `Guardar y continuar al Día ${currentDay.dayId + 1}`
+                                            : "Guardar y finalizar"}
+                                        <ChevronRight size={20} />
+                                    </>
+                                )}
+                            </button>
+                            <div className="h-0" />
+                        </div>
+
+                        {/* Exercise Search Modal */}
+                        <ExerciseSearchModal
+                            isOpen={isSearchModalOpen}
+                            onClose={() => setIsSearchModalOpen(false)}
+                            exercises={availableExercises}
+                            seriesOptions={seriesOptions}
+                            onAddExercise={handleAddExercise}
+                            existingExerciseNames={currentDay.exercises.map((e) => e.name)}
+                            defaultSelectedMuscles={currentDay.muscles}
+                            multiMuscleMode={true}
+                        />
+                    </motion.div>
+                )}
+
+                {/* Step 4: Weeks Selection */}
+                {step === "weeks" && (
+                    <motion.div
+                        key="weeks"
+                        initial={{ opacity: 0, x: 50 }}
+                        animate={{ opacity: 1, x: 0 }}
+                        exit={{ opacity: 0, x: -50 }}
+                        className="flex-1 flex flex-col items-center justify-center px-8"
+                    >
+                        <h1 className="text-4xl font-black text-black text-center mb-4">
+                            ¿Cuántas semanas?
+                        </h1>
+                        <p className="text-gray-500 text-center mb-8 max-w-xs">
+                            Elegí la duración de tu mesociclo (bloque de entrenamiento)
+                        </p>
+
+                        {/* Number input */}
+                        <div className="flex items-center gap-4 mb-8">
+                            <input
+                                type="number"
+                                min="1"
+                                max="15"
+                                value={totalWeeks || ""}
+                                onChange={(e) => {
+                                    const val = parseInt(e.target.value);
+                                    if (val >= 1 && val <= 15) {
+                                        setTotalWeeks(val);
+                                    } else if (e.target.value === "") {
+                                        setTotalWeeks(0);
+                                    }
+                                }}
+                                placeholder="1-15"
+                                className="w-32 h-20 text-center text-4xl font-black bg-white border-2 border-gray-200 rounded-2xl focus:border-ios-blue focus:outline-none"
+                            />
+                            <span className="text-2xl font-bold text-gray-400">semanas</span>
+                        </div>
+
+                        {/* Quick select */}
+                        <div className="flex gap-2 mb-12">
+                            {[4, 6, 8, 12].map((num) => (
+                                <button
+                                    key={num}
+                                    onClick={() => setTotalWeeks(num)}
+                                    className={`px-4 py-2 rounded-xl text-sm font-bold transition-all ${
+                                        totalWeeks === num
+                                            ? "bg-ios-blue text-white"
+                                            : "bg-gray-100 text-gray-600"
+                                    }`}
+                                >
+                                    {num} sem
+                                </button>
+                            ))}
+                        </div>
+
+                        {/* Error Message */}
+                        {errorMessage && (
+                            <div className="mb-4 px-4 py-3 bg-red-50 border border-red-200 rounded-2xl">
+                                <p className="text-sm text-red-700 font-medium">{errorMessage}</p>
+                            </div>
+                        )}
+
+                        <button
+                            onClick={handleCreateMesociclo}
+                            disabled={totalWeeks < 1 || totalWeeks > 15 || isSaving}
+                            className="flex items-center gap-2 px-8 py-4 bg-black text-white rounded-2xl font-bold text-lg disabled:opacity-30"
+                        >
+                            {isSaving ? (
+                                <Loader2 size={20} className="animate-spin" />
+                            ) : (
+                                <>
+                                    Crear Mesociclo
+                                    <ChevronRight size={20} />
+                                </>
+                            )}
+                        </button>
+                    </motion.div>
+                )}
+
+                {/* Complete State */}
+                {step === "complete" && (
+                    <motion.div
+                        key="complete"
+                        initial={{ opacity: 0, scale: 0.9 }}
+                        animate={{ opacity: 1, scale: 1 }}
+                        className="flex-1 flex flex-col items-center justify-center px-8"
+                    >
+                        <div className="w-24 h-24 bg-ios-green rounded-full flex items-center justify-center mb-6">
+                            <Check size={48} className="text-white" />
+                        </div>
+                        <h1 className="text-3xl font-black text-black text-center mb-2">
+                            ¡Listo!
+                        </h1>
+                        <p className="text-gray-500 text-center">
+                            Tu rutina de {totalDays} días por {totalWeeks} semanas está lista
+                        </p>
+                    </motion.div>
+                )}
+            </AnimatePresence>
+
+            {/* Skip confirmation modal */}
+            <AnimatePresence>
+                {isSkipModalOpen && (
+                    <>
+                        <motion.div
+                            key="skip-backdrop"
+                            initial={{ opacity: 0 }}
+                            animate={{ opacity: 1 }}
+                            exit={{ opacity: 0 }}
+                            className="fixed inset-0 z-[300] bg-black/30 backdrop-blur-sm"
+                            onClick={() => setIsSkipModalOpen(false)}
+                        />
+                        <motion.div
+                            key="skip-modal"
+                            initial={{ opacity: 0, scale: 0.95, y: 20 }}
+                            animate={{ opacity: 1, scale: 1, y: 0 }}
+                            exit={{ opacity: 0, scale: 0.95, y: 20 }}
+                            className="fixed inset-x-4 bottom-[calc(var(--bottom-nav-base)+env(safe-area-inset-bottom)+1rem)] z-[310] bg-white rounded-3xl shadow-2xl border border-black/5 p-5 space-y-4"
+                        >
+                            <div className="flex items-start gap-3">
+                                <div className="w-10 h-10 rounded-2xl bg-ios-blue/10 text-ios-blue flex items-center justify-center font-black text-sm">
+                                    i
+                                </div>
+                                <div className="flex-1 space-y-1">
+                                    <h3 className="text-lg font-black text-black">Antes de salir</h3>
+                                    <p className="text-sm text-gray-600">
+                                        Podés seguir con el setup en la página de Perfil, o podés modificar tu rutina desde Google Sheets.
+                                    </p>
+                                    {auth.spreadsheetId && (
+                                        <a
+                                            href={`https://docs.google.com/spreadsheets/d/${auth.spreadsheetId}`}
+                                            target="_blank"
+                                            rel="noreferrer"
+                                            className="inline-flex items-center gap-2 text-sm font-bold text-ios-blue underline underline-offset-4"
+                                        >
+                                            Abrir mi rutina en Google Sheets
+                                        </a>
+                                    )}
+                                </div>
+                            </div>
+                            <div className="flex flex-col gap-2">
+                                <button
+                                    onClick={() => setIsSkipModalOpen(false)}
+                                    className="w-full py-4 rounded-2xl font-bold text-sm bg-black text-white active:translate-y-px transition"
+                                >
+                                    Seguir planificando
+                                </button>
+                                <button
+                                    onClick={() => {
+                                        if (onSkip) onSkip();
+                                        setIsSkipModalOpen(false);
+                                    }}
+                                    className="w-full py-4 rounded-2xl font-bold text-sm bg-gray-100 text-gray-800 border border-black/5 active:translate-y-px transition"
+                                >
+                                    Cerrar y salir
+                                </button>
+                            </div>
+                        </motion.div>
+                    </>
+                )}
+            </AnimatePresence>
+        </div>
+    );
+}

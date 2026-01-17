@@ -1,11 +1,10 @@
 "use client";
 
-import { useState, useEffect, useCallback, useMemo } from "react";
+import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { Loader2, Save, Check, Plus } from "lucide-react";
 import { useAuth } from "@/lib/hooks/useAuth";
 import {
-    fetchExercisesList,
-    fetchSeriesOptions,
+    fetchOnboardingData,
     fetchDayRoutine,
     saveRoutine,
     fetchRoutineDaysSummary,
@@ -30,6 +29,17 @@ const ALL_DAYS: Day[] = [
 ];
 
 type ExerciseWithImage = RoutineExercise & { image?: string };
+
+function runWhenIdle(fn: () => void) {
+    if (typeof window === "undefined") return;
+    const anyWindow = window as any;
+    if (typeof anyWindow.requestIdleCallback === "function") {
+        anyWindow.requestIdleCallback(fn, { timeout: 1500 });
+        return;
+    }
+    // Fallback: run soon, but not blocking paint
+    setTimeout(fn, 250);
+}
 
 export function RutinaEditorScreen() {
     const auth = useAuth();
@@ -95,7 +105,35 @@ export function RutinaEditorScreen() {
         setTimeout(() => setToastMessage(null), 2000);
     };
 
-    // Load initial data (exercises, series, and days summary)
+    const onboardingLoadedRef = useRef(false);
+    const onboardingLoadingRef = useRef<Promise<void> | null>(null);
+
+    const ensureOnboardingDataLoaded = useCallback(async () => {
+        if (!auth.isAuthenticated) return;
+        if (onboardingLoadedRef.current) return;
+        if (onboardingLoadingRef.current) {
+            await onboardingLoadingRef.current;
+            return;
+        }
+
+        onboardingLoadingRef.current = (async () => {
+            const { exercises, series } = await fetchOnboardingData();
+            setAvailableExercises(exercises);
+            setSeriesOptions(series);
+            onboardingLoadedRef.current = true;
+        })()
+            .catch((error: any) => {
+                console.error("Error loading onboarding data:", error);
+                setErrorMessage(error?.message || "Error al cargar ejercicios/series");
+            })
+            .finally(() => {
+                onboardingLoadingRef.current = null;
+            });
+
+        await onboardingLoadingRef.current;
+    }, [auth.isAuthenticated]);
+
+    // Load initial data (only days summary; defer heavy data off the critical path)
     useEffect(() => {
         if (!auth.isAuthenticated) return;
 
@@ -104,16 +142,10 @@ export function RutinaEditorScreen() {
         const loadData = async () => {
             setIsLoadingData(true);
             try {
-                const [exercisesData, seriesData, daysData] = await Promise.all([
-                    fetchExercisesList(),
-                    fetchSeriesOptions(),
-                    fetchRoutineDaysSummary(),
-                ]);
+                const daysData = await fetchRoutineDaysSummary();
 
                 if (cancelled) return;
 
-                setAvailableExercises(exercisesData);
-                setSeriesOptions(seriesData);
                 setDaysSummary(daysData);
                 
                 // Set initial selected day to first non-empty day, or day 1 if all empty
@@ -121,12 +153,11 @@ export function RutinaEditorScreen() {
                 if (firstNonEmptyDay) {
                     setSelectedDayId(firstNonEmptyDay.id);
                 }
-
-                // Cache all exercise images in background
-                const urls = exercisesData
-                    .map((e) => (e.image ? `/images/exercises/${e.image}` : null))
-                    .filter((u): u is string => !!u);
-                void cacheUrls(urls);
+                
+                // Warm up exercises/series in the background (cached endpoint)
+                runWhenIdle(() => {
+                    void ensureOnboardingDataLoaded();
+                });
             } catch (error: any) {
                 console.error("Error loading data:", error);
                 setErrorMessage(error.message || "Error al cargar datos");
@@ -139,15 +170,13 @@ export function RutinaEditorScreen() {
         return () => {
             cancelled = true;
         };
-    }, [auth.isAuthenticated]);
+    }, [auth.isAuthenticated, ensureOnboardingDataLoaded]);
 
-    // Create exercise mapping for images
-    const exerciseImageMap = useCallback(() => {
+    // Create exercise mapping for images (name -> image filename)
+    const exerciseImageMap = useMemo(() => {
         const map = new Map<string, string>();
         availableExercises.forEach((e) => {
-            if (e.image) {
-                map.set(e.name.toLowerCase(), e.image);
-            }
+            if (e.image) map.set(e.name.toLowerCase(), e.image);
         });
         return map;
     }, [availableExercises]);
@@ -167,10 +196,9 @@ export function RutinaEditorScreen() {
                 if (cancelled) return;
 
                 // Enrich with images
-                const imageMap = exerciseImageMap();
                 const enriched: ExerciseWithImage[] = exercises.map((e) => ({
                     ...e,
-                    image: imageMap.get(e.name.toLowerCase()) || undefined,
+                    image: exerciseImageMap.get(e.name.toLowerCase()) || undefined,
                 }));
 
                 setDayExercises(enriched);
@@ -190,6 +218,33 @@ export function RutinaEditorScreen() {
             cancelled = true;
         };
     }, [auth.isAuthenticated, selectedDayId, isLoadingData, exerciseImageMap]);
+
+    // If onboarding data arrives after the routine, backfill images without re-fetching the routine.
+    useEffect(() => {
+        if (!auth.isAuthenticated) return;
+        if (availableExercises.length === 0) return;
+        if (dayExercises.length === 0) return;
+
+        setDayExercises((prev) =>
+            prev.map((e) =>
+                e.image ? e : { ...e, image: exerciseImageMap.get(e.name.toLowerCase()) || undefined }
+            )
+        );
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [availableExercises.length]);
+
+    // Cache only images relevant to the currently visible day (best-effort, non-blocking)
+    useEffect(() => {
+        if (!auth.isAuthenticated) return;
+        const urls = dayExercises
+            .map((e) => (e.image ? `/images/exercises/${e.image}` : null))
+            .filter((u): u is string => !!u);
+        if (urls.length === 0) return;
+
+        runWhenIdle(() => {
+            void cacheUrls(urls.slice(0, 20));
+        });
+    }, [auth.isAuthenticated, dayExercises]);
 
     const handleDayChange = (index: number) => {
         if (hasChanges) {
@@ -224,6 +279,12 @@ export function RutinaEditorScreen() {
         setHasChanges(true);
         setSaveSuccess(false);
     };
+
+    const openSearchModal = useCallback(async () => {
+        // Ensure we have exercises/series before opening (modal needs them)
+        await ensureOnboardingDataLoaded();
+        setIsSearchModalOpen(true);
+    }, [ensureOnboardingDataLoaded]);
 
     const handleAddExercise = async (exercise: { name: string; prescribedSeries: string; image: string }) => {
         const newExercise: ExerciseWithImage = {
@@ -426,7 +487,7 @@ export function RutinaEditorScreen() {
                     <DayRoutineEditor
                         exercises={dayExercises}
                         onExercisesChange={handleExercisesChange}
-                        onAddExercise={() => setIsSearchModalOpen(true)}
+                        onAddExercise={openSearchModal}
                         maxExercises={7}
                     />
                 )}

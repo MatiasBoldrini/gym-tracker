@@ -2,21 +2,12 @@ import { HomeScreen } from "@/components/screens/HomeScreen";
 import { createClient } from "@/lib/supabase/server";
 import { decrypt } from "@/lib/crypto";
 import { refreshAccessToken } from "@/lib/google/oauth";
-import { listSpreadsheetSheetTitles, readSheetValues } from "@/lib/google/sheets";
+import { readSheetValues } from "@/lib/google/sheets";
 import { normalizeSheetsError } from "@/lib/google/sheets-errors";
-import { parseExerciseMapping, parsePRData, parseWeekData } from "@/lib/sheets-parse";
+import { parsePRData, parseWeekData } from "@/lib/sheets-parse";
 import { unstable_cache } from "next/cache";
 import type { Week } from "@/types";
-
-export const dynamic = "force-dynamic";
-
-function parseWeekFromTitle(title: string): number | null {
-    const match = title.trim().match(/^Semana\s+(\d+)$/i);
-    if (!match) return null;
-    const id = Number(match[1]);
-    if (!Number.isFinite(id) || id < 1) return null;
-    return Math.trunc(id);
-}
+import { DEMO_MODE, getDemoHomeData } from "@/lib/demo-data";
 
 async function readPrSheet(accessToken: string, spreadsheetId: string) {
     const sheetNames = ["RM A,B,C", "RM"];
@@ -36,27 +27,17 @@ type WeekListItem = { id: number; name: string };
 // Cached function to fetch all home data from Sheets (per-user, 5 min TTL)
 async function fetchHomeSheetData(refreshToken: string, spreadsheetId: string) {
     const accessToken = await refreshAccessToken(refreshToken);
+    const weekId = 1;
+    const weeks: WeekListItem[] = [{ id: 1, name: "Semana 1" }];
 
-    // Detectar semanas disponibles por títulos reales.
-    const titles = await listSpreadsheetSheetTitles(accessToken, spreadsheetId);
-    const availableWeekIds = titles
-        .map(parseWeekFromTitle)
-        .filter((n): n is number => typeof n === "number")
-        .sort((a, b) => a - b);
-
-    // Build weeks list for the client
-    const weeks: WeekListItem[] = availableWeekIds.map(id => ({ id, name: `Semana ${id}` }));
-
-    const weekId = availableWeekIds[0] ?? 1;
-
-    const [weekValues, prValues, mappingValues] = await Promise.all([
+    // Keep the critical path minimal: load the week + PRs.
+    // Images are enriched client-side (cached endpoint) so first paint isn't blocked by 'Ejercicios' sheet.
+    const [weekValues, prValues] = await Promise.all([
         readSheetValues(accessToken, spreadsheetId, `'Semana ${weekId}'!A:N`),
         readPrSheet(accessToken, spreadsheetId),
-        readSheetValues(accessToken, spreadsheetId, `'Ejercicios'!A:D`).catch(() => []),
     ]);
 
-    const exerciseMapping = parseExerciseMapping(mappingValues);
-    const week = parseWeekData(weekValues, weekId, exerciseMapping);
+    const week = parseWeekData(weekValues, weekId);
     const prs = parsePRData(prValues);
 
     return { week, weeks, prs };
@@ -68,6 +49,9 @@ async function getHomeData(): Promise<{
     prs: any[];
     setupError?: { message: string; code?: string } | null;
 }> {
+    if (DEMO_MODE) {
+        return getDemoHomeData();
+    }
     const supabase = await createClient();
     
     // Check if user is authenticated

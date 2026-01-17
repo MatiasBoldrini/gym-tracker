@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { createClient, GOOGLE_SCOPES } from "@/lib/supabase/client";
+import { DEMO_MODE } from "@/lib/demo-data";
 
 interface OnboardingState {
     version: number;
@@ -35,18 +36,41 @@ const defaultOnboarding: OnboardingState = {
     hasProgress: false,
 };
 
+const demoAuthState: AuthState = {
+    isLoading: false,
+    isAuthenticated: true,
+    hasSpreadsheet: true,
+    spreadsheetId: "demo-sheet",
+    userId: "demo-user",
+    email: "demo@gymtracker.app",
+    onboarding: {
+        ...defaultOnboarding,
+        shouldShow: false,
+        hasCompleted: true,
+        completedAt: new Date().toISOString(),
+    },
+};
+
 export function useAuth() {
-    const [state, setState] = useState<AuthState>({
-        isLoading: true,
-        isAuthenticated: false,
-        hasSpreadsheet: false,
-        spreadsheetId: null,
-        userId: null,
-        email: null,
-        onboarding: defaultOnboarding,
-    });
+    const [state, setState] = useState<AuthState>(
+        DEMO_MODE
+            ? demoAuthState
+            : {
+                isLoading: true,
+                isAuthenticated: false,
+                hasSpreadsheet: false,
+                spreadsheetId: null,
+                userId: null,
+                email: null,
+                onboarding: defaultOnboarding,
+            }
+    );
 
     const fetchAuthState = useCallback(async () => {
+        if (DEMO_MODE) {
+            setState(demoAuthState);
+            return;
+        }
         try {
             const response = await fetch("/api/auth/me");
             const data = await response.json();
@@ -79,11 +103,19 @@ export function useAuth() {
     }, [fetchAuthState]);
 
     const refresh = useCallback(() => {
+        if (DEMO_MODE) {
+            setState(demoAuthState);
+            return;
+        }
         setState((prev) => ({ ...prev, isLoading: true }));
         fetchAuthState();
     }, [fetchAuthState]);
 
     const login = useCallback(async () => {
+        if (DEMO_MODE) {
+            setState(demoAuthState);
+            return;
+        }
         const supabase = createClient();
         const redirectTo = `${window.location.origin}/auth/callback`;
         
@@ -101,6 +133,10 @@ export function useAuth() {
     }, []);
 
     const logout = useCallback(async () => {
+        if (DEMO_MODE) {
+            setState(demoAuthState);
+            return;
+        }
         try {
             await fetch("/api/auth/logout", { method: "POST" });
             const supabase = createClient();

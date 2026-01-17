@@ -2,6 +2,8 @@
  * Client-side functions for interacting with Google Sheets via our API routes.
  * This replaces the previous Apps Script approach with proper server-side handling.
  */
+import { DEMO_MODE, demoWeeksList, getDemoWeeksMap, demoPrs, getDemoExercises, getDemoSeries, getDemoRoutineDay, getDemoRoutineSummary } from "@/lib/demo-data";
+import type { Week, PersonalRecord } from "@/types";
 
 export interface SaveResult {
     ok: boolean;
@@ -15,12 +17,57 @@ export interface WeekListItem {
     name: string; // "Semana X"
 }
 
+const IS_DEMO = DEMO_MODE;
+
+type DemoState = {
+    weeks: Map<number, Week>;
+    prs: PersonalRecord[];
+    onboardingProgress: OnboardingProgress | null;
+    onboardingCompleted: boolean;
+    onboardingDismissed: boolean;
+};
+
+const demoState: DemoState | null = IS_DEMO
+    ? {
+        weeks: getDemoWeeksMap(),
+        prs: demoPrs,
+        onboardingProgress: null,
+        onboardingCompleted: true,
+        onboardingDismissed: false,
+    }
+    : null;
+
+function cloneWeek(week: Week): Week {
+    return structuredClone(week);
+}
+
+function ensureDemoWeek(weekId: number): Week | null {
+    if (!demoState) return null;
+    const existing = demoState.weeks.get(weekId);
+    if (existing) return existing;
+    const fallback = demoState.weeks.get(1);
+    const next = fallback ? cloneWeek({ ...fallback, id: weekId }) : { id: weekId, days: [] };
+    demoState.weeks.set(weekId, next);
+    return next;
+}
+
 export async function saveExerciseSets(
     weekId: number,
     dayId: number,
     exerciseName: string,
     sets: { weight: number; reps: number }[]
 ): Promise<SaveResult> {
+    if (IS_DEMO) {
+        const week = ensureDemoWeek(weekId);
+        if (!week) return { ok: true };
+        const day = week.days.find((d) => d.id === dayId);
+        if (!day) return { ok: true };
+        const exercise = day.exercises.find((e) => e.name === exerciseName);
+        if (exercise) {
+            exercise.sets = sets.map((s) => ({ reps: s.reps, weight: s.weight }));
+        }
+        return { ok: true };
+    }
     try {
         const response = await fetch("/api/sheets/save", {
             method: "POST",
@@ -67,6 +114,9 @@ function createApiError(params: { message: string; status: number; code?: string
  * Fetch list of weeks from the user's spreadsheet.
  */
 export async function fetchWeeksList(): Promise<WeekListItem[]> {
+    if (IS_DEMO) {
+        return demoWeeksList;
+    }
     const response = await fetch("/api/sheets/weeks", { method: "GET" });
     const data = await response.json().catch(() => ({} as any));
     if (!response.ok) {
@@ -80,6 +130,10 @@ export async function fetchWeeksList(): Promise<WeekListItem[]> {
 }
 
 export async function fetchWeekData(weekId: number) {
+    if (IS_DEMO) {
+        const week = ensureDemoWeek(weekId);
+        return { week: week ? cloneWeek(week) : { id: weekId, days: [] } };
+    }
     const response = await fetch(`/api/sheets/week?weekId=${encodeURIComponent(String(weekId))}`, {
         method: "GET",
     });
@@ -99,6 +153,14 @@ export async function fetchExerciseSets(params: {
     dayId: number;
     exerciseName: string;
 }) {
+    if (IS_DEMO) {
+        const week = ensureDemoWeek(params.weekId);
+        const day = week?.days.find((d) => d.id === params.dayId);
+        const exercise = day?.exercises.find((e) => e.name === params.exerciseName);
+        return {
+            sets: exercise?.sets?.map((s) => ({ weight: s.weight ?? 0, reps: s.reps ?? 0 })) ?? [],
+        };
+    }
     const { weekId, dayId, exerciseName } = params;
     const url = `/api/sheets/exercise?weekId=${encodeURIComponent(String(weekId))}&dayId=${encodeURIComponent(String(dayId))}&exerciseName=${encodeURIComponent(exerciseName)}`;
     const response = await fetch(url, { method: "GET" });
@@ -126,6 +188,17 @@ export async function fetchExerciseSetsBulk(params: {
     dayId: number;
     exerciseNames: string[];
 }): Promise<BulkExerciseSetsResult[]> {
+    if (IS_DEMO) {
+        const week = ensureDemoWeek(params.weekId);
+        const day = week?.days.find((d) => d.id === params.dayId);
+        return (params.exerciseNames || []).map((name) => {
+            const exercise = day?.exercises.find((e) => e.name === name);
+            return {
+                exerciseName: name,
+                sets: exercise?.sets?.map((s) => ({ weight: s.weight ?? 0, reps: s.reps ?? 0 })) ?? [],
+            };
+        });
+    }
     const { weekId, dayId, exerciseNames } = params;
     const response = await fetch("/api/sheets/exercises-bulk", {
         method: "POST",
@@ -155,6 +228,14 @@ export async function saveSessionRating(
     dayId: number,
     stars: number
 ): Promise<SaveResult> {
+    if (IS_DEMO) {
+        const week = ensureDemoWeek(weekId);
+        const day = week?.days.find((d) => d.id === dayId);
+        if (day) {
+            day.stars = stars;
+        }
+        return { ok: true };
+    }
     try {
         const response = await fetch("/api/sheets/rating", {
             method: "POST",
@@ -209,6 +290,9 @@ export interface RoutineExercise {
  * Fetch available exercises from the Ejercicios sheet.
  */
 export async function fetchExercisesList(): Promise<ExerciseItem[]> {
+    if (IS_DEMO) {
+        return getDemoExercises();
+    }
     const response = await fetch("/api/sheets/exercises", { method: "GET" });
     const data = await response.json().catch(() => ({} as any));
     if (!response.ok) {
@@ -225,6 +309,9 @@ export async function fetchExercisesList(): Promise<ExerciseItem[]> {
  * Fetch available series options from the Series sheet.
  */
 export async function fetchSeriesOptions(): Promise<string[]> {
+    if (IS_DEMO) {
+        return getDemoSeries();
+    }
     const response = await fetch("/api/sheets/series", { method: "GET" });
     const data = await response.json().catch(() => ({} as any));
     if (!response.ok) {
@@ -245,6 +332,12 @@ export async function fetchOnboardingData(): Promise<{
     exercises: ExerciseItem[];
     series: string[];
 }> {
+    if (IS_DEMO) {
+        return {
+            exercises: getDemoExercises(),
+            series: getDemoSeries(),
+        };
+    }
     const response = await fetch("/api/sheets/onboarding-data", { method: "GET" });
     const data = await response.json().catch(() => ({} as any));
     if (!response.ok) {
@@ -264,6 +357,9 @@ export async function fetchOnboardingData(): Promise<{
  * Fetch current routine exercises for a specific day.
  */
 export async function fetchDayRoutine(dayId: number): Promise<RoutineExercise[]> {
+    if (IS_DEMO) {
+        return getDemoRoutineDay(dayId).map((e) => ({ ...e }));
+    }
     const response = await fetch(`/api/sheets/routine?dayId=${encodeURIComponent(String(dayId))}`, {
         method: "GET",
     });
@@ -285,6 +381,20 @@ export async function saveRoutine(
     dayId: number,
     exercises: RoutineExercise[]
 ): Promise<SaveResult> {
+    if (IS_DEMO) {
+        const week = ensureDemoWeek(1);
+        if (week) {
+            const dayIndex = week.days.findIndex((d) => d.id === dayId);
+            if (dayIndex >= 0) {
+                const setsTemplate = (week.days[dayIndex].exercises || []).map((e) => e.sets || []);
+                week.days[dayIndex].exercises = exercises.map((e, idx) => ({
+                    ...e,
+                    sets: setsTemplate[idx] || [],
+                }));
+            }
+        }
+        return { ok: true };
+    }
     try {
         const response = await fetch("/api/sheets/routine", {
             method: "POST",
@@ -332,6 +442,14 @@ export interface DaySummary {
  * Useful for determining which days are configured vs empty.
  */
 export async function fetchRoutineDaysSummary(): Promise<DaySummary[]> {
+    if (IS_DEMO) {
+        const week = ensureDemoWeek(1);
+        if (!week) return getDemoRoutineSummary();
+        return week.days.map((d) => ({
+            id: d.id,
+            exercisesCount: d.exercises.length,
+        }));
+    }
     const response = await fetch("/api/sheets/routine/days", { method: "GET" });
     const data = await response.json().catch(() => ({} as any));
     if (!response.ok) {
@@ -358,6 +476,18 @@ export interface CreateMesocicloResult {
  * Cleans reps/weight/stars data from the duplicated weeks.
  */
 export async function createMesociclo(weeks: number): Promise<CreateMesocicloResult> {
+    if (IS_DEMO) {
+        const created: number[] = [];
+        for (let i = 2; i <= weeks; i++) {
+            const base = ensureDemoWeek(1);
+            if (base) {
+                const clone = cloneWeek({ ...base, id: i });
+                demoState?.weeks.set(i, clone);
+                created.push(i);
+            }
+        }
+        return { ok: true, weeksCreated: created, totalWeeks: Math.max(weeks, 1) };
+    }
     try {
         const response = await fetch("/api/sheets/mesociclo", {
             method: "POST",
@@ -397,6 +527,13 @@ export async function createMesociclo(weeks: number): Promise<CreateMesocicloRes
  * Used when redoing the onboarding wizard.
  */
 export async function resetMesociclo(): Promise<SaveResult> {
+    if (IS_DEMO) {
+        if (demoState) {
+            const base = ensureDemoWeek(1);
+            demoState.weeks = new Map<number, Week>([[1, base ? cloneWeek({ ...base, id: 1 }) : { id: 1, days: [] }]]);
+        }
+        return { ok: true };
+    }
     try {
         const response = await fetch("/api/sheets/mesociclo", {
             method: "DELETE",
@@ -439,6 +576,9 @@ export interface SetupResult {
  * Called after auth when setup_pending=true.
  */
 export async function setupSpreadsheet(): Promise<SetupResult> {
+    if (IS_DEMO) {
+        return { ok: true, spreadsheetId: "demo-sheet", alreadyExists: true };
+    }
     try {
         const response = await fetch("/api/sheets/setup", {
             method: "POST",
@@ -475,6 +615,9 @@ export async function checkSetupStatus(): Promise<{
     authenticated: boolean;
     spreadsheetId: string | null;
 }> {
+    if (IS_DEMO) {
+        return { setupComplete: true, authenticated: true, spreadsheetId: "demo-sheet" };
+    }
     try {
         const response = await fetch("/api/sheets/setup", { method: "GET" });
         const data = await response.json();
@@ -496,6 +639,13 @@ export async function checkSetupStatus(): Promise<{
  * Mark onboarding as completed (persisted in Supabase)
  */
 export async function completeOnboarding(): Promise<{ ok: boolean; error?: string }> {
+    if (IS_DEMO) {
+        if (demoState) {
+            demoState.onboardingCompleted = true;
+            demoState.onboardingDismissed = false;
+        }
+        return { ok: true };
+    }
     try {
         const response = await fetch("/api/user/preferences/onboarding", {
             method: "POST",
@@ -517,6 +667,13 @@ export async function completeOnboarding(): Promise<{ ok: boolean; error?: strin
  * Mark onboarding as dismissed (persisted in Supabase)
  */
 export async function dismissOnboarding(): Promise<{ ok: boolean; error?: string }> {
+    if (IS_DEMO) {
+        if (demoState) {
+            demoState.onboardingCompleted = false;
+            demoState.onboardingDismissed = true;
+        }
+        return { ok: true };
+    }
     try {
         const response = await fetch("/api/user/preferences/onboarding", {
             method: "POST",
@@ -538,6 +695,13 @@ export async function dismissOnboarding(): Promise<{ ok: boolean; error?: string
  * Reset onboarding state (for "redo onboarding" feature)
  */
 export async function resetOnboarding(): Promise<{ ok: boolean; error?: string }> {
+    if (IS_DEMO) {
+        if (demoState) {
+            demoState.onboardingCompleted = false;
+            demoState.onboardingDismissed = false;
+        }
+        return { ok: true };
+    }
     try {
         const response = await fetch("/api/user/preferences/onboarding", {
             method: "DELETE",
@@ -564,6 +728,12 @@ export interface OnboardingProgress {
 }
 
 export async function saveOnboardingProgress(progress: OnboardingProgress): Promise<{ ok: boolean; error?: string }> {
+    if (IS_DEMO) {
+        if (demoState) {
+            demoState.onboardingProgress = progress;
+        }
+        return { ok: true };
+    }
     try {
         const response = await fetch("/api/user/preferences/onboarding", {
             method: "POST",
@@ -582,6 +752,9 @@ export async function saveOnboardingProgress(progress: OnboardingProgress): Prom
 }
 
 export async function loadOnboardingProgress(): Promise<OnboardingProgress | null> {
+    if (IS_DEMO) {
+        return demoState?.onboardingProgress ?? null;
+    }
     try {
         const response = await fetch("/api/user/preferences/onboarding", { method: "GET" });
         const data = await response.json();

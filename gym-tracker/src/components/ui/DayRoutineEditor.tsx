@@ -286,8 +286,9 @@ export function DayRoutineEditor({
                         <DragOverlay
                             adjustScale={false}
                             // Seguridad: el overlay no debe bloquear clicks (especialmente sobre la BottomNav)
-                            // y lo mantenemos por debajo del nav (nav z=1000).
+                            // y lo mantenemos por debajo del nav (nav z=9999).
                             zIndex={200}
+                            style={{ pointerEvents: "none" }}
                             dropAnimation={{
                                 duration: 180,
                                 easing: "cubic-bezier(0.2, 0.8, 0.2, 1)",
