@@ -1,24 +1,19 @@
 import * as esbuild from 'esbuild';
-import { readFileSync, mkdirSync } from 'fs';
-
-// Read package.json to get all dependencies
-const pkg = JSON.parse(readFileSync('package.json', 'utf8'));
-const external = Object.keys(pkg.dependencies || {});
+import { mkdirSync } from 'fs';
 
 // Ensure api directory exists
 mkdirSync('api', { recursive: true });
 
+// Bundle EVERYTHING to reduce cold start time
 await esbuild.build({
     entryPoints: ['api-src/[[...path]].ts'],
     bundle: true,
     platform: 'node',
     target: 'node20',
-    format: 'esm',
+    format: 'cjs', // CommonJS is faster for cold start
     outfile: 'api/[[...path]].js',
-    banner: {
-        js: 'import { createRequire } from "module"; const require = createRequire(import.meta.url);'
-    },
-    external,
+    minify: true,
+    treeShaking: true,
 });
 
 console.log('API bundled successfully');
