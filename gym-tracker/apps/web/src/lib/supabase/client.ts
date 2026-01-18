@@ -1,7 +1,10 @@
 import { createClient as createSupabaseClient } from "@supabase/supabase-js";
 
+let client: ReturnType<typeof createSupabaseClient> | null = null;
+
 export function createClient() {
-    return createSupabaseClient(
+    if (client) return client;
+    client = createSupabaseClient(
         import.meta.env.VITE_SUPABASE_URL!,
         import.meta.env.VITE_SUPABASE_PUBLISHABLE_DEFAULT_KEY!,
         {
@@ -11,6 +14,7 @@ export function createClient() {
             },
         }
     );
+    return client;
 }
 
 // Scopes needed for Google Sheets/Drive access

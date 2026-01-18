@@ -87,6 +87,10 @@ function useAuthState() {
             const response = await fetch("/api/auth/me", {
                 headers: accessToken ? { Authorization: `Bearer ${accessToken}` } : undefined,
             });
+            const contentType = response.headers.get("content-type") || "";
+            if (!contentType.includes("application/json")) {
+                throw new Error("Respuesta inesperada de /api/auth/me");
+            }
             const data = await response.json();
 
             setState({
