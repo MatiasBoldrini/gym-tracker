@@ -1,10 +1,12 @@
 import { useEffect } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { createClient } from "@/lib/supabase/client";
+import { useAuth } from "@/lib/hooks/useAuth";
 
 export function AuthCallbackPage() {
     const navigate = useNavigate();
     const location = useLocation();
+    const auth = useAuth();
 
     useEffect(() => {
         let cancelled = false;
@@ -39,6 +41,7 @@ export function AuthCallbackPage() {
                         }
                         if (!cancelled) {
                             didRedirect = true;
+                            auth.refresh();
                             navigate(`/?${paramsOut.toString()}`, { replace: true });
                         }
                         return;

@@ -116,6 +116,17 @@ function useAuthState() {
         fetchAuthState();
     }, [fetchAuthState]);
 
+    useEffect(() => {
+        if (DEMO_MODE) return;
+        const supabase = createClient();
+        const { data } = supabase.auth.onAuthStateChange(() => {
+            fetchAuthState();
+        });
+        return () => {
+            data.subscription.unsubscribe();
+        };
+    }, [fetchAuthState]);
+
     const refresh = useCallback(() => {
         if (DEMO_MODE) {
             setState(demoAuthState);
