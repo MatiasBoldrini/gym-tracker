@@ -1,11 +1,18 @@
 {
     "installCommand": "npm install && npm --prefix apps/web install",
-    "buildCommand": "npm --prefix apps/web run build",
+    "buildCommand": "node scripts/build-api.mjs && npm --prefix apps/web run build",
     "outputDirectory": "apps/web/dist",
-    "rewrites": [
+    "routes": [
         {
-            "source": "/((?!api/).*)",
-            "destination": "/index.html"
+            "handle": "filesystem"
+        },
+        {
+            "src": "/api/(.*)",
+            "dest": "/api/[[...path]]"
+        },
+        {
+            "src": "/(.*)",
+            "dest": "/index.html"
         }
     ]
 }
