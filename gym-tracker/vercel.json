@@ -1,14 +1,8 @@
 {
     "version": 2,
-    "builds": [
-        { "src": "api/index.js", "use": "@vercel/node" },
-        { "src": "public/**", "use": "@vercel/static" }
-    ],
-    "routes": [
-        { "src": "/api/(.*)", "dest": "/api/index.js" },
-        { "handle": "filesystem" },
-        { "src": "/(.*)", "dest": "/public/$1" }
-    ],
     "installCommand": "npm install && npm --prefix apps/web install",
-    "buildCommand": "node scripts/build-api.mjs && npm --prefix apps/web run build && mkdir -p public && cp -r apps/web/dist/* public/"
+    "buildCommand": "node scripts/build-api.mjs && npm --prefix apps/web run build && mkdir -p public && cp -r apps/web/dist/* public/",
+    "rewrites": [
+        { "source": "/api/:path*", "destination": "/api/index.js" }
+    ]
 }
