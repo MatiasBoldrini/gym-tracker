@@ -1,15 +1,66 @@
 {
     "version": 2,
-    "installCommand": "npm install && npm --prefix apps/web install",
-    "buildCommand": "npm --prefix apps/web run build",
-    "outputDirectory": "apps/web/dist",
+    "installCommand": "npm install",
+    "builds": [
+        {
+            "src": "apps/web/package.json",
+            "use": "@vercel/static-build",
+            "config": {
+                "distDir": "dist"
+            }
+        },
+        {
+            "src": "api/auth/ping.ts",
+            "use": "@vercel/node"
+        },
+        {
+            "src": "api/auth/me.ts",
+            "use": "@vercel/node"
+        }
+    ],
     "routes": [
+        {
+            "src": "^/api/auth/ping$",
+            "dest": "/api/auth/ping.ts"
+        },
+        {
+            "src": "^/api/auth/me$",
+            "dest": "/api/auth/me.ts"
+        },
         {
             "handle": "filesystem"
         },
         {
-            "src": "/(?!api/).*",
-            "dest": "/index.html"
+            "src": "^/assets/(.*)$",
+            "dest": "/apps/web/assets/$1"
+        },
+        {
+            "src": "^/icons/(.*)$",
+            "dest": "/apps/web/icons/$1"
+        },
+        {
+            "src": "^/images/(.*)$",
+            "dest": "/apps/web/images/$1"
+        },
+        {
+            "src": "^/manifest.webmanifest$",
+            "dest": "/apps/web/manifest.webmanifest"
+        },
+        {
+            "src": "^/sw.js$",
+            "dest": "/apps/web/sw.js"
+        },
+        {
+            "src": "^/workbox-(.*)\\.js$",
+            "dest": "/apps/web/workbox-$1.js"
+        },
+        {
+            "src": "^/offline.html$",
+            "dest": "/apps/web/offline.html"
+        },
+        {
+            "src": "^/(.*)$",
+            "dest": "/apps/web/index.html"
         }
     ]
 }
