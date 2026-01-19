@@ -31,7 +31,6 @@ function getSupabaseClient(accessToken?: string) {
             global: accessToken
                 ? { headers: { Authorization: `Bearer ${accessToken}` }, fetch: fetchWithTimeout as any }
                 : { fetch: fetchWithTimeout as any },
-                : undefined,
             auth: {
                 persistSession: false,
                 autoRefreshToken: false,
