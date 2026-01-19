@@ -4,11 +4,6 @@
     "installCommand": "npm install && npm --prefix apps/web install",
     "buildCommand": "node scripts/build-api.mjs && npm --prefix apps/web run build",
     "outputDirectory": "apps/web/dist",
-    "functions": {
-        "api/[[...path]].js": {
-            "runtime": "nodejs20.x"
-        }
-    },
     "rewrites": [
         { "source": "/api/(.*)", "destination": "/api/[[...path]]" }
     ]
