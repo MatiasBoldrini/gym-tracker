@@ -1,14 +1,14 @@
 {
     "version": 2,
     "builds": [
-        { "src": "api/[[...path]].js", "use": "@vercel/node" },
+        { "src": "api-src/[[...path]].ts", "use": "@vercel/node" },
         { "src": "public/**", "use": "@vercel/static" }
     ],
     "routes": [
-        { "src": "/api/(.*)", "dest": "/api/[[...path]].js" },
+        { "src": "/api/(.*)", "dest": "/api-src/[[...path]].ts" },
         { "handle": "filesystem" },
         { "src": "/(.*)", "dest": "/public/$1" }
     ],
     "installCommand": "npm install && npm --prefix apps/web install",
-    "buildCommand": "node scripts/build-api.mjs && npm --prefix apps/web run build && mkdir -p public && cp -r apps/web/dist/* public/"
+    "buildCommand": "npm --prefix apps/web run build && mkdir -p public && cp -r apps/web/dist/* public/"
 }
