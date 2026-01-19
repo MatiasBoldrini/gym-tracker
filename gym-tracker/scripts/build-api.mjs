@@ -15,14 +15,14 @@ await esbuild.build({
     target: 'node20',
     format: 'cjs',
     outfile: `${OUTPUT_DIR}/functions/api/index.func/index.js`,
-    minify: true,
+    minify: false, // Disable minify for debugging
     treeShaking: true,
 });
 
-// Create function config
+// Create function config - using web handler for Hono
 writeFileSync(`${OUTPUT_DIR}/functions/api/index.func/.vc-config.json`, JSON.stringify({
     runtime: 'nodejs20.x',
-    handler: 'index.js',
+    handler: 'index.default',
     launcherType: 'Nodejs'
 }));
 
