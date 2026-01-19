@@ -1,8 +1,11 @@
 import * as esbuild from 'esbuild';
-import { mkdirSync } from 'fs';
+import { mkdirSync, writeFileSync } from 'fs';
 
 // Ensure api directory exists
 mkdirSync('api', { recursive: true });
+
+// Create package.json for ESM support
+writeFileSync('api/package.json', JSON.stringify({ type: 'module' }));
 
 // Bundle EVERYTHING for serverless function
 await esbuild.build({
@@ -11,7 +14,7 @@ await esbuild.build({
     platform: 'node',
     target: 'node20',
     format: 'esm',
-    outfile: 'api/index.mjs',
+    outfile: 'api/index.js',
     minify: true,
     treeShaking: true,
     banner: {

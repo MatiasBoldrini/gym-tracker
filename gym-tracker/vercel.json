@@ -2,13 +2,7 @@
     "version": 2,
     "installCommand": "npm install && npm --prefix apps/web install",
     "buildCommand": "node scripts/build-api.mjs && npm --prefix apps/web run build && mkdir -p public && cp -r apps/web/dist/* public/",
-    "functions": {
-        "api/*.mjs": {
-            "memory": 1024,
-            "maxDuration": 30
-        }
-    },
     "rewrites": [
-        { "source": "/api/:path*", "destination": "/api/index.mjs" }
+        { "source": "/api/:path*", "destination": "/api/index.js" }
     ]
 }
