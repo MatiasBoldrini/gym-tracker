@@ -8,15 +8,15 @@ const FUNC_DIR = `${OUTPUT_DIR}/functions/api/index.func`;
 mkdirSync(FUNC_DIR, { recursive: true });
 mkdirSync(`${OUTPUT_DIR}/static`, { recursive: true });
 
-// Bundle the API function
+// Bundle the API function - using test handler for debugging
 await esbuild.build({
-    entryPoints: ['api-src/[[...path]].ts'],
+    entryPoints: ['api-src/test-handler.ts'],
     bundle: true,
     platform: 'node',
     target: 'node20',
     format: 'cjs',
     outfile: `${FUNC_DIR}/handler.js`,
-    minify: true,
+    minify: false,
     treeShaking: true,
 });
 
