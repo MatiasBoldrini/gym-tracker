@@ -1,19 +1,5 @@
 {
     "version": 2,
     "installCommand": "npm install && npm --prefix apps/web install",
-    "buildCommand": "node scripts/build-api.mjs && npm --prefix apps/web run build",
-    "builds": [
-        {
-            "src": "api/[[...path]].js",
-            "use": "@vercel/node"
-        },
-        {
-            "src": "apps/web/dist/**",
-            "use": "@vercel/static"
-        }
-    ],
-    "routes": [
-        { "src": "/api/(.*)", "dest": "/api/[[...path]].js" },
-        { "src": "/(.*)", "dest": "/apps/web/dist/$1" }
-    ]
+    "buildCommand": "node scripts/build-api.mjs && npm --prefix apps/web run build && cp -r apps/web/dist/* ."
 }
