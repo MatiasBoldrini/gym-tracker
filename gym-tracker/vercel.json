@@ -30,19 +30,19 @@
     "routes": [
         {
             "src": "^/api/auth/ping$",
-            "dest": "/api/auth/ping.ts"
+            "dest": "/api/auth/ping.js"
         },
         {
             "src": "^/api/auth/me$",
-            "dest": "/api/auth/me.ts"
+            "dest": "/api/auth/me.js"
         },
         {
             "src": "^/api/auth/callback$",
-            "dest": "/api/auth/callback.ts"
+            "dest": "/api/auth/callback.js"
         },
         {
             "src": "^/api/auth/logout$",
-            "dest": "/api/auth/logout.ts"
+            "dest": "/api/auth/logout.js"
         },
         {
             "handle": "filesystem"
