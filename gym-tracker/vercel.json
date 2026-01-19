@@ -1,5 +1,5 @@
 {
     "version": 2,
     "installCommand": "npm install && npm --prefix apps/web install",
-    "buildCommand": "node scripts/build-api.mjs && npm --prefix apps/web run build && cp -r apps/web/dist/* ."
+    "buildCommand": "node scripts/build-api.mjs && npm --prefix apps/web run build && mkdir -p public && cp -r apps/web/dist/* public/"
 }
