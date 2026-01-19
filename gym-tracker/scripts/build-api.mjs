@@ -1,25 +1,39 @@
 import * as esbuild from 'esbuild';
-import { mkdirSync, writeFileSync } from 'fs';
+import { mkdirSync, writeFileSync, cpSync } from 'fs';
 
-// Ensure api directory exists
-mkdirSync('api', { recursive: true });
+const OUTPUT_DIR = '.vercel/output';
 
-// Create package.json for ESM support
-writeFileSync('api/package.json', JSON.stringify({ type: 'module' }));
+// Create Vercel Build Output structure
+mkdirSync(`${OUTPUT_DIR}/functions/api`, { recursive: true });
+mkdirSync(`${OUTPUT_DIR}/static`, { recursive: true });
 
-// Bundle EVERYTHING for serverless function
+// Bundle the API function
 await esbuild.build({
     entryPoints: ['api-src/[[...path]].ts'],
     bundle: true,
     platform: 'node',
     target: 'node20',
-    format: 'esm',
-    outfile: 'api/index.js',
+    format: 'cjs',
+    outfile: `${OUTPUT_DIR}/functions/api/index.func/index.js`,
     minify: true,
     treeShaking: true,
-    banner: {
-        js: 'import { createRequire } from "module"; const require = createRequire(import.meta.url);'
-    }
 });
+
+// Create function config
+writeFileSync(`${OUTPUT_DIR}/functions/api/index.func/.vc-config.json`, JSON.stringify({
+    runtime: 'nodejs20.x',
+    handler: 'index.js',
+    launcherType: 'Nodejs'
+}));
+
+// Create output config with routes
+writeFileSync(`${OUTPUT_DIR}/config.json`, JSON.stringify({
+    version: 3,
+    routes: [
+        { src: '/api/(.*)', dest: '/api/index' },
+        { handle: 'filesystem' },
+        { src: '/(.*)', dest: '/$1' }
+    ]
+}));
 
 console.log('API bundled successfully');
