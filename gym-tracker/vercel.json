@@ -19,10 +19,6 @@
             "handle": "filesystem"
         },
         {
-            "src": "^/api/.*$",
-            "status": 404
-        },
-        {
             "src": "^/assets/(.*)$",
             "dest": "/apps/web/assets/$1"
         },
@@ -51,7 +47,7 @@
             "dest": "/apps/web/offline.html"
         },
         {
-            "src": "^/(.*)$",
+            "src": "^(?!/api/).*$",
             "dest": "/apps/web/index.html"
         }
     ]
