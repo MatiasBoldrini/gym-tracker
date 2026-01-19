@@ -2,9 +2,10 @@ import * as esbuild from 'esbuild';
 import { mkdirSync, writeFileSync, cpSync } from 'fs';
 
 const OUTPUT_DIR = '.vercel/output';
+const FUNC_DIR = `${OUTPUT_DIR}/functions/api/index.func`;
 
 // Create Vercel Build Output structure
-mkdirSync(`${OUTPUT_DIR}/functions/api`, { recursive: true });
+mkdirSync(FUNC_DIR, { recursive: true });
 mkdirSync(`${OUTPUT_DIR}/static`, { recursive: true });
 
 // Bundle the API function
@@ -14,15 +15,21 @@ await esbuild.build({
     platform: 'node',
     target: 'node20',
     format: 'cjs',
-    outfile: `${OUTPUT_DIR}/functions/api/index.func/index.js`,
-    minify: false, // Disable minify for debugging
+    outfile: `${FUNC_DIR}/handler.js`,
+    minify: true,
     treeShaking: true,
 });
 
-// Create function config - using web handler for Hono
-writeFileSync(`${OUTPUT_DIR}/functions/api/index.func/.vc-config.json`, JSON.stringify({
+// Create wrapper that exports the handler correctly for Vercel
+writeFileSync(`${FUNC_DIR}/index.js`, `
+const handler = require('./handler.js');
+module.exports = handler.default || handler;
+`);
+
+// Create function config for Vercel Node.js
+writeFileSync(`${FUNC_DIR}/.vc-config.json`, JSON.stringify({
     runtime: 'nodejs20.x',
-    handler: 'index.default',
+    handler: 'index.js',
     launcherType: 'Nodejs'
 }));
 
