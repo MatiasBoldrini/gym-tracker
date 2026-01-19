@@ -1,7 +1,7 @@
 {
     "version": 2,
     "framework": null,
-    "installCommand": "npm install",
+    "installCommand": "npm install && npm --prefix apps/web install",
     "buildCommand": "node scripts/build-api.mjs && npm --prefix apps/web run build",
     "outputDirectory": "apps/web/dist"
 }
