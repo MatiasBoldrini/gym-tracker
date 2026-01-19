@@ -18,6 +18,7 @@ await esbuild.build({
     outfile: `${FUNC_DIR}/handler.js`,
     minify: false,
     treeShaking: true,
+    external: ['http', 'https', 'stream', 'zlib', 'buffer', 'crypto', 'fs', 'path', 'os', 'url', 'util', 'events', 'net', 'tls', 'child_process', 'dns', 'dgram', 'cluster', 'module', 'readline', 'repl', 'tty', 'v8', 'vm', 'worker_threads', 'perf_hooks', 'async_hooks', 'string_decoder', 'timers', 'querystring', 'assert', 'inspector'],
 });
 
 // Create wrapper that exports the handler correctly for Vercel
