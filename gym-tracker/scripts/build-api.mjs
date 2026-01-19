@@ -8,17 +8,16 @@ const FUNC_DIR = `${OUTPUT_DIR}/functions/api/index.func`;
 mkdirSync(FUNC_DIR, { recursive: true });
 mkdirSync(`${OUTPUT_DIR}/static`, { recursive: true });
 
-// Bundle the API function - using test handler for debugging
+// Bundle the API function
 await esbuild.build({
-    entryPoints: ['api-src/test-handler.ts'],
+    entryPoints: ['api-src/[[...path]].ts'],
     bundle: true,
     platform: 'node',
     target: 'node20',
     format: 'cjs',
     outfile: `${FUNC_DIR}/handler.js`,
-    minify: false,
+    minify: true,
     treeShaking: true,
-    external: ['http', 'https', 'stream', 'zlib', 'buffer', 'crypto', 'fs', 'path', 'os', 'url', 'util', 'events', 'net', 'tls', 'child_process', 'dns', 'dgram', 'cluster', 'module', 'readline', 'repl', 'tty', 'v8', 'vm', 'worker_threads', 'perf_hooks', 'async_hooks', 'string_decoder', 'timers', 'querystring', 'assert', 'inspector'],
 });
 
 // Create wrapper that exports the handler correctly for Vercel

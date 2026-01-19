@@ -1,5 +1,5 @@
 import { Hono } from "hono";
-import { handle } from "hono/vercel";
+import { getRequestListener } from "@hono/node-server";
 import { google } from "googleapis";
 import { getAuthContext, getUserFromRequest } from "./_lib/supabase/auth";
 import { getUserIntegration, upsertUserIntegration } from "./_lib/supabase/integrations";
@@ -958,8 +958,5 @@ app.delete("/user/preferences/onboarding", async (c) => {
     }
 });
 
-export default handle(app);
-
-export const config = {
-    runtime: "nodejs",
-};
+// Export as Node.js HTTP handler for Vercel Build Output API
+export default getRequestListener(app.fetch);
