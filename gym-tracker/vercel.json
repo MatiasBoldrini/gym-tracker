@@ -1,10 +1,19 @@
 {
     "version": 2,
-    "framework": null,
     "installCommand": "npm install && npm --prefix apps/web install",
     "buildCommand": "node scripts/build-api.mjs && npm --prefix apps/web run build",
-    "outputDirectory": "apps/web/dist",
-    "rewrites": [
-        { "source": "/api/(.*)", "destination": "/api/[[...path]]" }
+    "builds": [
+        {
+            "src": "api/[[...path]].js",
+            "use": "@vercel/node"
+        },
+        {
+            "src": "apps/web/dist/**",
+            "use": "@vercel/static"
+        }
+    ],
+    "routes": [
+        { "src": "/api/(.*)", "dest": "/api/[[...path]].js" },
+        { "src": "/(.*)", "dest": "/apps/web/dist/$1" }
     ]
 }
