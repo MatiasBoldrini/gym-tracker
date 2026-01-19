@@ -3,11 +3,5 @@
     "framework": null,
     "installCommand": "npm install",
     "buildCommand": "node scripts/build-api.mjs && npm --prefix apps/web run build",
-    "outputDirectory": "apps/web/dist",
-    "functions": {
-        "api/**/*.js": {
-            "memory": 1024,
-            "maxDuration": 30
-        }
-    }
+    "outputDirectory": "apps/web/dist"
 }
