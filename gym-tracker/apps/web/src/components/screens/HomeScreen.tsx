@@ -77,10 +77,10 @@ export function HomeScreen({ initialWeek, initialWeeks, initialPrs, initialSetup
     const runSetupInBackground = useCallback(async () => {
         if (setupStartedRef.current) return;
         setupStartedRef.current = true;
-        
+
         setIsSettingUp(true);
         setSetupError(null);
-        
+
         try {
             const result = await setupSpreadsheet();
             if (result.ok) {
@@ -100,29 +100,29 @@ export function HomeScreen({ initialWeek, initialWeeks, initialPrs, initialSetup
     // Check for new user flag in URL or empty routine
     useEffect(() => {
         if (typeof window === "undefined") return;
-        
+
         const urlParams = new URLSearchParams(window.location.search);
         const forceOnboarding = urlParams.get("force_onboarding") === "true";
         const setupPending = urlParams.get("setup_pending") === "true";
         const isNewUser = urlParams.get("is_new_user") === "true";
-        
+
         // Clean URL params (auth_success, setup_pending, is_new_user) without reloading
         if (urlParams.has("auth_success") || urlParams.has("setup_pending") || urlParams.has("is_new_user") || urlParams.has("force_onboarding")) {
             const newUrl = window.location.pathname;
             window.history.replaceState({}, "", newUrl);
         }
-        
+
         // Start background setup if pending (new user without spreadsheet)
         if (setupPending || isNewUser) {
             runSetupInBackground();
         }
-        
+
         // Force onboarding if explicitly requested (from redo)
         if (forceOnboarding) {
             setShowOnboardingWizard(true);
             return;
         }
-        
+
         // Priority 1: Check server-side onboarding state (most reliable)
         if (auth.onboarding.hasCompleted || auth.onboarding.hasDismissed) {
             return;
@@ -131,12 +131,12 @@ export function HomeScreen({ initialWeek, initialWeeks, initialPrs, initialSetup
         if (auth.onboarding.hasProgress) {
             return;
         }
-        
+
         // Priority 2: Fallback to localStorage (for compat / offline)
         const hasCompletedOnboarding = localStorage.getItem("onboarding_completed_v1") === "true";
         const hasDismissedOnboarding = localStorage.getItem("onboarding_dismissed_v1") === "true";
         if (hasCompletedOnboarding || hasDismissedOnboarding) return;
-        
+
         // Priority 3: Show wizard if new user OR routine is empty
         if (isNewUser || isRoutineEmpty) {
             setShowOnboardingWizard(true);
@@ -214,7 +214,7 @@ export function HomeScreen({ initialWeek, initialWeeks, initialPrs, initialSetup
         if (!auth.isAuthenticated) return;
         if (auth.hasSpreadsheet) return;
         if (setupComplete) return;
-        
+
         // User is authenticated but has no spreadsheet - run setup
         runSetupInBackground();
     }, [auth.isLoading, auth.isAuthenticated, auth.hasSpreadsheet, setupComplete, runSetupInBackground]);
@@ -344,7 +344,7 @@ export function HomeScreen({ initialWeek, initialWeeks, initialPrs, initialSetup
 
     // Get current day from visible days
     const currentDay = visibleDays[currentDayIndex] || null;
-    
+
     // Adjust currentDayIndex if it's out of bounds after filtering
     useEffect(() => {
         if (visibleDays.length > 0 && currentDayIndex >= visibleDays.length) {
@@ -773,7 +773,7 @@ export function HomeScreen({ initialWeek, initialWeeks, initialPrs, initialSetup
         localStorage.removeItem("onboarding_dismissed_v1");
         localStorage.setItem(ONBOARDING_SYNC_ACTION_KEY, "complete");
         setShowOnboardingWizard(false);
-        
+
         // Persist to server (reliable, cross-device)
         completeOnboarding()
             .then((res) => {
@@ -783,7 +783,7 @@ export function HomeScreen({ initialWeek, initialWeeks, initialPrs, initialSetup
                 }
             })
             .catch((e) => console.error("Failed to persist onboarding complete:", e));
-        
+
         // Refresh week data after onboarding
         try {
             const data = await fetchWeekData(selectedWeekId);
@@ -801,7 +801,7 @@ export function HomeScreen({ initialWeek, initialWeeks, initialPrs, initialSetup
         localStorage.setItem("onboarding_dismissed_v1", "true");
         localStorage.setItem(ONBOARDING_SYNC_ACTION_KEY, "dismiss");
         setShowOnboardingWizard(false);
-        
+
         // Persist to server (reliable, cross-device)
         dismissOnboarding()
             .then((res) => {
@@ -816,8 +816,8 @@ export function HomeScreen({ initialWeek, initialWeeks, initialPrs, initialSetup
     return (
         <div className="min-h-[calc(100dvh-(var(--bottom-nav-base)+env(safe-area-inset-bottom)))] w-full flex flex-col bg-[#F2F2F7] overflow-x-hidden">
             {/* Onboarding wizard for new users */}
-            <OnboardingWizard 
-                isOpen={showOnboardingWizard} 
+            <OnboardingWizard
+                isOpen={showOnboardingWizard}
                 onComplete={handleOnboardingComplete}
                 onSkip={handleOnboardingSkip}
                 isSettingUp={isSettingUp}
@@ -893,9 +893,8 @@ export function HomeScreen({ initialWeek, initialWeeks, initialPrs, initialSetup
                     <button
                         onClick={handleToggleHideCompleted}
                         aria-pressed={hideCompleted}
-                        className={`w-10 h-10 rounded-full shadow-sm border border-black/5 flex items-center justify-center active:scale-95 transition-all ${
-                            hideCompleted ? "bg-black text-white" : "bg-white text-gray-500"
-                        }`}
+                        className={`w-10 h-10 rounded-full shadow-sm border border-black/5 flex items-center justify-center active:scale-95 transition-all ${hideCompleted ? "bg-black text-white" : "bg-white text-gray-500"
+                            }`}
                         aria-label={hideCompleted ? "Mostrar ejercicios completados" : "Ocultar ejercicios completados"}
                     >
                         <EyeOff size={18} />
@@ -948,7 +947,7 @@ export function HomeScreen({ initialWeek, initialWeeks, initialPrs, initialSetup
 
             {/* Routine Info Modal Backdrop with Blur */}
             {showInfoPopover && (
-                <div 
+                <div
                     className="fixed inset-0 z-40 bg-black/20 backdrop-blur-md"
                     onClick={() => setShowInfoPopover(false)}
                 />
@@ -956,7 +955,7 @@ export function HomeScreen({ initialWeek, initialWeeks, initialPrs, initialSetup
 
             {/* Routine Info Modal */}
             {showInfoPopover && (
-                <div 
+                <div
                     className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-50 w-[calc(100%-3rem)] max-w-sm bg-white/95 backdrop-blur-xl rounded-3xl shadow-2xl border border-black/5 overflow-hidden animate-in fade-in zoom-in-95 duration-200"
                 >
                     <div className="px-5 py-4 border-b border-black/5 flex items-center justify-between">

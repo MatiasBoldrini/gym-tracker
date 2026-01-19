@@ -14,6 +14,11 @@ function jsonError(c: any, message: string, status = 500, code?: string) {
     return c.json({ error: message, code }, status);
 }
 
+// Endpoint de diagnóstico: no toca Supabase (sirve para aislar si el problema es el runtime/routing)
+app.get("/ping", (c) => {
+    return c.json({ ok: true, ts: new Date().toISOString() });
+});
+
 app.get("/me", async (c) => {
     try {
         const auth = await getUserFromRequest(getAuthHeader(c));

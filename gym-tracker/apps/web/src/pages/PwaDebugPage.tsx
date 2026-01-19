@@ -62,13 +62,13 @@ export function PwaDebugPage() {
                     const reg = await navigator.serviceWorker.getRegistration();
                     registration = reg
                         ? {
-                              scope: reg.scope ?? null,
-                              active: reg.active?.scriptURL ?? null,
-                              waiting: reg.waiting?.scriptURL ?? null,
-                              installing: reg.installing?.scriptURL ?? null,
-                              // eslint-disable-next-line @typescript-eslint/no-explicit-any
-                              updateViaCache: ((reg as any).updateViaCache as string | undefined) ?? null,
-                          }
+                            scope: reg.scope ?? null,
+                            active: reg.active?.scriptURL ?? null,
+                            waiting: reg.waiting?.scriptURL ?? null,
+                            installing: reg.installing?.scriptURL ?? null,
+                            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                            updateViaCache: ((reg as any).updateViaCache as string | undefined) ?? null,
+                        }
                         : null;
                 }
 

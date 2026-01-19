@@ -53,7 +53,7 @@ export function RutinaEditorScreen() {
         );
         // Always include the currently selected day
         nonEmptyDayIds.add(selectedDayId);
-        
+
         return ALL_DAYS.filter((d) => nonEmptyDayIds.has(d.id));
     }, [daysSummary, selectedDayId]);
 
@@ -70,7 +70,7 @@ export function RutinaEditorScreen() {
         );
         // Also consider current day as "occupied" for this purpose
         nonEmptyDayIds.add(selectedDayId);
-        
+
         for (let i = 1; i <= 5; i++) {
             if (!nonEmptyDayIds.has(i)) {
                 return i;
@@ -115,7 +115,7 @@ export function RutinaEditorScreen() {
                 setAvailableExercises(exercisesData);
                 setSeriesOptions(seriesData);
                 setDaysSummary(daysData);
-                
+
                 // Set initial selected day to first non-empty day, or day 1 if all empty
                 const firstNonEmptyDay = daysData.find((d) => d.exercisesCount > 0);
                 if (firstNonEmptyDay) {
@@ -207,14 +207,14 @@ export function RutinaEditorScreen() {
 
     const handleAddDay = () => {
         if (nextEmptyDayId === null) return;
-        
+
         if (hasChanges) {
             const confirm = window.confirm(
                 "Tenés cambios sin guardar. ¿Querés agregar un nuevo día y perderlos?"
             );
             if (!confirm) return;
         }
-        
+
         setSelectedDayId(nextEmptyDayId);
         showToast(`Día ${nextEmptyDayId} habilitado`);
     };
@@ -231,15 +231,15 @@ export function RutinaEditorScreen() {
             prescribedSeries: exercise.prescribedSeries,
             image: exercise.image || undefined,
         };
-        
+
         const updatedExercises = [...dayExercises, newExercise];
         setDayExercises(updatedExercises);
         setIsSearchModalOpen(false);
-        
+
         // Guardado automático
         setIsSaving(true);
         setErrorMessage(null);
-        
+
         try {
             const result = await saveRoutine(
                 selectedDayId,
@@ -257,7 +257,7 @@ export function RutinaEditorScreen() {
             setSaveSuccess(true);
             showToast(`${exercise.name} agregado y guardado`);
             setTimeout(() => setSaveSuccess(false), 2000);
-            
+
             // Refresh days summary to update visible days
             refreshDaysSummary();
         } catch (error: any) {
@@ -372,13 +372,12 @@ export function RutinaEditorScreen() {
                         <button
                             onClick={handleSave}
                             disabled={!hasChanges || isSaving}
-                            className={`flex items-center gap-2 px-4 py-2.5 rounded-xl font-bold text-sm transition-all ${
-                                saveSuccess
+                            className={`flex items-center gap-2 px-4 py-2.5 rounded-xl font-bold text-sm transition-all ${saveSuccess
                                     ? "bg-ios-green text-white"
                                     : hasChanges
-                                    ? "bg-ios-blue text-white"
-                                    : "bg-gray-200 text-gray-400"
-                            } disabled:opacity-50`}
+                                        ? "bg-ios-blue text-white"
+                                        : "bg-gray-200 text-gray-400"
+                                } disabled:opacity-50`}
                         >
                             {isSaving ? (
                                 <Loader2 size={18} className="animate-spin" />

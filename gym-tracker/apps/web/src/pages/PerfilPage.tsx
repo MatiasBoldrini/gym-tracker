@@ -125,11 +125,11 @@ export function PerfilPage() {
         if (!confirmed) return;
 
         setIsResettingMesociclo(true);
-        
+
         try {
             // Reset mesociclo (delete Semana 2..N)
             const result = await resetMesociclo();
-            
+
             if (!result.ok) {
                 throw new Error(result.error || "Error al resetear mesociclo");
             }
@@ -137,7 +137,7 @@ export function PerfilPage() {
             // Clear onboarding flags (localStorage for compat)
             localStorage.removeItem("onboarding_completed_v1");
             localStorage.removeItem("onboarding_dismissed_v1");
-            
+
             // Reset onboarding in server DB
             await resetOnboarding();
 
@@ -197,11 +197,10 @@ export function PerfilPage() {
                             type="button"
                             onClick={handleCopyRoutine}
                             disabled={isCopying || !isReady}
-                            className={`w-full py-3 rounded-2xl font-bold flex items-center justify-center gap-2 text-sm ${
-                                isCopying || !isReady
+                            className={`w-full py-3 rounded-2xl font-bold flex items-center justify-center gap-2 text-sm ${isCopying || !isReady
                                     ? "bg-black/10 text-black/40"
                                     : "bg-black text-white hover:bg-black/90 active:translate-y-px transition"
-                            }`}
+                                }`}
                         >
                             {isCopying ? <Loader2 size={16} className="animate-spin" /> : <Copy size={16} />}
                             Copiar rutina para ChatGPT
@@ -233,13 +232,12 @@ export function PerfilPage() {
 
                 {copyMessage && (
                     <div
-                        className={`flex items-center gap-2 text-xs font-semibold ${
-                            copyState === "success"
+                        className={`flex items-center gap-2 text-xs font-semibold ${copyState === "success"
                                 ? "text-green-700"
                                 : copyState === "error"
-                                ? "text-red-700"
-                                : "text-gray-500"
-                        }`}
+                                    ? "text-red-700"
+                                    : "text-gray-500"
+                            }`}
                     >
                         {copyState === "success" && <Check size={16} />}
                         {copyState === "error" && <AlertCircle size={16} />}
@@ -259,11 +257,10 @@ export function PerfilPage() {
                         type="button"
                         onClick={handleRedoOnboarding}
                         disabled={isResettingMesociclo}
-                        className={`w-full py-3 rounded-2xl font-bold flex items-center justify-center gap-2 text-sm ${
-                            isResettingMesociclo
+                        className={`w-full py-3 rounded-2xl font-bold flex items-center justify-center gap-2 text-sm ${isResettingMesociclo
                                 ? "bg-black/10 text-black/40"
                                 : "bg-ios-blue text-white hover:bg-ios-blue/90 active:translate-y-px transition"
-                        }`}
+                            }`}
                     >
                         {isResettingMesociclo ? (
                             <Loader2 size={16} className="animate-spin" />
