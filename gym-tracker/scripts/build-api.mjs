@@ -11,7 +11,7 @@ await esbuild.build({
     platform: 'node',
     target: 'node20',
     format: 'cjs', // CommonJS is faster for cold start
-    outfile: 'api/[[...path]].js',
+    outfile: 'api/index.js',
     minify: true,
     treeShaking: true,
 });
