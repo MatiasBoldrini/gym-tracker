@@ -17,8 +17,15 @@ export function AuthCallbackPage() {
                 // Supabase usa ?code=... en el redirect OAuth (PKCE)
                 const params = new URLSearchParams(location.search);
                 const code = params.get("code");
+                
+                console.log("[AuthCallback] URL search:", location.search);
+                console.log("[AuthCallback] URL hash:", location.hash);
+                console.log("[AuthCallback] code:", code);
+                
                 if (code) {
+                    console.log("[AuthCallback] Exchanging code for session...");
                     const { data, error } = await supabase.auth.exchangeCodeForSession(code);
+                    console.log("[AuthCallback] Exchange result:", { data, error });
                     if (error) throw error;
                     const session = data.session;
                     const providerRefreshToken = session?.provider_refresh_token;
@@ -48,8 +55,9 @@ export function AuthCallbackPage() {
                     }
                 }
             } catch (e) {
-                console.error("Auth callback error:", e);
+                console.error("[AuthCallback] Error:", e);
             } finally {
+                console.log("[AuthCallback] Finally block, didRedirect:", didRedirect);
                 if (!cancelled && !didRedirect) {
                     navigate("/?auth_success=true", { replace: true });
                 }
