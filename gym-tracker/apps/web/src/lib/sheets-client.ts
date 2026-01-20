@@ -730,6 +730,7 @@ export async function resetOnboarding(): Promise<{ ok: boolean; error?: string }
         if (demoState) {
             demoState.onboardingCompleted = false;
             demoState.onboardingDismissed = false;
+            demoState.onboardingProgress = null;
         }
         return { ok: true };
     }

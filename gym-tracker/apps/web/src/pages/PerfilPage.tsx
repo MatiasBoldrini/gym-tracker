@@ -137,6 +137,8 @@ export function PerfilPage() {
             // Clear onboarding flags (localStorage for compat)
             localStorage.removeItem("onboarding_completed_v1");
             localStorage.removeItem("onboarding_dismissed_v1");
+            // También limpiar cualquier sync pendiente (si no, puede re-marcar complete/dismiss al refrescar)
+            localStorage.removeItem("onboarding_sync_action_v1");
 
             // Reset onboarding in server DB
             await resetOnboarding();

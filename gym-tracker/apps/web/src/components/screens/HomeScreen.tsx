@@ -60,6 +60,7 @@ export function HomeScreen({ initialWeek, initialWeeks, initialPrs, initialSetup
 
     // Onboarding wizard for new users or empty routines
     const [showOnboardingWizard, setShowOnboardingWizard] = useState(false);
+    const [onboardingStartMode, setOnboardingStartMode] = useState<"auto" | "resume" | "force">("auto");
     const ONBOARDING_SYNC_ACTION_KEY = "onboarding_sync_action_v1";
 
     // Async setup state (runs in background while user does onboarding)
@@ -121,6 +122,7 @@ export function HomeScreen({ initialWeek, initialWeeks, initialPrs, initialSetup
 
         // Force onboarding if explicitly requested (from redo)
         if (forceOnboarding) {
+            setOnboardingStartMode("force");
             setShowOnboardingWizard(true);
             return;
         }
@@ -141,6 +143,7 @@ export function HomeScreen({ initialWeek, initialWeeks, initialPrs, initialSetup
 
         // Priority 3: Show wizard if new user OR routine is empty
         if (isNewUser || isRoutineEmpty) {
+            setOnboardingStartMode("auto");
             setShowOnboardingWizard(true);
         }
     }, [isRoutineEmpty, runSetupInBackground, auth.onboarding.hasCompleted, auth.onboarding.hasDismissed, auth.onboarding.hasProgress]);
@@ -857,6 +860,7 @@ export function HomeScreen({ initialWeek, initialWeeks, initialPrs, initialSetup
             {/* Onboarding wizard for new users */}
             <OnboardingWizard
                 isOpen={showOnboardingWizard}
+                startMode={onboardingStartMode}
                 onComplete={handleOnboardingComplete}
                 onSkip={handleOnboardingSkip}
                 isSettingUp={isSettingUp}
@@ -880,7 +884,10 @@ export function HomeScreen({ initialWeek, initialWeeks, initialPrs, initialSetup
                             <p className="text-xs text-gray-500">Retomá donde lo dejaste</p>
                         </div>
                         <button
-                            onClick={() => setShowOnboardingWizard(true)}
+                            onClick={() => {
+                                setOnboardingStartMode("resume");
+                                setShowOnboardingWizard(true);
+                            }}
                             className="px-4 py-2 bg-black text-white rounded-xl text-sm font-bold active:translate-y-px transition"
                         >
                             Continuar

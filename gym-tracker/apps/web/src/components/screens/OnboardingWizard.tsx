@@ -72,6 +72,12 @@ const capitalizeFirst = (input: string): string => {
 
 interface OnboardingWizardProps {
     isOpen: boolean;
+    /**
+     * - "auto": apertura automática (rutina vacía / nuevo usuario)
+     * - "resume": el usuario tocó "Continuar onboarding"
+     * - "force": "Rehacer onboarding" (debe arrancar desde cero, sin rehidratar desde Sheets)
+     */
+    startMode?: "auto" | "resume" | "force";
     onComplete: () => void;
     onSkip?: () => void;
     /** Whether spreadsheet setup is running in background */
@@ -90,6 +96,7 @@ interface DayConfig {
 
 export function OnboardingWizard({
     isOpen,
+    startMode = "auto",
     onComplete,
     onSkip,
     isSettingUp = false,
@@ -309,6 +316,9 @@ export function OnboardingWizard({
     // Rehydrate progress when wizard opens
     useEffect(() => {
         if (!isOpen) return;
+        // Si el usuario eligió "rehacer onboarding", queremos arrancar SIEMPRE desde 0.
+        // (Si rehidratamos desde Sheets, lo manda al primer día incompleto o directo a "weeks".)
+        if (startMode === "force") return;
         let cancelled = false;
 
         const rehydrate = async () => {
@@ -380,7 +390,7 @@ export function OnboardingWizard({
         return () => {
             cancelled = true;
         };
-    }, [auth.hasSpreadsheet, isOpen]);
+    }, [auth.hasSpreadsheet, isOpen, startMode]);
 
     // Toggle muscle selection for current day (usa clave normalizada)
     const toggleMuscle = (muscle: string) => {
