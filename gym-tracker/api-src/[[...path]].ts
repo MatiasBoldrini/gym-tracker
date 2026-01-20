@@ -91,6 +91,20 @@ function jsonError(c: any, message: string, status = 500, code?: string) {
     return c.json({ error: message, code }, status);
 }
 
+// Debug endpoint to check headers
+app.get("/debug/headers", (c) => {
+    const headers: Record<string, string> = {};
+    c.req.raw.headers.forEach((value: string, key: string) => {
+        headers[key] = key.toLowerCase() === 'authorization' ? value.substring(0, 20) + '...' : value;
+    });
+    return c.json({ 
+        headers,
+        authHeader: getAuthHeader(c) ? 'present' : 'missing',
+        url: c.req.url,
+        path: c.req.path
+    });
+});
+
 app.get("/auth/me", async (c) => {
     try {
         const auth = await getUserFromRequest(getAuthHeader(c));
