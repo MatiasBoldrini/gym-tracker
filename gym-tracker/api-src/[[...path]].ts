@@ -91,15 +91,6 @@ function jsonError(c: any, message: string, status = 500, code?: string) {
     return c.json({ error: message, code }, status);
 }
 
-// Debug endpoint to check environment
-app.get("/debug/env", (c) => {
-    return c.json({ 
-        hasSupabaseUrl: !!process.env.NEXT_PUBLIC_SUPABASE_URL,
-        hasSupabaseKey: !!process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_DEFAULT_KEY,
-        supabaseUrlPrefix: process.env.NEXT_PUBLIC_SUPABASE_URL?.substring(0, 30) + '...',
-    });
-});
-
 app.get("/auth/me", async (c) => {
     try {
         const auth = await getUserFromRequest(getAuthHeader(c));
