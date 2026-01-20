@@ -91,17 +91,12 @@ function jsonError(c: any, message: string, status = 500, code?: string) {
     return c.json({ error: message, code }, status);
 }
 
-// Debug endpoint to check headers
-app.get("/debug/headers", (c) => {
-    const headers: Record<string, string> = {};
-    c.req.raw.headers.forEach((value: string, key: string) => {
-        headers[key] = key.toLowerCase() === 'authorization' ? value.substring(0, 20) + '...' : value;
-    });
+// Debug endpoint to check environment
+app.get("/debug/env", (c) => {
     return c.json({ 
-        headers,
-        authHeader: getAuthHeader(c) ? 'present' : 'missing',
-        url: c.req.url,
-        path: c.req.path
+        hasSupabaseUrl: !!process.env.NEXT_PUBLIC_SUPABASE_URL,
+        hasSupabaseKey: !!process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_DEFAULT_KEY,
+        supabaseUrlPrefix: process.env.NEXT_PUBLIC_SUPABASE_URL?.substring(0, 30) + '...',
     });
 });
 
