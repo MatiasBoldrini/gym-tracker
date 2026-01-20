@@ -1,7 +1,7 @@
 import { Hono } from "hono";
 import { getRequestListener } from "@hono/node-server";
 import { google } from "googleapis";
-import { getAuthContext, getUserFromRequest } from "./_lib/supabase/auth";
+import { getAuthContext, getAuthContextResult, getUserFromRequest } from "./_lib/supabase/auth";
 import { getUserIntegration, upsertUserIntegration } from "./_lib/supabase/integrations";
 import { refreshAccessToken } from "./_lib/google/oauth";
 import { getAuthenticatedClient } from "./_lib/google/oauth";
@@ -79,6 +79,41 @@ async function cleanWeekData(
         valueInputOption: "USER_ENTERED",
         requestBody: { values: newValues },
     });
+}
+
+async function clearSemana1Routine(
+    sheets: ReturnType<typeof google.sheets>,
+    spreadsheetId: string,
+    accessToken: string
+) {
+    const sheetName = "Semana 1";
+    const currentData = await readSheetValues(accessToken, spreadsheetId, `'${sheetName}'!A:D`);
+
+    const updates: { range: string; values: (string | null)[][] }[] = [];
+    for (let dayId = 1; dayId <= 5; dayId++) {
+        const dayRange = findDayRange(currentData, dayId);
+        if (!dayRange) continue;
+
+        // `dayRange.startRow` es índice 0-based del primer renglón debajo de "DIA X".
+        // Para Sheets API necesitamos números de fila 1-based.
+        const startRowNumber = dayRange.startRow + 1;
+        const endRowNumber = startRowNumber + MAX_EXERCISES_PER_DAY - 1;
+        const values = Array.from({ length: MAX_EXERCISES_PER_DAY }, () => ["", "", "", ""]);
+        updates.push({ range: `'${sheetName}'!A${startRowNumber}:D${endRowNumber}`, values });
+    }
+
+    if (updates.length > 0) {
+        await sheets.spreadsheets.values.batchUpdate({
+            spreadsheetId,
+            requestBody: {
+                valueInputOption: "USER_ENTERED",
+                data: updates.map((u) => ({ range: u.range, values: u.values })),
+            },
+        });
+    }
+
+    // También limpiar sets/ratings para que el reset sea real (misma lógica que para semanas duplicadas).
+    await cleanWeekData(sheets, spreadsheetId, sheetName);
 }
 
 const app = new Hono().basePath("/api");
@@ -219,10 +254,9 @@ app.post("/auth/callback", async (c) => {
 
 app.get("/sheets/home", async (c) => {
     try {
-        const auth = await getAuthContext(getAuthHeader(c));
-        if (!auth) {
-            return jsonError(c, "No autenticado", 401);
-        }
+        const authRes = await getAuthContextResult(getAuthHeader(c));
+        if (!authRes.ok) return jsonError(c, authRes.message, authRes.status, authRes.code);
+        const auth = authRes.ctx;
 
         const key = `home-${auth.userId}-${auth.spreadsheetId}`;
         const payload = await withCache(key, 300, async () => {
@@ -265,8 +299,9 @@ app.get("/sheets/home", async (c) => {
 
 app.get("/sheets/weeks", async (c) => {
     try {
-        const auth = await getAuthContext(getAuthHeader(c));
-        if (!auth) return jsonError(c, "No autenticado", 401);
+        const authRes = await getAuthContextResult(getAuthHeader(c));
+        if (!authRes.ok) return jsonError(c, authRes.message, authRes.status, authRes.code);
+        const auth = authRes.ctx;
 
         const key = `weeks-${auth.userId}-${auth.spreadsheetId}`;
         const weeks = await withCache(key, 300, async () => {
@@ -293,8 +328,9 @@ app.get("/sheets/weeks", async (c) => {
 
 app.get("/sheets/week", async (c) => {
     try {
-        const auth = await getAuthContext(getAuthHeader(c));
-        if (!auth) return jsonError(c, "No autenticado", 401);
+        const authRes = await getAuthContextResult(getAuthHeader(c));
+        if (!authRes.ok) return jsonError(c, authRes.message, authRes.status, authRes.code);
+        const auth = authRes.ctx;
 
         const weekIdRaw = c.req.query("weekId");
         const weekId = Number(weekIdRaw);
@@ -324,8 +360,9 @@ app.get("/sheets/week", async (c) => {
 
 app.get("/sheets/prs", async (c) => {
     try {
-        const auth = await getAuthContext(getAuthHeader(c));
-        if (!auth) return jsonError(c, "No autenticado", 401);
+        const authRes = await getAuthContextResult(getAuthHeader(c));
+        if (!authRes.ok) return jsonError(c, authRes.message, authRes.status, authRes.code);
+        const auth = authRes.ctx;
 
         const accessToken = await refreshAccessToken(auth.refreshToken);
         const values = await readSheetValues(accessToken, auth.spreadsheetId, `'RM A,B,C'!A:E`)
@@ -341,8 +378,9 @@ app.get("/sheets/prs", async (c) => {
 
 app.get("/sheets/exercises", async (c) => {
     try {
-        const auth = await getAuthContext(getAuthHeader(c));
-        if (!auth) return jsonError(c, "No autenticado", 401);
+        const authRes = await getAuthContextResult(getAuthHeader(c));
+        if (!authRes.ok) return jsonError(c, authRes.message, authRes.status, authRes.code);
+        const auth = authRes.ctx;
 
         const accessToken = await refreshAccessToken(auth.refreshToken);
         const values = await readSheetValues(accessToken, auth.spreadsheetId, `'Ejercicios'!A:D`);
@@ -369,8 +407,9 @@ app.get("/sheets/exercises", async (c) => {
 
 app.get("/sheets/series", async (c) => {
     try {
-        const auth = await getAuthContext(getAuthHeader(c));
-        if (!auth) return jsonError(c, "No autenticado", 401);
+        const authRes = await getAuthContextResult(getAuthHeader(c));
+        if (!authRes.ok) return jsonError(c, authRes.message, authRes.status, authRes.code);
+        const auth = authRes.ctx;
 
         const accessToken = await refreshAccessToken(auth.refreshToken);
         const values = await readSheetValues(accessToken, auth.spreadsheetId, `'Series'!A:A`);
@@ -387,8 +426,9 @@ app.get("/sheets/series", async (c) => {
 
 app.get("/sheets/onboarding-data", async (c) => {
     try {
-        const auth = await getAuthContext(getAuthHeader(c));
-        if (!auth) return jsonError(c, "No autenticado", 401);
+        const authRes = await getAuthContextResult(getAuthHeader(c));
+        if (!authRes.ok) return jsonError(c, authRes.message, authRes.status, authRes.code);
+        const auth = authRes.ctx;
 
         const accessToken = await refreshAccessToken(auth.refreshToken);
         const [exValues, seriesValues] = await Promise.all([
@@ -423,8 +463,9 @@ app.get("/sheets/onboarding-data", async (c) => {
 
 app.get("/sheets/exercise", async (c) => {
     try {
-        const auth = await getAuthContext(getAuthHeader(c));
-        if (!auth) return jsonError(c, "No autenticado", 401);
+        const authRes = await getAuthContextResult(getAuthHeader(c));
+        if (!authRes.ok) return jsonError(c, authRes.message, authRes.status, authRes.code);
+        const auth = authRes.ctx;
         const weekId = Number(c.req.query("weekId"));
         const dayId = Number(c.req.query("dayId"));
         const exerciseName = c.req.query("exerciseName") || "";
@@ -449,8 +490,9 @@ app.get("/sheets/exercise", async (c) => {
 
 app.post("/sheets/exercises-bulk", async (c) => {
     try {
-        const auth = await getAuthContext(getAuthHeader(c));
-        if (!auth) return jsonError(c, "No autenticado", 401);
+        const authRes = await getAuthContextResult(getAuthHeader(c));
+        if (!authRes.ok) return jsonError(c, authRes.message, authRes.status, authRes.code);
+        const auth = authRes.ctx;
         const body = await c.req.json();
         const { weekId, dayId, exerciseNames } = body || {};
         if (!Number.isFinite(weekId) || !Number.isFinite(dayId) || !Array.isArray(exerciseNames)) {
@@ -474,8 +516,9 @@ app.post("/sheets/exercises-bulk", async (c) => {
 
 app.post("/sheets/save", async (c) => {
     try {
-        const auth = await getAuthContext(getAuthHeader(c));
-        if (!auth) return jsonError(c, "No autenticado", 401);
+        const authRes = await getAuthContextResult(getAuthHeader(c));
+        if (!authRes.ok) return jsonError(c, authRes.message, authRes.status, authRes.code);
+        const auth = authRes.ctx;
         const body = await c.req.json();
         const { weekId, dayId, exerciseName, sets } = body || {};
         if (!Number.isFinite(weekId) || !Number.isFinite(dayId) || !exerciseName || !Array.isArray(sets)) {
@@ -500,8 +543,9 @@ app.post("/sheets/save", async (c) => {
 
 app.post("/sheets/rating", async (c) => {
     try {
-        const auth = await getAuthContext(getAuthHeader(c));
-        if (!auth) return jsonError(c, "No autenticado", 401);
+        const authRes = await getAuthContextResult(getAuthHeader(c));
+        if (!authRes.ok) return jsonError(c, authRes.message, authRes.status, authRes.code);
+        const auth = authRes.ctx;
         const body = await c.req.json();
         const { weekId, dayId, stars } = body || {};
         if (!Number.isFinite(weekId) || !Number.isFinite(dayId) || !Number.isFinite(stars)) {
@@ -525,8 +569,9 @@ app.post("/sheets/rating", async (c) => {
 
 app.get("/sheets/routine", async (c) => {
     try {
-        const auth = await getAuthContext(getAuthHeader(c));
-        if (!auth) return jsonError(c, "No autenticado", 401);
+        const authRes = await getAuthContextResult(getAuthHeader(c));
+        if (!authRes.ok) return jsonError(c, authRes.message, authRes.status, authRes.code);
+        const auth = authRes.ctx;
         const dayId = Number(c.req.query("dayId"));
         if (!Number.isFinite(dayId) || dayId < 1 || dayId > 5) {
             return jsonError(c, "dayId debe ser un número entre 1 y 5", 400);
@@ -557,8 +602,9 @@ app.get("/sheets/routine", async (c) => {
 
 app.post("/sheets/routine", async (c) => {
     try {
-        const auth = await getAuthContext(getAuthHeader(c));
-        if (!auth) return jsonError(c, "No autenticado", 401);
+        const authRes = await getAuthContextResult(getAuthHeader(c));
+        if (!authRes.ok) return jsonError(c, authRes.message, authRes.status, authRes.code);
+        const auth = authRes.ctx;
         const body = await c.req.json();
         const { dayId, exercises } = body || {};
         if (!Number.isFinite(dayId) || dayId < 1 || dayId > 5) {
@@ -605,8 +651,9 @@ app.post("/sheets/routine", async (c) => {
 
 app.get("/sheets/routine/days", async (c) => {
     try {
-        const auth = await getAuthContext(getAuthHeader(c));
-        if (!auth) return jsonError(c, "No autenticado", 401);
+        const authRes = await getAuthContextResult(getAuthHeader(c));
+        if (!authRes.ok) return jsonError(c, authRes.message, authRes.status, authRes.code);
+        const auth = authRes.ctx;
         const accessToken = await refreshAccessToken(auth.refreshToken);
         const values = await readSheetValues(accessToken, auth.spreadsheetId, `'Semana 1'!A:B`);
         const days: { id: number; exercisesCount: number }[] = [];
@@ -639,8 +686,9 @@ app.get("/sheets/routine/days", async (c) => {
 
 app.post("/sheets/mesociclo", async (c) => {
     try {
-        const auth = await getAuthContext(getAuthHeader(c));
-        if (!auth) return jsonError(c, "No autenticado", 401);
+        const authRes = await getAuthContextResult(getAuthHeader(c));
+        if (!authRes.ok) return jsonError(c, authRes.message, authRes.status, authRes.code);
+        const auth = authRes.ctx;
         const body = await c.req.json();
         const weeks = Number(body?.weeks);
         if (!Number.isFinite(weeks) || weeks < 1 || weeks > 15) {
@@ -725,8 +773,9 @@ app.post("/sheets/mesociclo", async (c) => {
 
 app.delete("/sheets/mesociclo", async (c) => {
     try {
-        const auth = await getAuthContext(getAuthHeader(c));
-        if (!auth) return jsonError(c, "No autenticado", 401);
+        const authRes = await getAuthContextResult(getAuthHeader(c));
+        if (!authRes.ok) return jsonError(c, authRes.message, authRes.status, authRes.code);
+        const auth = authRes.ctx;
         const accessToken = await refreshAccessToken(auth.refreshToken);
         const sheets = google.sheets({ version: "v4", auth: getAuthenticatedClient(accessToken) });
         const spreadsheet = await sheets.spreadsheets.get({
@@ -747,6 +796,11 @@ app.delete("/sheets/mesociclo", async (c) => {
                 requestBody: { requests: sheetsToDelete },
             });
         }
+
+        // "Rehacer onboarding" debería arrancar realmente desde cero:
+        // limpiar la rutina de Semana 1 (ejercicios/series/notas + sets/ratings).
+        await clearSemana1Routine(sheets, auth.spreadsheetId, accessToken);
+
         return c.json({ ok: true });
     } catch (error: any) {
         console.error("Error resetting mesociclo:", error);
@@ -850,10 +904,15 @@ app.get("/sheets/setup", async (c) => {
 
 app.get("/fatiga", async (c) => {
     try {
-        const auth = await getAuthContext(getAuthHeader(c));
-        if (!auth) {
-            return c.json({ muscleRows: [], daySummary: [], calendarDays: [], intensityByGroupId: {} });
+        const authRes = await getAuthContextResult(getAuthHeader(c));
+        if (!authRes.ok) {
+            // Mantener el comportamiento anterior: si no hay sesión, devolvemos vacío.
+            if (authRes.code === "NO_AUTH") {
+                return c.json({ muscleRows: [], daySummary: [], calendarDays: [], intensityByGroupId: {} });
+            }
+            return jsonError(c, authRes.message, authRes.status, authRes.code);
         }
+        const auth = authRes.ctx;
         const accessToken = await refreshAccessToken(auth.refreshToken);
         const data = await readSheetValues(accessToken, auth.spreadsheetId, `'Fatiga'!A:Z`);
         const { muscleRows, daySummary, calendarDays, raw } = computeFatigaFromSheet(data);

@@ -43,9 +43,15 @@ export async function clearRuntimeDataCaches() {
     if (typeof window === "undefined") return { ok: false as const, reason: "no-window" as const };
     if (!("caches" in window)) return { ok: false as const, reason: "no-cache" as const };
 
-    const names = ["sheets-api-cache", "fatiga-api-cache", "bodymap-api-cache"];
+    // Nota: nombres de caches pueden variar entre versiones del SW (Workbox).
+    // Para evitar que quede un 401/response vieja “pegada”, borramos caches que claramente no son assets.
+    const keep = new Set(["exercise-images", "static-images"]);
+    const keys = await caches.keys();
     const results = await Promise.all(
-        names.map(async (name) => {
+        keys.map(async (name) => {
+            if (keep.has(name)) return { name, deleted: false, skipped: true as const };
+            const looksLikeRuntimeDataCache = /(api|workbox|runtime|sheets|fatiga|bodymap)/i.test(name);
+            if (!looksLikeRuntimeDataCache) return { name, deleted: false, skipped: true as const };
             try {
                 const deleted = await caches.delete(name);
                 return { name, deleted };

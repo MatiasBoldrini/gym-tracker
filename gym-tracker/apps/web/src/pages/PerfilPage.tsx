@@ -119,7 +119,7 @@ export function PerfilPage() {
         if (!isReady) return;
 
         const confirmed = window.confirm(
-            "⚠️ Esto borrará todas las semanas excepto Semana 1 y reiniciará el wizard de configuración.\n\n¿Estás seguro?"
+            "⚠️ Esto borrará todas las semanas excepto Semana 1, limpiará tu Semana 1 y reiniciará el wizard de configuración.\n\n¿Estás seguro?"
         );
 
         if (!confirmed) return;

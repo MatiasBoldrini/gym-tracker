@@ -13,6 +13,7 @@ import { EyeOff, Loader2, Sparkles } from "lucide-react";
 import { OnboardingWizard } from "@/components/screens/OnboardingWizard";
 import { normalizeExerciseKey } from "@/lib/normalize";
 import { cacheUrls, clearRuntimeDataCaches } from "@/lib/pwa";
+import { useLocation } from "react-router-dom";
 
 type WeekListItem = { id: number; name: string };
 
@@ -39,6 +40,7 @@ export function HomeScreen({ initialWeek, initialWeeks, initialPrs, initialSetup
     // Auth state
     const auth = useAuth();
     const [errorMessage, setErrorMessage] = useState<string | null>(initialSetupError?.message ?? null);
+    const location = useLocation();
 
     // Info popover (rutina + progreso)
     const [showInfoPopover, setShowInfoPopover] = useState(false);
@@ -104,14 +106,16 @@ export function HomeScreen({ initialWeek, initialWeeks, initialPrs, initialSetup
     useEffect(() => {
         if (typeof window === "undefined") return;
 
-        const urlParams = new URLSearchParams(window.location.search);
+        // Importante: reaccionar a cambios del querystring (por ejemplo navigate("/?force_onboarding=true"))
+        // porque en SPA el componente puede NO remount-ear.
+        const urlParams = new URLSearchParams(location.search);
         const forceOnboarding = urlParams.get("force_onboarding") === "true";
         const setupPending = urlParams.get("setup_pending") === "true";
         const isNewUser = urlParams.get("is_new_user") === "true";
 
         // Clean URL params (auth_success, setup_pending, is_new_user) without reloading
         if (urlParams.has("auth_success") || urlParams.has("setup_pending") || urlParams.has("is_new_user") || urlParams.has("force_onboarding")) {
-            const newUrl = window.location.pathname;
+            const newUrl = location.pathname;
             window.history.replaceState({}, "", newUrl);
         }
 
@@ -146,7 +150,7 @@ export function HomeScreen({ initialWeek, initialWeeks, initialPrs, initialSetup
             setOnboardingStartMode("auto");
             setShowOnboardingWizard(true);
         }
-    }, [isRoutineEmpty, runSetupInBackground, auth.onboarding.hasCompleted, auth.onboarding.hasDismissed, auth.onboarding.hasProgress]);
+    }, [location.search, location.pathname, isRoutineEmpty, runSetupInBackground, auth.onboarding.hasCompleted, auth.onboarding.hasDismissed, auth.onboarding.hasProgress]);
 
     // Retry onboarding sync if we ever completed/dismissed offline or if the server write failed.
     useEffect(() => {
@@ -234,15 +238,26 @@ export function HomeScreen({ initialWeek, initialWeeks, initialPrs, initialSetup
             code === "SHEETS_PERMISSION" ||
             code === "SHEETS_NOT_FOUND" ||
             code === "SHEETS_BAD_RANGE" ||
+            code === "NO_INTEGRATION" ||
+            code === "NO_SPREADSHEET" ||
+            code === "NO_REFRESH_TOKEN" ||
+            code === "DECRYPT_REFRESH_TOKEN_FAILED" ||
+            code === "CONFIG_TOKEN_ENCRYPTION_KEY" ||
             status === 403 ||
             status === 404 ||
+            status === 401 ||
             messageLower.includes("no tenés permiso") ||
             messageLower.includes("permission") ||
             messageLower.includes("no encontramos ese google sheet");
 
         if (!isBlocking) return false;
 
-        setErrorMessage(message || "No pudimos acceder a tu Google Sheet. Probá desloguearte y volver a conectar.");
+        setErrorMessage(
+            message ||
+                (status === 401
+                    ? "Tu sesión o tu conexión con Google expiró. Probá cerrar sesión y volver a conectar."
+                    : "No pudimos acceder a tu Google Sheet. Probá desloguearte y volver a conectar.")
+        );
         return true;
     };
 
@@ -858,15 +873,17 @@ export function HomeScreen({ initialWeek, initialWeeks, initialPrs, initialSetup
     return (
         <div className="min-h-[calc(100dvh-(var(--bottom-nav-base)+env(safe-area-inset-bottom)))] w-full flex flex-col bg-[#F2F2F7] overflow-x-hidden">
             {/* Onboarding wizard for new users */}
-            <OnboardingWizard
-                isOpen={showOnboardingWizard}
-                startMode={onboardingStartMode}
-                onComplete={handleOnboardingComplete}
-                onSkip={handleOnboardingSkip}
-                isSettingUp={isSettingUp}
-                setupComplete={setupComplete || auth.hasSpreadsheet}
-                setupError={setupError}
-            />
+            {showOnboardingWizard && (
+                <OnboardingWizard
+                    isOpen={true}
+                    startMode={onboardingStartMode}
+                    onComplete={handleOnboardingComplete}
+                    onSkip={handleOnboardingSkip}
+                    isSettingUp={isSettingUp}
+                    setupComplete={setupComplete || auth.hasSpreadsheet}
+                    setupError={setupError}
+                />
+            )}
 
             {/* Error banner */}
             {errorMessage && (
