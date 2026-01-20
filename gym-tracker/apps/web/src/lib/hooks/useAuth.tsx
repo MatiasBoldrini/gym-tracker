@@ -26,6 +26,9 @@ interface AuthState {
     onboarding: OnboardingState;
 }
 
+const AUTH_CACHE_KEY = "gymtracker.auth.cache";
+const AUTH_CACHE_TTL_MS = 6 * 60 * 60 * 1000;
+
 const defaultOnboarding: OnboardingState = {
     version: 1,
     completedAt: null,
@@ -61,11 +64,62 @@ type AuthContextValue = AuthState & {
 
 const AuthContext = createContext<AuthContextValue | null>(null);
 
+type AuthCachePayload = Omit<AuthState, "isLoading"> & { cachedAt: number };
+
+function readAuthCache(): AuthState | null {
+    if (typeof window === "undefined") return null;
+    try {
+        const raw = window.localStorage.getItem(AUTH_CACHE_KEY);
+        if (!raw) return null;
+        const parsed = JSON.parse(raw) as Partial<AuthCachePayload> | null;
+        if (!parsed || typeof parsed.cachedAt !== "number") return null;
+        if (Date.now() - parsed.cachedAt > AUTH_CACHE_TTL_MS) return null;
+        return {
+            isLoading: false,
+            isAuthenticated: !!parsed.isAuthenticated,
+            hasSpreadsheet: !!parsed.hasSpreadsheet,
+            spreadsheetId: parsed.spreadsheetId ?? null,
+            userId: parsed.userId ?? null,
+            email: parsed.email ?? null,
+            onboarding: parsed.onboarding ?? defaultOnboarding,
+        };
+    } catch {
+        return null;
+    }
+}
+
+function writeAuthCache(state: AuthState) {
+    if (typeof window === "undefined") return;
+    try {
+        const payload: AuthCachePayload = {
+            isAuthenticated: state.isAuthenticated,
+            hasSpreadsheet: state.hasSpreadsheet,
+            spreadsheetId: state.spreadsheetId,
+            userId: state.userId,
+            email: state.email,
+            onboarding: state.onboarding,
+            cachedAt: Date.now(),
+        };
+        window.localStorage.setItem(AUTH_CACHE_KEY, JSON.stringify(payload));
+    } catch {
+        // Silenciar errores de storage (modo privado, cuota, etc.)
+    }
+}
+
+function clearAuthCache() {
+    if (typeof window === "undefined") return;
+    try {
+        window.localStorage.removeItem(AUTH_CACHE_KEY);
+    } catch {
+        // Silenciar errores de storage
+    }
+}
+
 function useAuthState() {
     const [state, setState] = useState<AuthState>(
         DEMO_MODE
             ? demoAuthState
-            : {
+            : readAuthCache() ?? {
                 isLoading: true,
                 isAuthenticated: false,
                 hasSpreadsheet: false,
@@ -85,6 +139,28 @@ function useAuthState() {
             const supabase = createClient();
             const { data: sessionData } = await supabase.auth.getSession();
             const accessToken = sessionData.session?.access_token;
+            if (!accessToken) {
+                clearAuthCache();
+                setState({
+                    isLoading: false,
+                    isAuthenticated: false,
+                    hasSpreadsheet: false,
+                    spreadsheetId: null,
+                    userId: null,
+                    email: null,
+                    onboarding: defaultOnboarding,
+                });
+                return;
+            }
+            setState((prev) =>
+                prev.isAuthenticated
+                    ? { ...prev, isLoading: false }
+                    : {
+                        ...prev,
+                        isLoading: false,
+                        isAuthenticated: true,
+                    }
+            );
             const response = await fetch("/api/auth/me", {
                 headers: accessToken ? { Authorization: `Bearer ${accessToken}` } : undefined,
             });
@@ -94,7 +170,7 @@ function useAuthState() {
             }
             const data = await response.json();
 
-            setState({
+            const nextState = {
                 isLoading: false,
                 isAuthenticated: data.authenticated ?? false,
                 hasSpreadsheet: data.hasSpreadsheet ?? false,
@@ -102,18 +178,28 @@ function useAuthState() {
                 userId: data.userId ?? null,
                 email: data.email ?? null,
                 onboarding: data.onboarding ?? defaultOnboarding,
-            });
+            };
+            setState(nextState);
+            if (nextState.isAuthenticated) {
+                writeAuthCache(nextState);
+            } else {
+                clearAuthCache();
+            }
         } catch (error) {
             console.error("Error fetching auth state:", error);
-            setState({
-                isLoading: false,
-                isAuthenticated: false,
-                hasSpreadsheet: false,
-                spreadsheetId: null,
-                userId: null,
-                email: null,
-                onboarding: defaultOnboarding,
-            });
+            setState((prev) =>
+                prev.isAuthenticated
+                    ? { ...prev, isLoading: false }
+                    : {
+                        isLoading: false,
+                        isAuthenticated: false,
+                        hasSpreadsheet: false,
+                        spreadsheetId: null,
+                        userId: null,
+                        email: null,
+                        onboarding: defaultOnboarding,
+                    }
+            );
         }
     }, []);
 
@@ -177,6 +263,7 @@ function useAuthState() {
             });
             await supabase.auth.signOut();
             await clearRuntimeDataCaches();
+            clearAuthCache();
             setState({
                 isLoading: false,
                 isAuthenticated: false,
