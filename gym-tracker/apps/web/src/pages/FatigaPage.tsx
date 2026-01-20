@@ -4,6 +4,7 @@ import { createClient } from "@/lib/supabase/client";
 import { DEMO_MODE, getDemoFatigaData } from "@/lib/demo-data";
 import type { FatigaDaySummaryRow, FatigaMuscleRow } from "@/lib/fatiga";
 import { clearRuntimeDataCaches } from "@/lib/pwa";
+import { useAuth } from "@/lib/hooks/useAuth";
 
 type FatigaPayload = {
     muscleRows: FatigaMuscleRow[];
@@ -33,6 +34,7 @@ function writeFatigaCache(payload: FatigaPayload) {
 }
 
 export function FatigaPage() {
+    const auth = useAuth();
     const [data, setData] = useState<FatigaPayload>(() => {
         if (DEMO_MODE) return getDemoFatigaData();
         if (typeof window === "undefined") {
@@ -45,6 +47,9 @@ export function FatigaPage() {
 
     useEffect(() => {
         if (DEMO_MODE) return;
+        if (auth.isLoading) return;
+        if (!auth.isAuthenticated) return;
+        if (!auth.hasSpreadsheet) return;
         let cancelled = false;
         const load = async () => {
             try {
@@ -74,7 +79,7 @@ export function FatigaPage() {
         return () => {
             cancelled = true;
         };
-    }, []);
+    }, [auth.isLoading, auth.isAuthenticated, auth.hasSpreadsheet]);
 
     return (
         <FatigaScreen

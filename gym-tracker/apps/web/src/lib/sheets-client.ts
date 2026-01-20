@@ -594,6 +594,8 @@ export interface SetupResult {
     spreadsheetId?: string;
     alreadyExists?: boolean;
     error?: string;
+    code?: string;
+    status?: number;
 }
 
 /**
@@ -615,6 +617,8 @@ export async function setupSpreadsheet(): Promise<SetupResult> {
             return {
                 ok: false,
                 error: data.error || `Error ${response.status}`,
+                code: data.code,
+                status: response.status,
             };
         }
 

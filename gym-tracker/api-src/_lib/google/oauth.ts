@@ -17,6 +17,12 @@ const tokenCache = new Map<string, TokenCacheEntry>();
 const inFlightRefresh = new Map<string, Promise<string>>();
 
 export function getOAuth2Client() {
+    if (!process.env.GOOGLE_CLIENT_ID) {
+        throw new Error("Missing env GOOGLE_CLIENT_ID (requerido para Google OAuth)");
+    }
+    if (!process.env.GOOGLE_CLIENT_SECRET) {
+        throw new Error("Missing env GOOGLE_CLIENT_SECRET (requerido para Google OAuth)");
+    }
     return new google.auth.OAuth2(
         process.env.GOOGLE_CLIENT_ID,
         process.env.GOOGLE_CLIENT_SECRET,

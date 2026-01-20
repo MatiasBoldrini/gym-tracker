@@ -758,7 +758,38 @@ app.post("/sheets/setup", async (c) => {
         return c.json({ ok: true, spreadsheetId, alreadyExists: false });
     } catch (error: any) {
         console.error("Error in sheets setup:", error);
-        return jsonError(c, error?.message || "Error al crear la planilla", 500);
+        const msg = String(error?.message || "");
+        const msgLower = msg.toLowerCase();
+
+        // Errores de configuración / cifrado
+        if (msgLower.includes("token_encryption_key")) {
+            return jsonError(
+                c,
+                "Falta configurar TOKEN_ENCRYPTION_KEY en el server (mínimo 32 caracteres).",
+                500,
+                "CONFIG_TOKEN_ENCRYPTION_KEY"
+            );
+        }
+        if (msgLower.includes("missing env google_client_id")) {
+            return jsonError(c, "Falta configurar GOOGLE_CLIENT_ID en Vercel.", 500, "CONFIG_GOOGLE_CLIENT_ID");
+        }
+        if (msgLower.includes("missing env google_client_secret")) {
+            return jsonError(c, "Falta configurar GOOGLE_CLIENT_SECRET en Vercel.", 500, "CONFIG_GOOGLE_CLIENT_SECRET");
+        }
+
+        // Refresh token revocado/expirado
+        if (msgLower.includes("invalid_grant")) {
+            return jsonError(
+                c,
+                "Tu autorización de Google expiró o fue revocada. Cerrá sesión y volvé a conectar tu cuenta de Google.",
+                401,
+                "GOOGLE_INVALID_GRANT"
+            );
+        }
+
+        // Drive/Sheets: reutilizamos normalización (permission/not found/bad range)
+        const normalized = normalizeSheetsError(error);
+        return jsonError(c, normalized.message, normalized.status, normalized.code);
     }
 });
 

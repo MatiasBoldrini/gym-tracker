@@ -88,6 +88,7 @@ export function HomeScreen({ initialWeek, initialWeeks, initialPrs, initialSetup
                 // Refresh auth state to get new spreadsheet info
                 auth.refresh();
             } else {
+                console.error("Setup spreadsheet failed:", result);
                 setSetupError(result.error || "Error al crear la planilla");
             }
         } catch (err: any) {
@@ -250,6 +251,8 @@ export function HomeScreen({ initialWeek, initialWeeks, initialPrs, initialSetup
 
         if (auth.isLoading) return;
         if (!auth.isAuthenticated) return;
+        // Evita 401 mientras el setup todavía está creando la planilla.
+        if (!auth.hasSpreadsheet && !setupComplete) return;
 
         let cancelled = false;
 
@@ -281,7 +284,7 @@ export function HomeScreen({ initialWeek, initialWeeks, initialPrs, initialSetup
             cancelled = true;
         };
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [auth.isLoading, auth.isAuthenticated]);
+    }, [auth.isLoading, auth.isAuthenticated, auth.hasSpreadsheet, setupComplete]);
 
     useEffect(() => {
         // Skip fetching week if we have initial data for THIS week - only on first mount
@@ -292,6 +295,8 @@ export function HomeScreen({ initialWeek, initialWeeks, initialPrs, initialSetup
 
         if (auth.isLoading) return;
         if (!auth.isAuthenticated) return;
+        // Evita 401 mientras el setup todavía está creando la planilla.
+        if (!auth.hasSpreadsheet && !setupComplete) return;
 
         let cancelled = false;
 
@@ -314,7 +319,7 @@ export function HomeScreen({ initialWeek, initialWeeks, initialPrs, initialSetup
         return () => {
             cancelled = true;
         };
-    }, [auth.isLoading, auth.isAuthenticated, selectedWeekId, initialWeek?.id]);
+    }, [auth.isLoading, auth.isAuthenticated, auth.hasSpreadsheet, setupComplete, selectedWeekId, initialWeek?.id]);
 
     // Cache selectivo: precachear SOLO las imágenes de la rutina cargada (toda la semana).
     useEffect(() => {

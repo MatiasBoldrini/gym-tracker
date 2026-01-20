@@ -57,6 +57,8 @@ export function HomePage() {
         if (DEMO_MODE) return;
         if (auth.isLoading) return;
         if (!auth.isAuthenticated) return;
+        // Si todavía no existe spreadsheet, /api/sheets/* va a responder 401 (setup_pending).
+        if (!auth.hasSpreadsheet) return;
 
         let cancelled = false;
         const load = async () => {
@@ -94,7 +96,7 @@ export function HomePage() {
         return () => {
             cancelled = true;
         };
-    }, [auth.isAuthenticated, auth.isLoading]);
+    }, [auth.isAuthenticated, auth.isLoading, auth.hasSpreadsheet]);
 
     const data = latest || cached || fallbackPayload;
 

@@ -4,6 +4,7 @@ import { ProgresoScreen } from "@/components/screens/ProgresoScreen";
 import { createClient } from "@/lib/supabase/client";
 import { DEMO_MODE, demoPrs } from "@/lib/demo-data";
 import { clearRuntimeDataCaches } from "@/lib/pwa";
+import { useAuth } from "@/lib/hooks/useAuth";
 
 const PRS_CACHE_KEY = "prs_cache_v1";
 
@@ -26,6 +27,7 @@ function writePrsCache(prs: PersonalRecord[]) {
 }
 
 export function ProgresoPage() {
+    const auth = useAuth();
     const [prs, setPrs] = useState<PersonalRecord[]>(() => {
         if (DEMO_MODE) return demoPrs;
         if (typeof window === "undefined") return [];
@@ -34,6 +36,9 @@ export function ProgresoPage() {
 
     useEffect(() => {
         if (DEMO_MODE) return;
+        if (auth.isLoading) return;
+        if (!auth.isAuthenticated) return;
+        if (!auth.hasSpreadsheet) return;
         let cancelled = false;
 
         const load = async () => {
@@ -64,7 +69,7 @@ export function ProgresoPage() {
         return () => {
             cancelled = true;
         };
-    }, []);
+    }, [auth.isLoading, auth.isAuthenticated, auth.hasSpreadsheet]);
 
     return <ProgresoScreen initialPrs={prs} />;
 }
