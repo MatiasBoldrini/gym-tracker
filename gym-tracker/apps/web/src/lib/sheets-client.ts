@@ -4,6 +4,7 @@
  */
 import { DEMO_MODE, demoWeeksList, getDemoWeeksMap, demoPrs, getDemoExercises, getDemoSeries, getDemoRoutineDay, getDemoRoutineSummary } from "@/lib/demo-data";
 import { createClient } from "@/lib/supabase/client";
+import { clearRuntimeDataCaches } from "@/lib/pwa";
 import type { Week, PersonalRecord } from "@/types";
 
 export interface SaveResult {
@@ -28,7 +29,19 @@ async function authFetch(input: RequestInfo, init: RequestInit = {}) {
         ...(init.headers || {}),
         ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
     };
-    return fetch(input, { ...init, headers });
+
+    // Importante: el Service Worker cachea por URL (no por Authorization). Si quedó un 401 cacheado,
+    // limpiamos caches de datos y reintentamos una sola vez.
+    const res = await fetch(input, { ...init, headers });
+    if (res.status === 401) {
+        try {
+            await clearRuntimeDataCaches();
+        } catch {
+            // best-effort
+        }
+        return fetch(input, { ...init, headers });
+    }
+    return res;
 }
 
 type DemoState = {

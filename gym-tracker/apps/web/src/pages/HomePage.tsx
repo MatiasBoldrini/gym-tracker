@@ -4,6 +4,7 @@ import type { Week } from "@/types";
 import { useAuth } from "@/lib/hooks/useAuth";
 import { createClient } from "@/lib/supabase/client";
 import { DEMO_MODE, getDemoHomeData } from "@/lib/demo-data";
+import { clearRuntimeDataCaches } from "@/lib/pwa";
 
 type WeekListItem = { id: number; name: string };
 type HomePayload = {
@@ -64,9 +65,15 @@ export function HomePage() {
                 const supabase = createClient();
                 const { data: sessionData } = await supabase.auth.getSession();
                 const accessToken = sessionData.session?.access_token;
-                const res = await fetch("/api/sheets/home", {
+                const init: RequestInit = {
                     headers: accessToken ? { Authorization: `Bearer ${accessToken}` } : undefined,
-                });
+                };
+                let res = await fetch("/api/sheets/home", init);
+                if (res.status === 401) {
+                    await clearRuntimeDataCaches();
+                    res = await fetch("/api/sheets/home", init);
+                }
+
                 const data = await res.json();
                 if (!res.ok) {
                     throw new Error(data?.error || `Error ${res.status}`);

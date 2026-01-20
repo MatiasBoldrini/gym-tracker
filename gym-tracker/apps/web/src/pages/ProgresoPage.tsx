@@ -3,6 +3,7 @@ import type { PersonalRecord } from "@/types";
 import { ProgresoScreen } from "@/components/screens/ProgresoScreen";
 import { createClient } from "@/lib/supabase/client";
 import { DEMO_MODE, demoPrs } from "@/lib/demo-data";
+import { clearRuntimeDataCaches } from "@/lib/pwa";
 
 const PRS_CACHE_KEY = "prs_cache_v1";
 
@@ -40,9 +41,14 @@ export function ProgresoPage() {
                 const supabase = createClient();
                 const { data } = await supabase.auth.getSession();
                 const accessToken = data.session?.access_token;
-                const res = await fetch("/api/sheets/prs", {
+                const init: RequestInit = {
                     headers: accessToken ? { Authorization: `Bearer ${accessToken}` } : undefined,
-                });
+                };
+                let res = await fetch("/api/sheets/prs", init);
+                if (res.status === 401) {
+                    await clearRuntimeDataCaches();
+                    res = await fetch("/api/sheets/prs", init);
+                }
                 const json = await res.json();
                 if (!res.ok) throw new Error(json?.error || `Error ${res.status}`);
                 if (cancelled) return;

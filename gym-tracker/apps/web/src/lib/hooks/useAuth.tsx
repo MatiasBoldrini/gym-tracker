@@ -3,6 +3,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from "react";
 import { createClient, GOOGLE_SCOPES } from "@/lib/supabase/client";
 import { DEMO_MODE } from "@/lib/demo-data";
+import { clearRuntimeDataCaches } from "@/lib/pwa";
 
 interface OnboardingState {
     version: number;
@@ -175,6 +176,7 @@ function useAuthState() {
                 headers: accessToken ? { Authorization: `Bearer ${accessToken}` } : undefined,
             });
             await supabase.auth.signOut();
+            await clearRuntimeDataCaches();
             setState({
                 isLoading: false,
                 isAuthenticated: false,

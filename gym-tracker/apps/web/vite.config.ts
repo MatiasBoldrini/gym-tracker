@@ -73,6 +73,10 @@ export default defineConfig({
             handler: "StaleWhileRevalidate",
             options: {
               cacheName: "sheets-api-cache",
+              // El cache key no incluye Authorization, así que NUNCA cacheamos errores/401.
+              cacheableResponse: {
+                statuses: [200],
+              },
               expiration: {
                 maxEntries: 50,
                 maxAgeSeconds: 60 * 60 * 24 * 7,
@@ -88,6 +92,9 @@ export default defineConfig({
             handler: "StaleWhileRevalidate",
             options: {
               cacheName: "fatiga-api-cache",
+              cacheableResponse: {
+                statuses: [200],
+              },
               expiration: {
                 maxEntries: 10,
                 maxAgeSeconds: 60 * 60 * 24 * 7,
@@ -99,6 +106,9 @@ export default defineConfig({
             handler: "StaleWhileRevalidate",
             options: {
               cacheName: "bodymap-api-cache",
+              cacheableResponse: {
+                statuses: [200],
+              },
               expiration: {
                 maxEntries: 10,
                 maxAgeSeconds: 60 * 60 * 24 * 7,

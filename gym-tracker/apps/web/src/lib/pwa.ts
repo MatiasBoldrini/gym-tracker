@@ -31,6 +31,33 @@ export async function cacheUrls(urls: string[]) {
     }
 }
 
+/**
+ * Borra caches de datos (APIs) manejadas por Workbox.
+ *
+ * Importante:
+ * - El cache key NO incluye el header Authorization, así que puede quedar cacheado un 401
+ *   de "antes del login" y seguir devolviéndose.
+ * - También evita "leaks" de datos entre usuarios si se loguea otro usuario en el mismo device.
+ */
+export async function clearRuntimeDataCaches() {
+    if (typeof window === "undefined") return { ok: false as const, reason: "no-window" as const };
+    if (!("caches" in window)) return { ok: false as const, reason: "no-cache" as const };
+
+    const names = ["sheets-api-cache", "fatiga-api-cache", "bodymap-api-cache"];
+    const results = await Promise.all(
+        names.map(async (name) => {
+            try {
+                const deleted = await caches.delete(name);
+                return { name, deleted };
+            } catch {
+                return { name, deleted: false };
+            }
+        })
+    );
+
+    return { ok: true as const, results };
+}
+
 
 
 

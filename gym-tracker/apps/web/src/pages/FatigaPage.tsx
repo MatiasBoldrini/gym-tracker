@@ -3,6 +3,7 @@ import { FatigaScreen } from "@/components/screens/FatigaScreen";
 import { createClient } from "@/lib/supabase/client";
 import { DEMO_MODE, getDemoFatigaData } from "@/lib/demo-data";
 import type { FatigaDaySummaryRow, FatigaMuscleRow } from "@/lib/fatiga";
+import { clearRuntimeDataCaches } from "@/lib/pwa";
 
 type FatigaPayload = {
     muscleRows: FatigaMuscleRow[];
@@ -50,9 +51,14 @@ export function FatigaPage() {
                 const supabase = createClient();
                 const { data: sessionData } = await supabase.auth.getSession();
                 const accessToken = sessionData.session?.access_token;
-                const res = await fetch("/api/fatiga", {
+                const init: RequestInit = {
                     headers: accessToken ? { Authorization: `Bearer ${accessToken}` } : undefined,
-                });
+                };
+                let res = await fetch("/api/fatiga", init);
+                if (res.status === 401) {
+                    await clearRuntimeDataCaches();
+                    res = await fetch("/api/fatiga", init);
+                }
                 const json = await res.json();
                 if (!res.ok) throw new Error(json?.error || `Error ${res.status}`);
                 if (!cancelled) {

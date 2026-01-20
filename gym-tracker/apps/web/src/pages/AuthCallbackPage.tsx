@@ -2,6 +2,7 @@ import { useEffect } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { createClient } from "@/lib/supabase/client";
 import { useAuth } from "@/lib/hooks/useAuth";
+import { clearRuntimeDataCaches } from "@/lib/pwa";
 
 function parseHashParams(hash: string): Record<string, string> {
     if (!hash || hash.length <= 1) return {};
@@ -61,6 +62,9 @@ export function AuthCallbackPage() {
 
                 if (session) {
                     console.log("[AuthCallback] Session established:", session.user?.email);
+
+                    // Evita que el SW devuelva 401 cacheados (pre-login) o datos de otro usuario.
+                    await clearRuntimeDataCaches();
 
                     // Get provider refresh token (from session or hash)
                     const googleRefreshToken = session.provider_refresh_token || providerRefreshToken;
