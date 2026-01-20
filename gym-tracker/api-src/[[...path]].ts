@@ -87,6 +87,19 @@ function getAuthHeader(c: any) {
     return c.req.header("Authorization") ?? null;
 }
 
+function getEmailFromSupabaseUser(user: any): string | null {
+    const direct = typeof user?.email === "string" ? user.email.trim() : "";
+    if (direct) return direct;
+    const meta = typeof user?.user_metadata?.email === "string" ? user.user_metadata.email.trim() : "";
+    if (meta) return meta;
+    const identities = Array.isArray(user?.identities) ? user.identities : [];
+    const identityEmail =
+        typeof identities?.[0]?.identity_data?.email === "string"
+            ? String(identities[0].identity_data.email).trim()
+            : "";
+    return identityEmail || null;
+}
+
 function jsonError(c: any, message: string, status = 500, code?: string) {
     return c.json({ error: message, code }, status);
 }
@@ -170,12 +183,22 @@ app.post("/auth/callback", async (c) => {
             return jsonError(c, "No provider_refresh_token recibido", 400);
         }
 
+        const email = getEmailFromSupabaseUser(auth.user);
+        if (!email) {
+            return jsonError(
+                c,
+                "No se pudo obtener el email del usuario desde Supabase. Volvé a iniciar sesión con Google.",
+                400,
+                "NO_EMAIL"
+            );
+        }
+
         const encryptedRefreshToken = await encrypt(providerRefreshToken);
         const existing = await getUserIntegration(auth.supabase, auth.user.id);
         const hasSpreadsheet = !!existing?.spreadsheet_id;
 
         const updated = await upsertUserIntegration(auth.supabase, auth.user.id, {
-            email: auth.user.email ?? null,
+            email,
             google_refresh_token_enc: encryptedRefreshToken,
             spreadsheet_id: existing?.spreadsheet_id || null,
         });
@@ -748,10 +771,24 @@ app.post("/sheets/setup", async (c) => {
             return jsonError(c, "No hay token de Google guardado. Volvé a iniciar sesión.", 400);
         }
 
+        // En DB `email` es NOT NULL. Aseguramos que siempre vaya en el upsert.
+        const ensuredEmail = integration.email || getEmailFromSupabaseUser(auth.user);
+        if (!ensuredEmail) {
+            return jsonError(
+                c,
+                "No se pudo obtener el email del usuario para crear la integración. Volvé a iniciar sesión con Google.",
+                400,
+                "NO_EMAIL"
+            );
+        }
+
         const refreshToken = await decrypt(integration.google_refresh_token_enc);
         const accessToken = await refreshAccessToken(refreshToken);
         const spreadsheetId = await copyTemplate(accessToken);
-        const updated = await upsertUserIntegration(auth.supabase, auth.user.id, { spreadsheet_id: spreadsheetId });
+        const updated = await upsertUserIntegration(auth.supabase, auth.user.id, {
+            email: ensuredEmail,
+            spreadsheet_id: spreadsheetId,
+        });
         if (!updated) {
             return jsonError(c, "Error al guardar la planilla. Intentá de nuevo.", 500);
         }
