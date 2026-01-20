@@ -12,7 +12,7 @@ import { useAuth } from "@/lib/hooks/useAuth";
 import { EyeOff, Loader2, Sparkles } from "lucide-react";
 import { OnboardingWizard } from "@/components/screens/OnboardingWizard";
 import { normalizeExerciseKey } from "@/lib/normalize";
-import { cacheUrls } from "@/lib/pwa";
+import { cacheUrls, clearRuntimeDataCaches } from "@/lib/pwa";
 
 type WeekListItem = { id: number; name: string };
 
@@ -56,6 +56,7 @@ export function HomeScreen({ initialWeek, initialWeeks, initialPrs, initialSetup
     // Track if we've consumed initial server data (to avoid duplicate fetches only on first mount)
     const hasConsumedInitialWeeksRef = useRef(initialWeeks.length > 0);
     const hasConsumedInitialWeekRef = useRef(initialWeek?.days?.length > 0);
+    const hasRetriedEmptyWeekRef = useRef(false);
 
     // Onboarding wizard for new users or empty routines
     const [showOnboardingWizard, setShowOnboardingWizard] = useState(false);
@@ -319,6 +320,25 @@ export function HomeScreen({ initialWeek, initialWeeks, initialPrs, initialSetup
                 });
                 setCurrentDayIndex(0);
                 setSelectedWeekName(`Semana ${selectedWeekId}`);
+
+                // Auto-recovery: si llegó vacío, probablemente es un entry stale en `sheets-api-cache`.
+                // Borramos caches de datos y reintentamos UNA sola vez con cache-buster.
+                // (Esto también ayuda aunque el SW sea viejo / esté sirviendo stale).
+                const nextHasData = Array.isArray(data?.week?.days) && data.week.days.some((d: any) => (d.exercises?.length ?? 0) > 0);
+                const prevHasData = Array.isArray(week?.days) && week.days.some((d) => (d.exercises?.length ?? 0) > 0);
+                if (prevHasData && !nextHasData && !hasRetriedEmptyWeekRef.current) {
+                    hasRetriedEmptyWeekRef.current = true;
+                    try {
+                        await clearRuntimeDataCaches();
+                        const retry = await fetchWeekData(selectedWeekId, { cacheBust: Date.now() });
+                        const retryHasData = Array.isArray(retry?.week?.days) && retry.week.days.some((d: any) => (d.exercises?.length ?? 0) > 0);
+                        if (!cancelled && retryHasData) {
+                            setWeek(retry.week);
+                        }
+                    } catch (e) {
+                        console.warn("Auto-recovery de week falló:", e);
+                    }
+                }
             } catch (e) {
                 if (!handleSheetsError(e)) {
                     console.error("Failed to load week:", e);

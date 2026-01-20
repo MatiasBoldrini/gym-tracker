@@ -154,12 +154,14 @@ export async function fetchWeeksList(): Promise<WeekListItem[]> {
     return Array.isArray(data.weeks) ? (data.weeks as WeekListItem[]) : [];
 }
 
-export async function fetchWeekData(weekId: number) {
+export async function fetchWeekData(weekId: number, opts?: { cacheBust?: string | number }) {
     if (IS_DEMO) {
         const week = ensureDemoWeek(weekId);
         return { week: week ? cloneWeek(week) : { id: weekId, days: [] } };
     }
-    const response = await authFetch(`/api/sheets/week?weekId=${encodeURIComponent(String(weekId))}`, {
+    const cacheBust = opts?.cacheBust;
+    const url = `/api/sheets/week?weekId=${encodeURIComponent(String(weekId))}${cacheBust !== undefined ? `&cb=${encodeURIComponent(String(cacheBust))}` : ""}`;
+    const response = await authFetch(url, {
         method: "GET",
     });
     if (!response.ok) {
