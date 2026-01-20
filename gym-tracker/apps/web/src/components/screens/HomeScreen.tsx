@@ -304,7 +304,19 @@ export function HomeScreen({ initialWeek, initialWeeks, initialPrs, initialSetup
             try {
                 const data = await fetchWeekData(selectedWeekId);
                 if (cancelled) return;
-                setWeek(data.week);
+                // Guard rail: si por cache/SW vuelve una semana vacía, no pisar una rutina válida ya renderizada (SSR).
+                // Esto evita el "flash" donde se ve 300ms y desaparece.
+                setWeek((prev) => {
+                    const prevHasData = Array.isArray(prev?.days) && prev.days.some((d) => (d.exercises?.length ?? 0) > 0);
+                    const nextHasData = Array.isArray(data?.week?.days) && data.week.days.some((d: any) => (d.exercises?.length ?? 0) > 0);
+                    if (prevHasData && !nextHasData) {
+                        console.warn("fetchWeekData devolvió semana vacía; se mantiene el estado previo:", {
+                            selectedWeekId,
+                        });
+                        return prev;
+                    }
+                    return data.week;
+                });
                 setCurrentDayIndex(0);
                 setSelectedWeekName(`Semana ${selectedWeekId}`);
             } catch (e) {
@@ -721,7 +733,9 @@ export function HomeScreen({ initialWeek, initialWeeks, initialPrs, initialSetup
     // Loading state: only show loader if we DON'T have initial server data
     // This avoids blocking SSR content while auth hydrates
     const hasInitialData = initialWeek?.days && initialWeek.days.length > 0;
-    if (auth.isLoading && !hasInitialData) {
+    // Importante: si el onboarding está abierto, NO desmontar toda la UI por un refresh de auth
+    // (por ejemplo cuando termina el setup y hacemos auth.refresh()) porque eso resetea el wizard.
+    if (auth.isLoading && !hasInitialData && !showOnboardingWizard) {
         return (
             <div className="min-h-[calc(100dvh-(var(--bottom-nav-base)+env(safe-area-inset-bottom)))] w-full flex flex-col items-center justify-center bg-[#F2F2F7]">
                 <Loader2 className="w-8 h-8 animate-spin text-ios-blue" />

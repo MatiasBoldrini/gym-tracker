@@ -67,13 +67,45 @@ export default defineConfig({
             },
           },
           {
-            urlPattern: ({ url }) =>
-              url.pathname.startsWith("/api/sheets/") &&
-              url.pathname !== "/api/sheets/exercise",
-            handler: "StaleWhileRevalidate",
+            // Endpoints "críticos" (si se sirven stale, pisan el estado de UI: rutina que aparece y desaparece).
+            // Preferimos NetworkFirst para evitar devolver una respuesta vieja cacheada mientras el usuario está online.
+            urlPattern: ({ url }) => {
+              if (!url.pathname.startsWith("/api/sheets/")) return false;
+              if (url.pathname === "/api/sheets/exercise") return false; // NetworkOnly (ver regla abajo)
+              return (
+                url.pathname === "/api/sheets/home" ||
+                url.pathname === "/api/sheets/week" ||
+                url.pathname === "/api/sheets/weeks" ||
+                url.pathname === "/api/sheets/prs" ||
+                url.pathname.startsWith("/api/sheets/routine")
+              );
+            },
+            handler: "NetworkFirst",
             options: {
               cacheName: "sheets-api-cache",
               // El cache key no incluye Authorization, así que NUNCA cacheamos errores/401.
+              cacheableResponse: {
+                statuses: [200],
+              },
+              expiration: {
+                maxEntries: 50,
+                maxAgeSeconds: 60 * 60 * 24 * 7,
+              },
+            },
+          },
+          {
+            // Resto de /api/sheets/*: podemos usar SWR para mejorar UX, pero evitando endpoints críticos de arriba.
+            urlPattern: ({ url }) =>
+              url.pathname.startsWith("/api/sheets/") &&
+              url.pathname !== "/api/sheets/exercise" &&
+              url.pathname !== "/api/sheets/home" &&
+              url.pathname !== "/api/sheets/week" &&
+              url.pathname !== "/api/sheets/weeks" &&
+              url.pathname !== "/api/sheets/prs" &&
+              !url.pathname.startsWith("/api/sheets/routine"),
+            handler: "StaleWhileRevalidate",
+            options: {
+              cacheName: "sheets-api-cache",
               cacheableResponse: {
                 statuses: [200],
               },
