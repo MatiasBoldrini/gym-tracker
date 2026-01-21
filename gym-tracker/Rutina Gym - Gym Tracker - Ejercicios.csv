@@ -1,0 +1,288 @@
+Ejercicio,Musculo,Categorias,Imagen
+Sentadilla con barra,Cuadriceps,,squat.webp
+Press de banca plano con barra,Pecho,,bench-press.webp
+Peso muerto convencional,Isquiotibiales,,deadlift.webp
+Press Militar con barra,Hombro,,military-press.webp
+Remo con barra,Espalda,,bent-over-row.webp
+Dominadas,Espalda,,pull-ups.webp
+Dominadas supinas (Chin-ups),Espalda,,chin-ups.webp
+Dorsalera (agarre ancho),Espalda,,lat-pulldown.webp
+Remo con polea (sentado),Espalda,,seated-cable-row.webp
+Press de banca inclinado con barra,Pecho,,incline-bench-press.webp
+Press de banca con mancuernas,Pecho,,dumbbell-bench-press.webp
+Press de banca inclinado con mancuernas,Pecho,,incline-dumbbell-bench-press.webp
+Fondos en paralelas (enfasis en pecho),Pecho,,dips.webp
+Press de pecho en máquina,Pecho,,chest-press.webp
+Press de hombros sentado con mancuernas,Hombro,,seated-dumbbell-shoulder-press.webp
+Press de hombros en máquina,Hombro,,machine-shoulder-press.webp
+Press de hombros,Hombro,,shoulder-press.webp
+Vuelos laterales con mancuerna,Hombro,,dumbbell-lateral-raise.webp
+Face Pulls,Hombro,,face-pull.webp
+Curl de bíceps con barra,Biceps,Espalda,barbell-curl.webp
+Curl de bíceps con mancuernas,Biceps,,dumbbell-curl.webp
+Extensión de tríceps con polea alta,Triceps,,tricep-pushdown.webp
+Prensa de Piernas,Cuadriceps,,horizontal-leg-press.webp
+Sentadilla frontal,Cuadriceps,,front-squat.webp
+Sentadilla búlgara,Gluteos,,bulgarian-split-squat.webp
+Zancadas,Cuadriceps,,lunge.webp
+Peso Muerto Rumano (RDL),Isquiotibiales,,romanian-deadlift.webp
+Hip Thrust,Gluteos,,hip-thrust.webp
+Extensión de cuádriceps,Cuadriceps,,leg-extension.webp
+Curl Femoral,Isquiotibiales,,lying-leg-curl.webp
+Maquina gemelos,Gemelos,,machine-calf-raise.webp
+Elevación de talones sentado,Gemelos,,seated-calf-raise.webp
+Rueda abdominal (Ab Wheel),Abdominales,Aductores,ab-wheel-rollout.webp
+Flexiones arqueras,Pecho,Antebrazos,archer-push-ups.webp
+Press Arnold,Hombro,Biceps,arnold-press.webp
+Hiperextensiones glúteo/espalda,Isquiotibiales,Cuadriceps,back-extension.webp
+Elevación de talones con barra,Gemelos,Hombro,barbell-calf-raise.webp
+Elevaciones frontales con barra,Hombro,Gemelos,barbell-front-raise.webp
+Puente de glúteo con barra,Gluteos,Gluteos,barbell-glute-bridge.webp
+Sentadilla Hack con barra,Cuadriceps,Isquiotibiales,barbell-hack-squat.webp
+Zancadas con barra,Cuadriceps,Cuello,barbell-lunge.webp
+Encogimientos de potencia con barra,Espalda,Pecho,barbell-power-shrug.webp
+Pullover con barra,Espalda,Abdominales,barbell-pullover.webp
+Zancada inversa con barra,Gluteos,Triceps,barbell-reverse-lunge.webp
+Encogimientos con barra,Hombro,,barbell-shrug.webp
+Encogimientos con barra tras nuca,Espalda,,behind-the-back-barbell-shrug.webp
+Peso muerto tras nuca (Hack),Cuadriceps,,behind-the-back-deadlift.webp
+Press tras nuca,Hombro,,behind-the-neck-press.webp
+Sentadilla con cinturón,Cuadriceps,,belt-squat.webp
+Fondos en banco,Triceps,,bench-dips.webp
+Pin Press de banca,Triceps,,bench-pin-press.webp
+Remo en banco (Seal Row),Espalda,,bench-pull.webp
+Pullover con barra (brazos flexionados),Espalda,,bent-arm-barbell-pullover.webp
+Remo con mancuerna inclinado,Espalda,,bent-over-dumbbell-row.webp
+Abdominales bicicleta,Abdominales,,bicycle-crunch.webp
+Elevación de talones (peso corporal),Gemelos,,bodyweight-calf-raise.webp
+Sentadilla con peso corporal,Cuadriceps,,bodyweight-squat.webp
+Sentadilla al cajón,Cuadriceps,,box-squat.webp
+Burpees,Cuadriceps,,burpees.webp
+Curl de bíceps con polea,Biceps,,cable-bicep-curl.webp
+Abdominales en polea alta,Abdominales,,cable-crunch.webp
+Rotación externa en polea,Hombro,,cable-external-rotation.webp
+Cruces en polea (Aperturas),Pecho,,cable-fly.webp
+Curl martillo en polea,Biceps,,cable-hammer-curl.webp
+Patada de glúteo en polea,Gluteos,,cable-kickback.webp
+Vuelos laterales con polea,Hombro,,cable-lateral-raise.webp
+Extensión de pierna en polea,Gluteos,,cable-leg-extension.webp
+Extensión de tríceps sobre la cabeza en polea,Triceps,,cable-overhead-tricep-extension.webp
+Pull through en polea,Gluteos,,cable-pull-through.webp
+Vuelos posteriores en polea,Hombro,,cable-reverse-fly.webp
+Encogimientos en polea,Espalda,,cable-shrug.webp
+Remo al mentón en polea,Hombro,,cable-upright-row.webp
+Leñador en polea (Woodchopper),Abdominales,,cable-woodchopper.webp
+Curl con trampa,Biceps,,cheat-curl.webp
+Remo con soporte de pecho,Espalda,,chest-supported-dumbbell-row.webp
+Dominadas con palmada,Espalda,,clap-pull-up.webp
+Dos tiempos (Clean and Jerk),Cuadriceps,,clean-and-jerk.webp
+Clean and Press,Hombro,,clean-and-press.webp
+Tirón alto de clean,Cuadriceps,,clean-high-pull.webp
+Tirón de clean,Cuadriceps,,clean-pull.webp
+Cargada (Clean),Cuadriceps,,clean.webp
+Press banca cerrado,Triceps,,close-grip-bench-press.webp
+Press banca cerrado con mancuernas,Pecho,,close-grip-dumbbell-bench-press.webp
+Press inclinado cerrado,Pecho,,close-grip-incline-bench-press.webp
+Jalón al pecho agarre cerrado,Espalda,,close-grip-lat-pulldown.webp
+Flexiones diamante/cerradas,Triceps,,close-grip-push-up.webp
+Abdominales cortos (Crunch),Abdominales,,crunches.webp
+Press declinado con barra,Pecho,,decline-bench-press.webp
+Crunch declinado,Abdominales,,decline-crunch.webp
+Press declinado con mancuernas,Pecho,,decline-dumbbell-bench-press.webp
+Aperturas declinadas,Pecho,,decline-dumbbell-fly.webp
+Flexiones declinadas,Pecho,,decline-push-up.webp
+Abdominales en banco declinado,Abdominales,,decline-sit-up.webp
+Peso muerto con déficit,Gluteos,,deficit-deadlift.webp
+Flexiones diamante,Triceps,,diamond-push-ups.webp
+Elevación de talones tipo burro,Gemelos,,donkey-calf-raise.webp
+Remo en banco con mancuernas,Espalda,,dumbbell-bench-pull.webp
+Sentadilla búlgara con mancuernas,Gluteos,,dumbbell-bulgarian-split-squat.webp
+Elevación de talones con mancuernas,Gemelos,,dumbbell-calf-raise.webp
+Clean and press con mancuerna,Hombro,,dumbbell-clean-and-press.webp
+Curl concentrado,Biceps,,dumbbell-concentration-curl.webp
+Peso muerto con mancuernas,Isquiotibiales,,dumbbell-deadlift.webp
+Rotación externa con mancuerna,Hombro,,dumbbell-external-rotation.webp
+Face pull con mancuernas,Hombro,,dumbbell-face-pull.webp
+Floor press con mancuernas,Triceps,,dumbbell-floor-press.webp
+Aperturas con mancuernas,Pecho,,dumbbell-fly.webp
+Elevaciones frontales,Hombro,,dumbbell-front-raise.webp
+Sentadilla frontal con mancuernas,Cuadriceps,,dumbbell-front-squat.webp
+Hang Clean con mancuerna,Cuadriceps,,dumbbell-hang-clean.webp
+Tirón alto con mancuernas,Gluteos,,dumbbell-high-pull.webp
+Elevaciones Y en banco inclinado,Abdominales,,dumbbell-incline-y-raise.webp
+Zancadas con mancuernas,Cuádriceps,,dumbbell-lunge.webp
+Pullover con mancuerna,Espalda,,dumbbell-pullover.webp
+Push press con mancuernas,Hombro,,dumbbell-push-press.webp
+Curl invertido con mancuernas,Antebrazos,,dumbbell-reverse-curl.webp
+Vuelos posteriores con mancuernas,Hombro,,dumbbell-reverse-fly.webp
+Curl de muñeca invertido con mancuerna,Antebrazos,,dumbbell-reverse-wrist-curl.webp
+Peso muerto rumano con mancuernas,Gluteos,,dumbbell-romanian-deadlift.webp
+Remo unilateral con mancuerna,Espalda,,dumbbell-row.webp
+Press militar con mancuernas,Hombro,,dumbbell-shoulder-press.webp
+Encogimientos con mancuernas,Espalda,,dumbbell-shrug.webp
+Flexión lateral con mancuerna,Abdominales,,dumbbell-side-bend.webp
+Arrancada (Snatch) con mancuerna,Cuadriceps,,dumbbell-snatch.webp
+Sentadilla dividida con mancuernas,Cuadriceps,,dumbbell-split-squat.webp
+Sentadilla con mancuerna,Cuadriceps,,dumbbell-squat.webp
+Thruster con mancuernas,Cuadriceps,,dumbbell-thruster.webp
+Extensión de tríceps unilateral con mancuerna,Triceps,,dumbbell-tricep-extension.webp
+Patada de tríceps con mancuerna,Triceps,,dumbbell-tricep-kickback.webp
+Remo al mentón con mancuernas,Hombro,,dumbbell-upright-row.webp
+Caminata de puntillas con mancuernas,Gemelos,,dumbbell-walking-calf-raise.webp
+Curl de muñeca con mancuerna,Antebrazos,,dumbbell-wrist-curl.webp
+Press Z con mancuernas,Hombro,,dumbbell-z-press.webp
+Curl con barra Z,Biceps,,ez-bar-curl.webp
+Abducción de cadera en suelo,Gluteos,,floor-hip-abduction.webp
+Extensión de cadera en suelo,Gluteos,,floor-hip-extension.webp
+Floor Press con barra,Pecho,,floor-press.webp
+Aleteo de piernas,Abdominales,,flutter-kicks.webp
+Puente de glúteo,Gluteos,,glute-bridge.webp
+Glute Ham Raise (GHR),Isquiotibiales,,glute-ham-raise.webp
+Patada de glúteo,Gluteos,,glute-kickback.webp
+Sentadilla Goblet,Cuadriceps,,goblet-squat.webp
+Buenos dias con barra,Isquiotibiales,,good-morning.webp
+Hacka (Sentadilla en máquina),Cuadriceps,,hack-squat.webp
+Media sentadilla,Cuadriceps,,half-squat.webp
+Curl martillo con mancuernas,Antebrazos,,hammer-curl.webp
+Flexiones de pino,Hombro,,handstand-push-ups.webp
+Hang Clean,Cuadriceps,,hang-clean.webp
+Hang Power Clean,Cuadriceps,,hang-power-clean.webp
+Hang Snatch,Cuadriceps,,hang-snatch.webp
+Elevación de rodillas colgado,Abdominales,,hanging-knee-raise.webp
+Elevación de piernas colgado,Abdominales,,hanging-leg-raise.webp
+Peso muerto con barra hexagonal,Gluteos,,hex-bar-deadlift.webp
+Encogimientos con barra hexagonal,Espalda,,hex-bar-shrug.webp
+Crunch en polea alta,Abdominales,,high-pulley-crunch.webp
+Aductores invertidos (Abducción),Gluteos,,hip-abduction.webp
+Maquina de aductores,Aductores,,hip-adduction.webp
+Extensión de cadera,Gluteos,,hip-extension.webp
+Curl inclinado en polea,Biceps,,incline-cable-curl.webp
+Curl de bíceps en banco inclinado,Biceps,,incline-dumbbell-curl.webp
+Aperturas inclinadas,Pecho,,incline-dumbbell-fly.webp
+Curl martillo inclinado,Biceps,,incline-hammer-curl.webp
+Flexiones inclinadas,Pecho,,incline-push-up.webp
+Remo invertido,Espalda,,inverted-row.webp
+Peso muerto Jefferson,Isquiotibiales,,jefferson-deadlift.webp
+Sentadilla Jefferson,Cuadriceps,,jefferson-squat.webp
+Press JM,Triceps,,jm-press.webp
+Jumping Jacks,Gluteos,,jumping-jack.webp
+Press Landmine,Hombro,,landmine-press.webp
+Sentadilla Landmine,Cuadriceps,,landmine-squat.webp
+Press Log (Tronco),Hombro,,log-press.webp
+Curl tumbado en polea,Biceps,,lying-cable-curl.webp
+Rompecráneos con mancuernas,Triceps,,lying-dumbbell-tricep-extension.webp
+Elevación de piernas recostado,Abdominales,,lying-leg-raise.webp
+Rompecraneos (Skull Crushers),Triceps,,lying-tricep-extension.webp
+Extensiones de espalda en máquina,Espalda,,machine-back-extension.webp
+Curl de bíceps en máquina,Biceps,,machine-bicep-curl.webp
+Mariposa (Pec Deck),Pecho,,machine-chest-fly.webp
+Vuelos laterales en máquina,Hombro,,machine-lateral-raise.webp
+Aperturas invertidas (Reverse Pec Deck),Hombro,,machine-reverse-fly.webp
+Remo en máquina,Espalda,,machine-row.webp
+Crunch en máquina,Abdominales,,machine-seated-crunch.webp
+Encogimientos en máquina,Abdominales,,machine-shrug.webp
+Extensión de tríceps en máquina,Triceps,,machine-tricep-extension.webp
+Remo Meadows,Espalda,,meadows-row.webp
+Escaladores (Mountain Climbers),Abdominales,,mountain-climbers.webp
+Muscle Snatch,Gluteos,,muscle-snatch.webp
+Muscle Ups,Triceps,,muscle-ups.webp
+Curl de cuello,Cuello,,neck-curl.webp
+Extensión de cuello,Cuello,,neck-extension.webp
+Dominadas agarre neutro,Espalda,,neutral-grip-pull-ups.webp
+Curl nórdico,Isquiotibiales,,nordic-hamstring-curl.webp
+Curl de bíceps unilateral en polea,Biceps,,one-arm-cable-bicep-curl.webp
+Curl predicador unilateral,Biceps,,one-arm-dumbbell-preacher-curl.webp
+Press Landmine unilateral,Hombro,,one-arm-landmine-press.webp
+Jalón al pecho unilateral,Espalda,,one-arm-lat-pulldown.webp
+Dominada a una mano,Espalda,,one-arm-pull-ups.webp
+Jalón unilateral,Espalda,,one-arm-pulldown.webp
+Flexiones a una mano,Pecho,,one-arm-push-ups.webp
+Remo en polea unilateral,Espalda,,one-arm-seated-cable-row.webp
+Curl de bíceps alto en polea,Biceps,,overhead-cable-curl.webp
+Sentadilla sobre la cabeza (Overhead),Cuadriceps,,overhead-squat.webp
+Peso muerto con pausa,Gluteos,,pause-deadlift.webp
+Sentadilla con pausa,Cuadriceps,,pause-squat.webp
+Press de banca con pausa,Pecho,,paused-bench-press.webp
+Remo Pendlay,Espalda,,pendlay-row.webp
+Flexiones en pica,Hombro,,pike-push-up.webp
+Pin Squat,Cuadriceps,,pin-squat.webp
+Sentadilla Pistol,Cuadriceps,,pistol-squat.webp
+Power Clean (Cargada de potencia),Cuadriceps,,power-clean.webp
+Power Snatch (Arrancada de potencia),Gluteos,,power-snatch.webp
+Curl predicador,Biceps,,preacher-curl.webp
+Push Jerk,Cuadriceps,,push-jerk.webp
+Push Press,Hombro,,push-press.webp
+Flexiones de brazos,Pecho,,push-ups.webp
+Rack Pull,Espalda,,rack-pull.webp
+Remo Renegade,Espalda,,renegade-row.webp
+Curl invertido con barra,Antebrazos,,reverse-barbell-curl.webp
+Crunch invertido,Abdominales,,reverse-crunches.webp
+Press banca agarre inverso,Pecho,,reverse-grip-bench-press.webp
+Jalón al pecho agarre supino,Espalda,,reverse-grip-lat-pulldown.webp
+Extensión de tríceps agarre inverso,Triceps,,reverse-grip-tricep-pushdown.webp
+Hiperextensiones inversas,Gluteos,,reverse-hyperextension.webp
+Zancada inversa,Gluteos,,reverse-lunge.webp
+Curl de muñeca invertido,Antebrazos,,reverse-wrist-curl.webp
+Fondos en anillas,Triceps,,ring-dips.webp
+Muscle up en anillas,Espalda,,ring-muscle-ups.webp
+Flexión lateral en silla romana,Abdominales,,roman-chair-side-bend.webp
+Giros rusos,Abdominales,,russian-twist.webp
+Sentadilla con barra de seguridad,Cuadriceps,,safety-bar-squat.webp
+Tijeras (Abdominales),Abdominales,,scissor-kicks.webp
+Fondos en máquina,Pecho,,seated-dip-machine.webp
+Curl de bíceps sentado con mancuerna,Biceps,,seated-dumbbell-curl.webp
+Extensión de tríceps sentado con mancuerna,Triceps,,seated-dumbbell-tricep-extension.webp
+Curl femoral sentado,Cuadriceps,,seated-leg-curl.webp
+Press de hombros sentado,Hombro,,seated-shoulder-press.webp
+Pin press de hombros,Hombro,,shoulder-pin-press.webp
+Crunch lateral,Abdominales,,side-crunch.webp
+Elevación lateral de piernas,Gluteos,,side-leg-raise.webp
+Zancada lateral,Aductores,,side-lunge.webp
+Peso muerto a una pierna,Gluteos,,single-leg-deadlift.webp
+Peso muerto a una pierna con mancuerna,Isquiotibiales,,single-leg-dumbbell-deadlift.webp
+Prensa a una pierna,Cuadriceps,,single-leg-press.webp
+Peso muerto rumano a una pierna,Isquiotibiales,,single-leg-romanian-deadlift.webp
+Elevación de talones sentado a una pierna,Gemelos,,single-leg-seated-calf-raise.webp
+Sentadilla a una pierna,Cuadriceps,,single-leg-squat.webp
+Sentadilla Sissy,Cuadriceps,,sissy-squat.webp
+Abdominales clásicos (Sit-ups),Abdominales,,sit-ups.webp
+Prensa inclinada (Sled),Cuadriceps,,sled-leg-press.webp
+Elevación de talones en prensa,Gemelos,,sled-press-calf-raise.webp
+Press de banca en multipower,Pecho,,smith-machine-bench-press.webp
+Encogimientos en multipower,Cuello,,smith-machine-shrug.webp
+Sentadilla en multipower,Cuadriceps,,smith-machine-squat.webp
+Peso muerto de arranque,Espalda,,snatch-deadlift.webp
+Tirón de arranque,Cuadriceps,,snatch-pull.webp
+Arrancada (Snatch),Cuadriceps,,snatch.webp
+Curl araña,Biceps,,spider-curl.webp
+Split Jerk (Envión),Cuadriceps,,split-jerk.webp
+Sentadilla dividida,Cuadriceps,,split-squat.webp
+Press Spoto,Triceps,,spoto-press.webp
+Sentadilla con salto,Cuadriceps,,squat-jump.webp
+Squat Thrust,Cuadriceps,,squat-thrust.webp
+Crunch de pie en polea,Abdominales,,standing-cable-crunch.webp
+Curl femoral de pie,Isquiotibiales,,standing-leg-curl.webp
+Peso muerto piernas rígidas,Isquiotibiales,,stiff-leg-deadlift.webp
+PullOver con polea (brazos rectos),Espalda,,straight-arm-pulldown.webp
+Curl estricto,Biceps,,strict-curl.webp
+Peso muerto sumo,Cuadriceps,,sumo-deadlift.webp
+Sentadilla sumo,Aductores,,sumo-squat.webp
+Superman,Espalda,,superman.webp
+Remo en punta (Barra T),Espalda,,t-bar-row.webp
+Press Tate,Triceps,,tate-press.webp
+Thruster,Cuadriceps,,thruster.webp
+Pies a la barra (Toes to Bar),Abdominales,,toes-to-bar.webp
+Extensión de tríceps trasnuca,Triceps,,tricep-extension.webp
+Extensión de tríceps con cuerda,Triceps,,tricep-rope-pushdown.webp
+Remo al mentón,Hombro,,upright-row.webp
+Prensa vertical,Hombro,,vertical-leg-press.webp
+Press Vikingo,Hombro,,viking-press.webp
+Zancadas caminando,Cuadriceps,,walking-lunge.webp
+Lanzamiento de balón medicinal,Abdominales,,wall-ball.webp
+Press de banca agarre ancho,Pecho,,wide-grip-bench-press.webp
+Curl de muñeca,Antebrazos,,wrist-curl.webp
+Remo Yates,Espalda,,yates-row.webp
+Press Z,Hombro,,z-press.webp
+Peso muerto Zercher,Cuadriceps,,zercher-deadlift.webp
+Sentadilla Zercher,Cuadriceps,,zercher-squat.webp
+Curl Zottman,Biceps,,zottman-curl.webp
