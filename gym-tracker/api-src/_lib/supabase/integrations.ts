@@ -31,21 +31,26 @@ export async function upsertUserIntegration(
     userId: string,
     data: Partial<Omit<UserIntegration, "user_id" | "created_at" | "updated_at">>
 ): Promise<UserIntegration | null> {
+    const upsertPayload = {
+        user_id: userId,
+        ...data,
+        updated_at: new Date().toISOString(),
+    };
+
     const { data: result, error } = await supabase
         .from("user_integrations")
-        .upsert(
-            {
-                user_id: userId,
-                ...data,
-                updated_at: new Date().toISOString(),
-            },
-            { onConflict: "user_id" }
-        )
+        .upsert(upsertPayload, { onConflict: "user_id" })
         .select()
         .single();
 
     if (error) {
-        console.error("Error upserting user integration:", error);
+        console.error("[upsertUserIntegration] Error upserting user integration:", {
+            code: error.code,
+            message: error.message,
+            details: error.details,
+            hint: error.hint,
+            userId,
+        });
         return null;
     }
 

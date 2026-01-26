@@ -106,8 +106,20 @@ app.post("/callback", async (c) => {
         if (!auth) return jsonError(c, "No autenticado", 401);
         const body = await c.req.json();
         const providerRefreshToken = body?.providerRefreshToken;
+        const existing = await getUserIntegration(auth.supabase, auth.user.id);
+        const hasSpreadsheet = !!existing?.spreadsheet_id;
+
+        // Google puede NO devolver refresh token en logins repetidos. Si ya tenemos uno guardado,
+        // consideramos el callback OK y seguimos (especialmente en nuevos dispositivos).
         if (!providerRefreshToken) {
-            return jsonError(c, "No provider_refresh_token recibido", 400);
+            if (existing?.google_refresh_token_enc) {
+                return c.json({
+                    ok: true,
+                    setup_pending: !hasSpreadsheet,
+                    is_new_user: !hasSpreadsheet,
+                });
+            }
+            return jsonError(c, "No provider_refresh_token recibido", 400, "NO_REFRESH_TOKEN");
         }
 
         const email = getEmailFromSupabaseUser(auth.user);
@@ -121,9 +133,6 @@ app.post("/callback", async (c) => {
         }
 
         const encryptedRefreshToken = await encrypt(providerRefreshToken);
-        const existing = await getUserIntegration(auth.supabase, auth.user.id);
-        const hasSpreadsheet = !!existing?.spreadsheet_id;
-
         const updated = await upsertUserIntegration(auth.supabase, auth.user.id, {
             email,
             google_refresh_token_enc: encryptedRefreshToken,

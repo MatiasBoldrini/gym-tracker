@@ -60,6 +60,14 @@ export function HomeScreen({ initialWeek, initialWeeks, initialPrs, initialSetup
     const hasConsumedInitialWeekRef = useRef(initialWeek?.days?.length > 0);
     const hasRetriedEmptyWeekRef = useRef(false);
 
+    // Track if week data has been loaded (either from SSR or fetch)
+    // Esto evita tomar decisiones de onboarding antes de tener la data real
+    const [hasLoadedWeekData, setHasLoadedWeekData] = useState(() => {
+        // "Cargado" significa: ya tenemos una respuesta de week (SSR o fetch),
+        // aunque esa respuesta sea una rutina vacía.
+        return (initialWeek?.days?.length ?? 0) > 0;
+    });
+
     // Onboarding wizard for new users or empty routines
     const [showOnboardingWizard, setShowOnboardingWizard] = useState(false);
     const [onboardingStartMode, setOnboardingStartMode] = useState<"auto" | "resume" | "force">("auto");
@@ -112,9 +120,21 @@ export function HomeScreen({ initialWeek, initialWeeks, initialPrs, initialSetup
         const forceOnboarding = urlParams.get("force_onboarding") === "true";
         const setupPending = urlParams.get("setup_pending") === "true";
         const isNewUser = urlParams.get("is_new_user") === "true";
+        const authError = urlParams.get("auth_error");
 
-        // Clean URL params (auth_success, setup_pending, is_new_user) without reloading
-        if (urlParams.has("auth_success") || urlParams.has("setup_pending") || urlParams.has("is_new_user") || urlParams.has("force_onboarding")) {
+        // Manejar errores de autenticación
+        if (authError) {
+            let errorMsg = "Hubo un error al conectar tu cuenta. Intentá de nuevo.";
+            if (authError === "callback_failed") {
+                errorMsg = "No pudimos guardar tu conexión con Google. Cerrá sesión e intentá de nuevo.";
+            } else if (authError === "no_refresh_token") {
+                errorMsg = "Google no devolvió los permisos necesarios. Cerrá sesión e intentá de nuevo, asegurate de aceptar todos los permisos.";
+            }
+            setErrorMessage(errorMsg);
+        }
+
+        // Clean URL params (auth_success, setup_pending, is_new_user, auth_error) without reloading
+        if (urlParams.has("auth_success") || urlParams.has("setup_pending") || urlParams.has("is_new_user") || urlParams.has("force_onboarding") || urlParams.has("auth_error")) {
             const newUrl = location.pathname;
             window.history.replaceState({}, "", newUrl);
         }
@@ -128,6 +148,13 @@ export function HomeScreen({ initialWeek, initialWeeks, initialPrs, initialSetup
         if (forceOnboarding) {
             setOnboardingStartMode("force");
             setShowOnboardingWizard(true);
+            return;
+        }
+
+        // IMPORTANTE: No tomar decisiones de onboarding mientras auth está cargando.
+        // Si no esperamos, usamos los valores default (hasCompleted: false) y abrimos
+        // el wizard incorrectamente en dispositivos nuevos.
+        if (auth.isLoading) {
             return;
         }
 
@@ -145,12 +172,32 @@ export function HomeScreen({ initialWeek, initialWeeks, initialPrs, initialSetup
         const hasDismissedOnboarding = localStorage.getItem("onboarding_dismissed_v1") === "true";
         if (hasCompletedOnboarding || hasDismissedOnboarding) return;
 
-        // Priority 3: Show wizard if new user OR routine is empty
-        if (isNewUser || isRoutineEmpty) {
+        // Priority 3: Si el usuario tiene spreadsheet, esperar a que cargue la data de la semana
+        // antes de decidir si la rutina está vacía. Esto evita falsos positivos mientras
+        // se carga la data en un nuevo dispositivo.
+        if (auth.hasSpreadsheet && !hasLoadedWeekData) {
+            // Aún no cargó la data de la semana, esperar antes de tomar decisiones.
+            return;
+        }
+
+        // Priority 4: Heurística para usuarios "legacy" que completaron onboarding antes
+        // de que existiera user_preferences: si tienen spreadsheet Y rutina con ejercicios,
+        // asumimos que ya no necesitan onboarding (en nuevo dispositivo, no tienen localStorage).
+        if (auth.hasSpreadsheet && !isRoutineEmpty) {
+            // Usuario legacy con rutina configurada - no mostrar onboarding.
+            // Opcionalmente podríamos persistir esto al server para que no vuelva a evaluarse.
+            return;
+        }
+
+        // Priority 5: Show wizard if new user OR routine is empty
+        // Solo considerar isRoutineEmpty si ya tenemos el spreadsheet configurado Y la data cargó,
+        // de lo contrario la rutina aparece "vacía" porque aún no cargó la data.
+        const shouldConsiderEmptyRoutine = auth.hasSpreadsheet && hasLoadedWeekData && isRoutineEmpty;
+        if (isNewUser || shouldConsiderEmptyRoutine) {
             setOnboardingStartMode("auto");
             setShowOnboardingWizard(true);
         }
-    }, [location.search, location.pathname, isRoutineEmpty, runSetupInBackground, auth.onboarding.hasCompleted, auth.onboarding.hasDismissed, auth.onboarding.hasProgress]);
+    }, [location.search, location.pathname, isRoutineEmpty, hasLoadedWeekData, runSetupInBackground, auth.isLoading, auth.hasSpreadsheet, auth.onboarding.hasCompleted, auth.onboarding.hasDismissed, auth.onboarding.hasProgress]);
 
     // Retry onboarding sync if we ever completed/dismissed offline or if the server write failed.
     useEffect(() => {
@@ -309,6 +356,9 @@ export function HomeScreen({ initialWeek, initialWeeks, initialPrs, initialSetup
         // Skip fetching week if we have initial data for THIS week - only on first mount
         if (hasConsumedInitialWeekRef.current && initialWeek?.id === selectedWeekId) {
             hasConsumedInitialWeekRef.current = false; // Consume initial data
+            // Ya tenemos la semana del SSR para este weekId: considerarla "cargada"
+            // aunque no tenga ejercicios, para no bloquear decisiones de onboarding.
+            setHasLoadedWeekData(true);
             return;
         }
 
@@ -339,6 +389,11 @@ export function HomeScreen({ initialWeek, initialWeeks, initialPrs, initialSetup
                 setCurrentDayIndex(0);
                 setSelectedWeekName(`Semana ${selectedWeekId}`);
 
+                // Marcar que la data de la semana fue cargada (para decisiones de onboarding)
+                if (!cancelled) {
+                    setHasLoadedWeekData(true);
+                }
+
                 // Auto-recovery: si llegó vacío, probablemente es un entry stale en `sheets-api-cache`.
                 // Borramos caches de datos y reintentamos UNA sola vez con cache-buster.
                 // (Esto también ayuda aunque el SW sea viejo / esté sirviendo stale).
@@ -360,6 +415,10 @@ export function HomeScreen({ initialWeek, initialWeeks, initialPrs, initialSetup
             } catch (e) {
                 if (!handleSheetsError(e)) {
                     console.error("Failed to load week:", e);
+                }
+                // Incluso si hay error, marcamos como "cargado" para evitar bloquear la decisión de onboarding
+                if (!cancelled) {
+                    setHasLoadedWeekData(true);
                 }
             }
         };
