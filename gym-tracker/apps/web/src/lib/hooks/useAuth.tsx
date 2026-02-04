@@ -106,7 +106,7 @@ function writeAuthCache(state: AuthState) {
     }
 }
 
-function clearAuthCache() {
+export function clearAuthCache() {
     if (typeof window === "undefined") return;
     try {
         window.localStorage.removeItem(AUTH_CACHE_KEY);

@@ -1,7 +1,7 @@
 import { useEffect } from "react";
 import { useLocation, useNavigate } from "react-router-dom";
 import { createClient } from "@/lib/supabase/client";
-import { useAuth } from "@/lib/hooks/useAuth";
+import { useAuth, clearAuthCache } from "@/lib/hooks/useAuth";
 import { clearRuntimeDataCaches } from "@/lib/pwa";
 
 function parseHashParams(hash: string): Record<string, string> {
@@ -56,6 +56,10 @@ export function AuthCallbackPage() {
                 }
 
                 if (session) {
+                    // Limpiar cache de auth anterior para evitar que un usuario nuevo herede
+                    // el estado (hasSpreadsheet, etc.) de otro usuario logueado previamente.
+                    clearAuthCache();
+
                     // Evita que el SW devuelva 401 cacheados (pre-login) o datos de otro usuario.
                     await clearRuntimeDataCaches();
 

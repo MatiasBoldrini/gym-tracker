@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { ExternalLink, Copy, Check, Loader2, AlertCircle, LogOut, FileSpreadsheet, RefreshCw } from "lucide-react";
 import { fetchWeekData, resetMesociclo, resetOnboarding } from "@/lib/sheets-client";
 import type { Week } from "@/types";
@@ -47,9 +47,15 @@ export function PerfilPage() {
     const [isResettingMesociclo, setIsResettingMesociclo] = useState(false);
 
     const isReady = auth.isAuthenticated;
+    const hasAutoLoadedWeekRef = useRef(false);
 
     const loadWeek = useCallback(async () => {
         if (!isReady) return;
+        // Evitar requests innecesarias/401 si el usuario todavía no tiene planilla creada.
+        if (!auth.hasSpreadsheet) {
+            setLoadError("Tu cuenta todavía no tiene una planilla configurada. Volvé al inicio y completá el setup.");
+            return;
+        }
         setIsLoadingWeek(true);
         setLoadError(null);
         try {
@@ -57,18 +63,30 @@ export function PerfilPage() {
             setWeek(data.week);
         } catch (error: any) {
             console.error("Error cargando Semana 1:", error);
-            setLoadError("No pudimos leer la Semana 1 de tu sheet.");
+            const status = (error as any)?.status as number | undefined;
+            const code = (error as any)?.code as string | undefined;
+            if (status === 401 && code === "NO_SPREADSHEET") {
+                setLoadError("Tu cuenta todavía no tiene una planilla configurada. Volvé al inicio y completá el setup.");
+            } else if (status === 401) {
+                setLoadError("No pudimos autenticar tu sesión para leer la planilla. Probá cerrar sesión y volver a conectar Google.");
+            } else {
+                setLoadError("No pudimos leer la Semana 1 de tu sheet.");
+            }
         } finally {
             setIsLoadingWeek(false);
         }
-    }, [isReady]);
+    }, [isReady, auth.hasSpreadsheet]);
 
     useEffect(() => {
         if (auth.isLoading) return;
         if (!isReady) return;
+        if (!auth.hasSpreadsheet) return;
         if (week || isLoadingWeek) return;
+        // IMPORTANTE: no reintentar en loop infinito si hay error (p.ej. 401 NO_SPREADSHEET).
+        if (hasAutoLoadedWeekRef.current) return;
+        hasAutoLoadedWeekRef.current = true;
         loadWeek();
-    }, [auth.isLoading, isReady, isLoadingWeek, loadWeek, week]);
+    }, [auth.isLoading, isReady, auth.hasSpreadsheet, isLoadingWeek, loadWeek, week]);
 
     const handleCopyRoutine = async () => {
         if (!isReady) {
