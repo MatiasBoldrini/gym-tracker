@@ -133,6 +133,13 @@ export function HomeScreen({ initialWeek, initialWeeks, initialPrs, initialSetup
             setErrorMessage(errorMsg);
         }
 
+        // IMPORTANTE: No tomar decisiones de onboarding mientras auth está cargando.
+        // Si no esperamos, usamos los valores default (hasCompleted: false) y abrimos
+        // el wizard incorrectamente en dispositivos nuevos.
+        if (auth.isLoading) {
+            return;
+        }
+
         // Clean URL params (auth_success, setup_pending, is_new_user, auth_error) without reloading
         if (urlParams.has("auth_success") || urlParams.has("setup_pending") || urlParams.has("is_new_user") || urlParams.has("force_onboarding") || urlParams.has("auth_error")) {
             const newUrl = location.pathname;
@@ -148,13 +155,6 @@ export function HomeScreen({ initialWeek, initialWeeks, initialPrs, initialSetup
         if (forceOnboarding) {
             setOnboardingStartMode("force");
             setShowOnboardingWizard(true);
-            return;
-        }
-
-        // IMPORTANTE: No tomar decisiones de onboarding mientras auth está cargando.
-        // Si no esperamos, usamos los valores default (hasCompleted: false) y abrimos
-        // el wizard incorrectamente en dispositivos nuevos.
-        if (auth.isLoading) {
             return;
         }
 
@@ -193,7 +193,8 @@ export function HomeScreen({ initialWeek, initialWeeks, initialPrs, initialSetup
         // Solo considerar isRoutineEmpty si ya tenemos el spreadsheet configurado Y la data cargó,
         // de lo contrario la rutina aparece "vacía" porque aún no cargó la data.
         const shouldConsiderEmptyRoutine = auth.hasSpreadsheet && hasLoadedWeekData && isRoutineEmpty;
-        if (isNewUser || shouldConsiderEmptyRoutine) {
+        const isMissingSpreadsheet = auth.isAuthenticated && !auth.hasSpreadsheet;
+        if (isNewUser || isMissingSpreadsheet || shouldConsiderEmptyRoutine) {
             setOnboardingStartMode("auto");
             setShowOnboardingWizard(true);
         }
