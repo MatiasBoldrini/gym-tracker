@@ -6,7 +6,7 @@ Tu entrenador programa en Google Sheets y vos registrás el entrenamiento en el 
 
 En 22 segundos, seguí el cambio de press de banca de **3×8 a 4×8** desde la planilla hasta el celular y la serie de **8 repeticiones con 62,5 kg** de vuelta a la hoja. En **Fatiga**, el modelo 3D gira y permite tocar el pecho para ver las cuatro series planificadas. El video cierra con la demostración del press de banca en la **Biblioteca de ejercicios**.
 
-https://github.com/user-attachments/assets/429814b4-cb72-4bb7-b9b0-52d333977b4e
+https://github.com/user-attachments/assets/02d576b5-4479-495a-b0e5-62f710725651
 
 [Descargar el video vertical en MP4](https://github.com/MatiasBoldrini/gym-tracker/raw/refs/heads/main/docs/media/gym-tracker-demo.mp4)
 
