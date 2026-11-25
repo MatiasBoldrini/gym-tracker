@@ -4,9 +4,9 @@ Tu entrenador programa en Google Sheets y vos registrás el entrenamiento en el 
 
 ## Demo
 
-En 24 segundos, seguí un cambio de press de banca de **3×8 a 4×8** desde la planilla hasta el celular. Después, una serie de **8 repeticiones con 62,5 kg** vuelve a la hoja y aparece en el gráfico de progreso junto a los 60 kg programados.
+En 22 segundos, seguí el cambio de press de banca de **3×8 a 4×8** desde la planilla hasta el celular y la serie de **8 repeticiones con 62,5 kg** de vuelta a la hoja. En **Fatiga**, el modelo 3D gira y permite tocar el pecho para ver las cuatro series planificadas. El video cierra con la demostración del press de banca en la **Biblioteca de ejercicios**.
 
-https://github.com/user-attachments/assets/9406b6f1-1900-4438-98ec-73f50bd5d0f9
+https://github.com/user-attachments/assets/429814b4-cb72-4bb7-b9b0-52d333977b4e
 
 [Descargar el video vertical en MP4](https://github.com/MatiasBoldrini/gym-tracker/raw/refs/heads/main/docs/media/gym-tracker-demo.mp4)
 
@@ -17,6 +17,8 @@ https://github.com/user-attachments/assets/9406b6f1-1900-4438-98ec-73f50bd5d0f9
 
 La demo usa capturas de la app real y datos ficticios. Las vistas de la planilla reproducen un archivo de ejemplo creado en GridCraft. El ensayo ejecutó el importador y el exportador del proyecto con respuestas simuladas de Google y Supabase. La sincronización es periódica y el video abrevia la espera. [Cómo funciona la sincronización](gym-tracker/supabase/ops/README.md#verificación)
 
-La música se creó para esta demo. La ilustración de press de banca de la app es de [Strength Level](https://strengthlevel.com/).
+La música se creó para esta demo. La demostración de press de banca es de [Strength Level](https://strengthlevel.com/).
+
+El modelo de **Fatiga** adapta [Free Muscle](https://github.com/tiralonghipol/free-muscles) de tiralonghipol, basado en [Z-Anatomy](https://www.z-anatomy.com/) de Gauthier Kervyn y colaboradores y en [BodyParts3D](https://lifesciencedb.jp/bp3d/) © The Database Center for Life Science. Gym Tracker simplificó el modelo y agrupó las piezas por músculo. El modelo adaptado y el plano que lo muestra se comparten bajo [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/).
 
 </details>
