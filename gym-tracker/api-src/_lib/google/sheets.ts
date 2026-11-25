@@ -1,6 +1,8 @@
 import { google } from "googleapis";
 import { getAuthenticatedClient } from "./oauth";
 import { normalizeExerciseKey } from "../normalize";
+import { MAX_SETS, parseRowSets, type RecordedSet } from "../set-values";
+import { findDayRange } from "./workout-sheet";
 
 export interface SetData {
     weight: number;
@@ -13,7 +15,7 @@ export interface SaveExerciseParams {
     weekId: number;
     dayId: number;
     exerciseName: string;
-    sets: SetData[];
+    sets: (RecordedSet | null)[];
 }
 
 export async function listSpreadsheetSheetTitles(accessToken: string, spreadsheetId: string): Promise<string[]> {
@@ -64,14 +66,22 @@ export async function readSheetValuesBatch(
         valueRenderOption: "UNFORMATTED_VALUE",
     });
 
-    const map: Record<string, any[][]> = {};
-    const valueRanges = response.data.valueRanges || [];
-    for (const vr of valueRanges) {
-        if (vr.range) {
-            map[vr.range] = (vr.values as any[][]) || [];
-        }
-    }
-    return map;
+    // The API can normalize A1 ranges. It preserves the order of the requests.
+    const valueRanges = response.data.valueRanges ?? [];
+    return Object.fromEntries(ranges.map((range, index) => [range, valueRanges[index]?.values ?? []]));
+}
+
+function findExerciseRow(rows: any[][], dayId: number, exerciseName: string): number {
+    const range = findDayRange(rows, dayId);
+    if (!range) return -1;
+    const exerciseKey = normalizeExerciseKey(exerciseName);
+    const position = rows.slice(range.startRow, range.endRow)
+        .findIndex((row) => normalizeExerciseKey(row?.[0]) === exerciseKey);
+    return position < 0 ? -1 : range.startRow + position;
+}
+
+function toLegacySets(row: any[]): SetData[] {
+    return parseRowSets(row).map(({ reps, weight }) => ({ reps: reps ?? 0, weight: weight ?? 0 }));
 }
 
 export async function readExerciseSets(params: {
@@ -96,66 +106,11 @@ export async function readExerciseSets(params: {
 
     const rows = (readResponse.data.values as any[][]) || [];
 
-    let inCorrectDay = false;
-    let targetRow: any[] | null = null;
-
-    for (let i = 0; i < rows.length; i++) {
-        const cellValue = rows[i]?.[0]?.toString().trim().toUpperCase() || "";
-
-        if (cellValue.startsWith("DIA ")) {
-            const currentDayId = parseInt(cellValue.replace("DIA ", ""));
-            inCorrectDay = currentDayId === dayId;
-        } else if (inCorrectDay && normalizeExerciseKey(rows[i]?.[0]) === normalizeExerciseKey(exerciseName)) {
-            targetRow = rows[i];
-            break;
-        }
-    }
-
-    if (!targetRow) {
+    const targetRow = findExerciseRow(rows, dayId, exerciseName);
+    if (targetRow < 0) {
         throw new Error(`Exercise "${exerciseName}" not found in ${sheetName} Day ${dayId}`);
     }
-
-    const sets: SetData[] = [];
-    for (let i = 0; i < 4; i++) {
-        const repCol = 5 + i * 2; // F is index 5
-        const weightCol = 6 + i * 2; // G is index 6
-        const repsRaw = targetRow[repCol];
-        const weightRaw = targetRow[weightCol];
-
-        const reps = Number.parseFloat(repsRaw);
-        const weight = Number.parseFloat(weightRaw);
-
-        // No “capear” reps a 30: hay ejercicios con rangos más altos (p.ej. zancadas).
-        // Igual mantenemos límites razonables para evitar ruido de plantilla/formulas.
-        const repsOk = Number.isFinite(reps) && reps > 0 && reps <= 500;
-        const weightOk = Number.isFinite(weight) && weight >= 0 && weight <= 500;
-        // Si está incompleto (p.ej. peso sin reps), lo tratamos como vacío.
-        sets.push(repsOk && weightOk ? { reps, weight } : { reps: 0, weight: 0 });
-    }
-
-    return sets;
-}
-
-/**
- * Helper: parse columns F..M of a row into SetData[].
- * Extracted to avoid duplication between readExerciseSets and readExerciseSetsBulk.
- */
-function parseRowSets(row: any[]): SetData[] {
-    const sets: SetData[] = [];
-    for (let i = 0; i < 4; i++) {
-        const repCol = 5 + i * 2; // F is index 5
-        const weightCol = 6 + i * 2; // G is index 6
-        const repsRaw = row[repCol];
-        const weightRaw = row[weightCol];
-
-        const reps = Number.parseFloat(repsRaw);
-        const weight = Number.parseFloat(weightRaw);
-
-        const repsOk = Number.isFinite(reps) && reps > 0 && reps <= 500;
-        const weightOk = Number.isFinite(weight) && weight >= 0 && weight <= 500;
-        sets.push(repsOk && weightOk ? { reps, weight } : { reps: 0, weight: 0 });
-    }
-    return sets;
+    return toLegacySets(rows[targetRow]);
 }
 
 export interface BulkExerciseResult {
@@ -194,38 +149,14 @@ export async function readExerciseSetsBulk(params: {
 
     const rows = (readResponse.data.values as any[][]) || [];
 
-    // Build a map of normalized exercise name -> row for the target day only
-    const dayRowsMap = new Map<string, any[]>();
-    let inCorrectDay = false;
-
-    for (let i = 0; i < rows.length; i++) {
-        const cellValue = rows[i]?.[0]?.toString().trim().toUpperCase() || "";
-
-        if (cellValue.startsWith("DIA ")) {
-            const currentDayId = parseInt(cellValue.replace("DIA ", ""));
-            inCorrectDay = currentDayId === dayId;
-        } else if (inCorrectDay && rows[i]?.[0]) {
-            const key = normalizeExerciseKey(rows[i][0]);
-            if (key) {
-                dayRowsMap.set(key, rows[i]);
-            }
-        }
-    }
-
-    // Resolve each requested exercise
     const results: BulkExerciseResult[] = [];
     const missing: string[] = [];
-
     for (const exerciseName of exerciseNames) {
-        const key = normalizeExerciseKey(exerciseName);
-        const row = dayRowsMap.get(key);
-        if (!row) {
+        const row = findExerciseRow(rows, dayId, exerciseName);
+        if (row < 0) {
             missing.push(exerciseName);
         } else {
-            results.push({
-                exerciseName,
-                sets: parseRowSets(row),
-            });
+            results.push({ exerciseName, sets: toLegacySets(rows[row]) });
         }
     }
 
@@ -265,37 +196,14 @@ export async function saveExerciseSets(
 
     const rows = readResponse.data.values || [];
 
-    // Find the row index for this exercise within the correct day section
-    let inCorrectDay = false;
-    let exerciseRowIndex = -1;
-
-    for (let i = 0; i < rows.length; i++) {
-        const cellValue = rows[i][0]?.toString().trim().toUpperCase() || "";
-
-        if (cellValue.startsWith("DIA ")) {
-            const currentDayId = parseInt(cellValue.replace("DIA ", ""));
-            inCorrectDay = currentDayId === dayId;
-        } else if (inCorrectDay && normalizeExerciseKey(rows[i][0]) === normalizeExerciseKey(exerciseName)) {
-            exerciseRowIndex = i + 1; // 1-indexed for Sheets API
-            break;
-        }
-    }
-
-    if (exerciseRowIndex === -1) {
+    const targetRow = findExerciseRow(rows, dayId, exerciseName);
+    if (targetRow < 0) {
         throw new Error(`Exercise "${exerciseName}" not found in ${sheetName} Day ${dayId}`);
     }
-
-    // Build the values to write
-    // Columns F-M are indices 5-12 (0-indexed)
-    // F: Reps 1, G: Weight 1, H: Reps 2, I: Weight 2, etc.
-    const setValues: (number | string)[] = [];
-    for (let i = 0; i < 4; i++) {
-        if (i < sets.length) {
-            setValues.push(sets[i].reps, sets[i].weight);
-        } else {
-            setValues.push("", ""); // Empty if no set
-        }
-    }
+    const exerciseRowIndex = targetRow + 1;
+    const setValues = Array.from({ length: MAX_SETS }, (_, index) => [
+        sets[index]?.reps ?? "", sets[index]?.weight ?? "",
+    ]).flat();
 
     // Update the row (columns F through M = 6th to 13th columns)
     const range = `'${sheetName}'!F${exerciseRowIndex}:M${exerciseRowIndex}`;
@@ -303,7 +211,7 @@ export async function saveExerciseSets(
     await sheets.spreadsheets.values.update({
         spreadsheetId,
         range,
-        valueInputOption: "USER_ENTERED",
+        valueInputOption: "RAW",
         requestBody: {
             values: [setValues],
         },
@@ -374,20 +282,3 @@ export async function saveSessionRating(
         value: ratingValue,
     };
 }
-
-/**
- * Test connection to the spreadsheet by reading sheet names
- */
-export async function testSpreadsheetAccess(
-    accessToken: string,
-    spreadsheetId: string
-): Promise<{ ok: boolean; sheetNames?: string[]; error?: string }> {
-    try {
-        const sheetNames = await listSpreadsheetSheetTitles(accessToken, spreadsheetId);
-
-        return { ok: true, sheetNames };
-    } catch (error: any) {
-        return { ok: false, error: error.message };
-    }
-}
-

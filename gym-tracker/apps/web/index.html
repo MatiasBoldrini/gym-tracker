@@ -1,18 +1,36 @@
 <!doctype html>
-<html lang="es">
-
+<html lang="es-AR" prefix="og: https://ogp.me/ns#">
 <head>
   <meta charset="UTF-8" />
-  <link rel="icon" type="image/png" href="/icons/icon-192.png" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
-  <meta name="theme-color" content="#000000" />
-  <link rel="manifest" href="/manifest.webmanifest" />
-  <title>Gym Tracker</title>
-</head>
+  <title>Gym Tracker · Tu rutina de fuerza</title>
+  <meta name="description" content="Registrá tus series, pesos y notas por ejercicio. Seguí tu progreso con tu rutina de Google Sheets." />
+  <meta name="theme-color" content="#f7f8fa" />
 
+  <meta property="og:type" content="website" />
+  <meta property="og:site_name" content="Gym Tracker" />
+  <meta property="og:locale" content="es_AR" />
+  <meta property="og:title" content="Gym Tracker · Tu rutina de fuerza" />
+  <meta property="og:description" content="Registrá tus series, pesos y notas por ejercicio. Seguí tu progreso con tu rutina de Google Sheets." />
+  <meta property="og:url" content="%PUBLIC_APP_ORIGIN%/bloques" />
+  <meta property="og:image" content="%PUBLIC_APP_ORIGIN%/social/mancuerna-azul.jpg" />
+  <meta property="og:image:type" content="image/jpeg" />
+  <meta property="og:image:width" content="1200" />
+  <meta property="og:image:height" content="630" />
+  <meta property="og:image:alt" content="Mancuerna azul cobalto con empuñadura de acero sobre un fondo claro." />
+
+  <meta name="twitter:card" content="summary_large_image" />
+  <meta name="twitter:image" content="%PUBLIC_APP_ORIGIN%/social/gym-tracker-fuerza.jpg" />
+  <meta name="twitter:image:alt" content="Gym Tracker, junto a una mancuerna azul cobalto." />
+
+  <link rel="icon" type="image/png" sizes="32x32" href="/icons/favicon-32.png" />
+  <link rel="icon" type="image/svg+xml" sizes="any" href="/icons/icon-512.svg" />
+  <link rel="apple-touch-icon" sizes="180x180" href="/icons/apple-touch-icon.png" />
+  <meta name="apple-mobile-web-app-title" content="Gym Tracker" />
+  <link rel="manifest" href="/manifest.webmanifest" />
+</head>
 <body>
   <div id="root"></div>
   <script type="module" src="/src/main.tsx"></script>
 </body>
-
 </html>

@@ -1,252 +1,91 @@
-# Guía de Configuración - Gym Tracker
+# Configuración de Gym Tracker
 
-## 📋 Paso 1: Crear proyecto en Supabase
+## Arranque local
 
-### 1.1 Crear cuenta y proyecto
+Ejecutá estos comandos desde el directorio interno `gym-tracker/`, que contiene `package.json`, `api-src/` y `apps/`. Usá Node 22.12 o posterior.
 
-1. Ve a [Supabase](https://supabase.com/) y creá una cuenta (es gratis)
-2. Click en **"New project"**
-3. Nombre: `gym-tracker` (o el que prefieras)
-4. Database password: generá una segura y guardala
-5. Región: elegí la más cercana a tus usuarios
-6. Click **"Create new project"** y esperá ~2 minutos
-
-### 1.2 Obtener credenciales de Supabase
-
-1. En el dashboard de tu proyecto, andá a **Settings** → **API**
-2. Copiá estos valores (los vas a necesitar):
-   - **Project URL**: algo como `https://xxxx.supabase.co`
-   - **Publishable key** (antes llamada "anon key"): el JWT que empieza con `eyJ...`
-
-### 1.3 Ejecutar migración de base de datos
-
-1. En Supabase, andá a **SQL Editor** → **New Query**
-2. Copiá y pegá el contenido del archivo `supabase/migrations/001_user_integrations.sql`
-3. Click **"Run"** para crear la tabla y las políticas RLS
-
----
-
-## 📋 Paso 2: Configurar Google OAuth en Supabase
-
-### 2.1 Crear credenciales en Google Cloud Console
-
-1. Ve a [Google Cloud Console](https://console.cloud.google.com/)
-2. Creá un proyecto nuevo o usá uno existente
-3. Habilitá las APIs:
-   - **Google Sheets API**
-   - **Google Drive API**
-4. Andá a **APIs y servicios** → **Credenciales** → **+ Crear credenciales** → **ID de cliente de OAuth**
-5. Tipo de aplicación: **Aplicación web**
-6. Nombre: `Gym Tracker`
-7. **URIs de redirección autorizados**:
-   - `https://TU_PROJECT_ID.supabase.co/auth/v1/callback`
-   - (Reemplazá `TU_PROJECT_ID` con tu project ID de Supabase)
-8. Copiá el **Client ID** y **Client Secret**
-
-### 2.2 Configurar Google como provider en Supabase
-
-1. En Supabase, andá a **Authentication** → **Providers**
-2. Buscá **Google** y habilitalo
-3. Pegá tu **Client ID** y **Client Secret** de Google
-4. En **Authorized Client IDs**, dejalo vacío o agregá tu Client ID
-5. Click **"Save"**
-
-### 2.3 Configurar pantalla de consentimiento OAuth (Google)
-
-1. En Google Cloud Console, andá a **APIs y servicios** → **Pantalla de consentimiento OAuth**
-2. Seleccioná **Externo** (o **Interno** si es solo para tu organización)
-3. Completá los datos básicos (nombre, email de soporte)
-4. En **Scopes**, agregá:
-   - `https://www.googleapis.com/auth/spreadsheets`
-   - `https://www.googleapis.com/auth/drive.file`
-5. En **Usuarios de prueba** (si elegiste Externo), agregá los emails de quienes van a probar
-
----
-
-## 📋 Paso 3: Preparar la plantilla de Google Sheets
-
-1. Usá la plantilla oficial o creá la tuya:
-
-   - **Plantilla oficial**: `1XMFq-Twxtoa_Fs2_6kOWjB65mMqEgzFJ8ujzyZN7iCo`
-   - [Ver plantilla](https://docs.google.com/spreadsheets/d/1XMFq-Twxtoa_Fs2_6kOWjB65mMqEgzFJ8ujzyZN7iCo/edit?usp=sharing)
-
-2. **Importante**: La plantilla debe estar compartida con permisos de **"Cualquiera con el link puede ver"** para que los usuarios puedan copiarla.
-
-3. En la URL de tu plantilla, buscá el ID entre `/d/` y `/edit`:
-   ```
-   https://docs.google.com/spreadsheets/d/1XMFq-Twxtoa_Fs2_6kOWjB65mMqEgzFJ8ujzyZN7iCo/edit
-                                                      ↑ Este es el ID ↑
-   ```
-
----
-
-## 📋 Paso 4: Configurar variables de entorno
-
-### 4.1 En Vercel (producción)
-
-1. En tu proyecto de Vercel, andá a **Settings** → **Environment Variables**
-2. Agregá estas variables:
-
-```
-NEXT_PUBLIC_SUPABASE_URL
-Valor: [tu Project URL de Supabase, ej: https://xxxx.supabase.co]
-
-NEXT_PUBLIC_SUPABASE_PUBLISHABLE_DEFAULT_KEY
-Valor: [tu Publishable key de Supabase, ej: eyJ...]
-
-GOOGLE_CLIENT_ID
-Valor: [tu Client ID de Google, ej: 123456789-abc.apps.googleusercontent.com]
-
-GOOGLE_CLIENT_SECRET
-Valor: [tu Client Secret de Google, ej: GOCSPX-xxxxxxxxxxxxx]
-
-TOKEN_ENCRYPTION_KEY
-Valor: [string random de 32+ caracteres para cifrar refresh tokens]
-Ejemplo: openssl rand -base64 32
-
-SHEETS_TEMPLATE_ID
-Valor: [el ID de tu plantilla de Google Sheets]
-(Si no lo definís, se usa la plantilla oficial por defecto)
+```sh
+npm ci
+npm --prefix apps/web ci
+VITE_DEMO_MODE=true npm run dev
 ```
 
-3. Para cada variable, seleccioná los **entornos** donde aplica (Production, Preview, Development)
+Abrí la URL que imprime Vite, normalmente `http://localhost:5173`. El modo demo trae datos de ejemplo. `npm run dev` y `npm run start` arrancan Vite y la vista previa estática respectivamente. El flujo OAuth y las rutas `/api/*` requieren el runtime de Vercel configurado en el mismo origen.
 
-### 4.2 En local (.env.local)
-
-Creá un archivo `.env.local` en la raíz del proyecto:
-
-```bash
-# Supabase
-NEXT_PUBLIC_SUPABASE_URL=https://tu-project.supabase.co
-NEXT_PUBLIC_SUPABASE_PUBLISHABLE_DEFAULT_KEY=eyJ...tu_publishable_key
-
-# Google OAuth (para refresh de tokens)
-GOOGLE_CLIENT_ID=tu_client_id.apps.googleusercontent.com
-GOOGLE_CLIENT_SECRET=tu_client_secret
-
-# Seguridad
-TOKEN_ENCRYPTION_KEY=tu_encryption_key_32_chars_minimo
-
-# Template (server-only)
-SHEETS_TEMPLATE_ID=1XMFq-Twxtoa_Fs2_6kOWjB65mMqEgzFJ8ujzyZN7iCo
+```sh
+npm run lint
+npm run build
 ```
 
----
+El build crea la función de Node.js 24 en `.vercel/output/functions/` y el frontend en `apps/web/dist/`. El comando de `vercel.json` copia el frontend a `.vercel/output/static/`. En Vercel, la raíz del proyecto es el directorio interno `gym-tracker/`.
 
-## 📋 Paso 5: Verificar que todo funciona
+## Compartir una rutina v4
 
-### 5.1 Probar localmente
+Creá o copiá una hoja v4. Dale edición a la persona que va a entrenar y a la cuenta de servicio de Google que usa el sincronizador. En tu Mac, abrí **Asignar rutina.command**, pegá el enlace de Google Sheets y enviá el enlace de la app que el programa copia. Podés volver a obtener el mismo enlace desde otra computadora autorizada. Quien lo tenga puede leer y registrar entrenamientos en esa rutina. El permiso en Drive y el acceso por enlace a la app se administran por separado.
 
-1. Reiniciá tu servidor de desarrollo:
+Desde la terminal también podés administrar los enlaces.
 
-   ```bash
-   npm run dev
-   ```
-
-2. Abrí `http://localhost:3000`
-3. Deberías ver el botón "Conectar con Google"
-4. Al hacer click, Supabase te redirige a Google para autorizar
-5. Después de autorizar:
-   - Se crea automáticamente una copia de la plantilla en tu Drive
-   - El `spreadsheetId` y `refreshToken` se guardan en la BD de Supabase
-6. Serás redirigido a la app ya funcionando
-
-### 5.2 Probar en Vercel
-
-1. Hacé un commit y push a tu repo
-2. Vercel debería hacer deploy automático
-3. Probá el flujo completo de autenticación
-
----
-
-## ⚠️ Troubleshooting
-
-### Error: "redirect_uri_mismatch"
-
-- Verificá que en Google Cloud Console tengas configurado el redirect URI correcto:
-  `https://TU_PROJECT_ID.supabase.co/auth/v1/callback`
-
-### Error: "No provider_refresh_token received"
-
-- Asegurate de que los scopes de Drive/Sheets estén configurados en tu app
-- Verificá que `access_type: offline` y `prompt: consent` estén seteados
-
-### Error: "Failed to create spreadsheet"
-
-- Verificá que la plantilla esté compartida con "Cualquiera con el link puede ver"
-- Verificá que habilitaste las APIs de Drive y Sheets en Google Cloud
-
-### El usuario no ve su spreadsheet en otro dispositivo
-
-- Eso no debería pasar más: el `spreadsheetId` se guarda en Supabase y se reutiliza
-- Si pasa, verificá que la tabla `user_integrations` tenga el dato
-
----
-
-## 📝 Arquitectura
-
-### Flujo de autenticación
-
-```
-Usuario → "Conectar con Google" → Supabase OAuth → Google consent
-                                                         ↓
-                                         Supabase recibe tokens
-                                                         ↓
-                                         Redirect a /auth/callback
-                                                         ↓
-                                    - Guarda refresh_token cifrado en BD
-                                    - Crea spreadsheet si no existe
-                                    - Guarda spreadsheetId en BD
-                                                         ↓
-                                              Redirect a home
+```sh
+npm run hoja -- abrir 'https://docs.google.com/spreadsheets/d/<ID>/edit'
+npm run hoja -- renovar 'https://docs.google.com/spreadsheets/d/<ID>/edit'
+npm run hoja -- revocar 'https://docs.google.com/spreadsheets/d/<ID>/edit'
 ```
 
-### Modelo de datos
+Al renovar, compartí el nuevo enlace con quien deba seguir entrenando. Revocar el enlace conserva el historial y la sincronización de la hoja. Para una hoja nueva, el programa valida la estructura v4 antes de asignarla. La migración 006 conserva las asignaciones anteriores. Para copiar una hoja que ya tiene una pestaña de registro administrada, usá una plantilla limpia sin la pestaña **Registro app** ni sus rangos de sincronización.
 
-Tabla `user_integrations` en Supabase:
+### Configuración del administrador
 
-- `user_id`: UUID (PK, referencia a auth.users)
-- `email`: texto
-- `spreadsheet_id`: ID del Google Sheet del usuario
-- `google_refresh_token_enc`: refresh token cifrado (AES-GCM)
-- `created_at`, `updated_at`: timestamps
+Aplicá las migraciones con `supabase db push` y configurá el sincronizador. En el directorio interno guardá `GYM_APP_ORIGIN=https://<tu-app>` en `.env.admin.local`. El programa usa el proyecto vinculado a la CLI de Supabase, o bien `SUPABASE_URL` y `SUPABASE_SECRET_KEY` del entorno. Para leer hojas nuevas usa las credenciales de Google del sincronizador. En macOS admite la entrada **Gym Tracker v4 · Google Sheets** del llavero. El frontend sólo necesita `VITE_BLOCKS_CLOUD=true`, `VITE_SUPABASE_URL` y la clave publicable `VITE_SUPABASE_PUBLISHABLE_DEFAULT_KEY`.
 
-### Seguridad
+Los enlaces son reutilizables y se recuperan con permisos administrativos desde Supabase Vault. Las lecturas y los guardados comprueban su huella por plan y respetan las políticas de filas. El fragmento del enlace se retira de la barra al abrirlo. Para reabrir completamente sin red, la PWA tiene que haber cargado con el enlace válido en HTTPS o localhost. Un dispositivo que ya descargó datos puede consultarlos sin conexión hasta que vuelva a comprobar su acceso. [Sincronización con Google Sheets](supabase/ops/README.md) · [Funcionamiento de la PWA](apps/web/README.md)
 
-- Los refresh tokens se cifran con AES-GCM antes de guardarse en BD
-- RLS (Row Level Security) asegura que cada usuario solo accede a sus datos
-- Las cookies de sesión son manejadas por Supabase (HttpOnly, Secure)
+### Actualizar la app publicada
 
----
+La dirección de producción es `https://gym-tracker-hojas.vercel.app`. Usá ese valor para `GYM_APP_ORIGIN`. Las actualizaciones del frontend conservan los enlaces privados ya asignados. El proyecto gratuito de Vercel sirve los archivos compilados y Supabase ejecuta la sincronización con Sheets.
 
-## 📝 Checklist final
+Guardá las tres variables de frontend indicadas arriba en `apps/web/.env.local`. Ejecutá estos comandos desde el directorio interno.
 
-- [ ] Proyecto creado en Supabase
-- [ ] Migración SQL ejecutada (tabla `user_integrations`)
-- [ ] Google OAuth configurado en Supabase
-- [ ] APIs de Sheets y Drive habilitadas en Google Cloud
-- [ ] Credenciales OAuth creadas en Google Cloud
-- [ ] Variables de entorno configuradas (Vercel y local)
-- [ ] Plantilla compartida con "Cualquiera con el link puede ver"
-- [ ] Probar flujo completo de login → crear spreadsheet → usar app
+```sh
+VITE_BLOCKS_CLOUD=true npm --prefix apps/web run build
+publicacion=$(mktemp -d)
+mkdir -p "$publicacion/.vercel/output"
+cp apps/web/vercel-output.json "$publicacion/.vercel/output/config.json"
+cp -R apps/web/dist "$publicacion/.vercel/output/static"
+vercel link --cwd "$publicacion" --project gym-tracker-hojas --scope matis-projects-b35aec9e --yes
+vercel deploy --cwd "$publicacion" --scope matis-projects-b35aec9e --prebuilt --prod
+```
 
----
+## Integración de Google y Supabase para la versión con OAuth
 
-## 🎉 ¡Listo!
+1. Usá un proyecto Supabase de prueba. Aplicá `001_user_integrations.sql`, `002_user_preferences.sql` y `003_onboarding_progress.sql`, en ese orden, dentro de `supabase/migrations/`. Para conocer qué se aplicó, consultá el historial de migraciones del proyecto. Las políticas y triggers de `001` y `002` fallan si ya existen.
+2. Habilitá Sheets API y Drive API en el proyecto Google Cloud. Creá un cliente OAuth de tipo web y registrá como redirección de Google `https://<proyecto>.supabase.co/auth/v1/callback`. Configurá esas credenciales en el proveedor Google de Supabase.
+3. Agregá la URL de la app terminada en `/auth/callback` a los destinos permitidos de Supabase. Los scopes que pide el frontend están en `apps/web/src/lib/supabase/client.ts` y son `spreadsheets`, `drive.readonly` y `drive.file`.
+4. Para provisionar rutinas de prueba, usá una plantilla dedicada compatible con `Semana 1`, `Ejercicios` y `Series`. El progreso también lee `RM` y la fatiga puede leer `Fatiga`. Podés consultar la [plantilla histórica](https://docs.google.com/spreadsheets/d/1XMFq-Twxtoa_Fs2_6kOWjB65mMqEgzFJ8ujzyZN7iCo/edit).
+5. Configurá las variables de frontend y API y verificá login → callback → provisión → escritura en una copia de prueba. Un primer login guarda la integración y la app inicia la provisión de Sheets cuando detecta que quedó pendiente.
 
-Una vez completados estos pasos, tu app debería estar funcionando con:
+## Variables de entorno
 
-- ✅ Autenticación gestionada por Supabase
-- ✅ Usuarios y spreadsheets persistidos en BD
-- ✅ Creación automática de spreadsheet en el primer login
-- ✅ Multi-dispositivo: el usuario encuentra su spreadsheet en cualquier device
-- ✅ Refresh tokens cifrados y seguros
+En desarrollo, Vite lee sus valores de `apps/web/.env.local` o del entorno del proceso. Para un despliegue configurá las variables de ambos grupos en el entorno correspondiente de Vercel.
 
-### Nombres de pestañas esperados
+| Consumidor | Variable | Valor |
+| --- | --- | --- |
+| Frontend | `VITE_SUPABASE_URL` | URL del proyecto Supabase. |
+| Frontend | `VITE_SUPABASE_PUBLISHABLE_DEFAULT_KEY` | Clave publicable de Supabase. |
+| Frontend | `VITE_DEMO_MODE` | `true` para usar los datos de ejemplo. |
+| API | `NEXT_PUBLIC_SUPABASE_URL` | La misma URL de Supabase. El nombre histórico sigue en uso en la API. |
+| API | `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_DEFAULT_KEY` | La misma clave publicable de Supabase. |
+| API | `GOOGLE_CLIENT_ID` | Identificador del cliente OAuth. |
+| API | `GOOGLE_CLIENT_SECRET` | Secreto del cliente OAuth. |
+| API | `GOOGLE_REDIRECT_URI` | Redirección opcional para el cliente Google del servidor. |
+| API | `TOKEN_ENCRYPTION_KEY` | Clave estable de al menos 32 caracteres. Generá una con `openssl rand -base64 32`. Los tokens ya cifrados dependen de la clave con que se guardaron. |
+| API | `SHEETS_TEMPLATE_ID` | ID de la plantilla para nuevas integraciones. El código tiene un ID histórico por defecto. |
 
-La app lee los datos por **título de pestaña**. Asegurate de que la plantilla tenga:
+Guardá secretos únicamente en el entorno de la API. El SDK de Supabase inicia y conserva la sesión en el cliente. El frontend envía su token de acceso mediante `Authorization` a Hono. La API almacena cifrado el refresh token de Google en `user_integrations`.
 
-- `Semana 1`, `Semana 2`, ... (las que existan)
-- `RM` o `RM A,B,C` (PRs)
-- `Ejercicios` (mapeo nombre→imagen)
-- `Fatiga` (tabla de volumen semanal)
+## Diagnóstico
+
+- Si Vite devuelve HTML al consultar `/api/*`, verificá primero que el frontend esté conectado a un runtime que sirva Hono.
+- `GET /api/auth/ping` verifica el enrutamiento de la API sin consultar Supabase.
+- Si falla la redirección OAuth, revisá ambos destinos, el callback de Supabase registrado en Google y el callback de la app permitido en Supabase.
+- Si el callback falla al guardar la integración, revisá la clave de cifrado, la disponibilidad del refresh token y la migración `001`. Si falla la carga de preferencias, revisá también `002` y `003`.
+- Si falla la copia de la plantilla, revisá `SHEETS_TEMPLATE_ID`, el acceso de la cuenta de prueba y los scopes de Drive.

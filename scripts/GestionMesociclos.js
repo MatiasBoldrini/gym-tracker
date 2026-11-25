@@ -35,12 +35,13 @@ function crearMesociclo() {
         return;
     }
 
-    const numSemanas = parseInt(respuesta.getResponseText());
+    const textoSemanas = respuesta.getResponseText().trim();
+    const numSemanas = Number(textoSemanas);
 
-    if (isNaN(numSemanas) || numSemanas < 2) {
+    if (!/^\d+$/.test(textoSemanas) || numSemanas < 2) {
         ui.alert(
             "❌ Error",
-            "Ingresa un número válido mayor a 1.",
+            "Ingresá un número entero mayor a 1.",
             ui.ButtonSet.OK
         );
         return;

@@ -1,5 +1,7 @@
-import { PersonalRecord, Week, Day, Exercise } from "./types";
+import type { PersonalRecord, Week, Day } from "./types";
 import { normalizeExerciseKey } from "./normalize";
+import { findDayRange, readDayId } from "./google/workout-sheet";
+import { parseRowSets } from "./set-values";
 
 /**
  * Helpers de parseo para datos leídos desde Google Sheets (Sheets API).
@@ -16,78 +18,33 @@ function parseStarsFromString(starsText: string): number {
 // Helper to parse "Semana X" sheets
 export function parseWeekData(data: any[][], weekId: number, exerciseMapping: Record<string, string> = {}): Week {
     const days: Day[] = [];
-    let currentDay: Day | null = null;
+    for (const row of data) {
+        const dayId = readDayId(row[0]);
+        if (dayId === null || days.some((day) => day.id === dayId)) continue;
+        const range = findDayRange(data, dayId)!;
+        const rating = data[dayId * 10 - 1]?.[5];
+        const exercises = data.slice(range.startRow, range.endRow).flatMap((exerciseRow) => {
+            const name = String(exerciseRow[0] ?? "").trim();
+            if (!name || name.toLowerCase() === "ejercicio") return [];
 
-    // Pre-parse session ratings from rows F10, F20, F30, F40, F50
-    // Row index is 0-based, so F10 is data[9], F20 is data[19], etc.
-    const ratingsByDayId: Record<number, number> = {};
-    for (let dayId = 1; dayId <= 5; dayId++) {
-        const ratingRowIndex = dayId * 10 - 1; // 0-based: day 1 -> row 9, day 2 -> row 19, etc.
-        if (data[ratingRowIndex]) {
-            const ratingValue = data[ratingRowIndex][5]; // Column F is index 5
-            if (ratingValue && typeof ratingValue === "string" && ratingValue.includes("★")) {
-                ratingsByDayId[dayId] = parseStarsFromString(ratingValue);
-            }
-        }
+            const sets = parseRowSets(exerciseRow);
+            while (sets.length > 0 && sets.at(-1)?.reps === null) sets.pop();
+            return [{
+                name,
+                prescribedSeries: String(exerciseRow[1] ?? ""),
+                notes: String(exerciseRow[3] ?? ""),
+                muscleGroup: String(exerciseRow[13] ?? ""),
+                image: exerciseMapping[normalizeExerciseKey(name)] || undefined,
+                sets,
+            }];
+        });
+        days.push({
+            id: dayId,
+            name: String(row[0]).trim().toUpperCase(),
+            stars: typeof rating === "string" && rating.includes("★") ? parseStarsFromString(rating) : undefined,
+            exercises,
+        });
     }
-
-    data.forEach((row) => {
-        const firstCol = row[0]?.toString().toUpperCase() || "";
-
-        if (firstCol.startsWith("DIA ")) {
-            if (currentDay) days.push(currentDay);
-            const dayId = parseInt(firstCol.replace("DIA ", ""));
-            currentDay = {
-                id: dayId,
-                name: firstCol,
-                exercises: [],
-                // Assign pre-parsed rating if exists
-                stars: ratingsByDayId[dayId],
-            };
-        } else if (currentDay && row[0] && row[0] !== "Ejercicio" && row[0] !== "DIA") {
-            const rawName = String(row[0] ?? "");
-            const trimmedName = rawName.trim();
-            const exercise: Exercise = {
-                // Evitar que espacios al final/incipientes rompan matching (PR / Sheets read/save).
-                name: trimmedName,
-                prescribedSeries: row[1] || "",
-                notes: row[3] || "",
-                sets: [],
-                muscleGroup: row[13] || "",
-                image: exerciseMapping[normalizeExerciseKey(trimmedName)] || undefined,
-            };
-
-            // Extract up to 4 sets (Columns F, G, H, I, J, K, L, M)
-            // F: Reps 1, G: Weight 1
-            // H: Reps 2, I: Weight 2
-            // J: Reps 3, K: Weight 3
-            // L: Reps 4, M: Weight 4
-            for (let i = 0; i < 4; i++) {
-                const repCol = 5 + i * 2; // F is index 5
-                const weightCol = 6 + i * 2; // G is index 6
-                const reps = parseFloat(row[repCol]);
-                const weight = parseFloat(row[weightCol]);
-
-                // Solo consideramos "set" si hay reps y peso numéricos.
-                // Importante: no limitamos reps a 30 porque hay ejercicios con rangos más altos.
-                // Igual mantenemos límites razonables para evitar ruido de plantilla/formulas.
-                // Nota: reps=0 lo tratamos como "vacío" (evita falsos positivos/plantillas).
-                const repsOk = Number.isFinite(reps) && reps > 0 && reps <= 500;
-                const weightOk = Number.isFinite(weight) && weight >= 0 && weight <= 500;
-                if (repsOk && weightOk) {
-                    exercise.sets.push({
-                        reps,
-                        weight,
-                    });
-                }
-            }
-
-            currentDay.exercises.push(exercise);
-        }
-    });
-
-    if (currentDay) days.push(currentDay);
-
     return { id: weekId, days };
 }
 
@@ -100,10 +57,21 @@ export function parsePRData(data: any[][]): PersonalRecord[] {
             exercise: String(row[0] ?? "").trim(),
             weight: parseFloat(row[1]) || 0,
             reps: parseFloat(row[2]) || 0,
-            date: row[3] || "",
+            date: formatRecordDate(row[3]),
             estimated1RM: parseFloat(row[4]) || 0,
         }))
         .filter((pr) => pr.exercise);
+}
+
+const recordDateFormatter = new Intl.DateTimeFormat("es-AR", {
+    day: "2-digit", month: "2-digit", year: "numeric", timeZone: "UTC",
+});
+
+function formatRecordDate(value: unknown): string {
+    if (typeof value === "string") return value;
+    if (typeof value !== "number" || value <= 0) return "";
+    const date = new Date(Date.UTC(1899, 11, 30) + Math.floor(value) * 86_400_000);
+    return Number.isNaN(date.getTime()) ? "" : recordDateFormatter.format(date);
 }
 
 export function parseExerciseMapping(data: any[][]): Record<string, string> {

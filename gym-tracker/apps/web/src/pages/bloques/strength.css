@@ -1,0 +1,66 @@
+.strength-history { min-width: 0; color: #19212a; }
+.strength-history h2 { margin-bottom: 10px; font-size: 1.12rem; font-weight: 680; letter-spacing: -.025em; }
+.strength-metrics { display: inline-flex; flex-wrap: wrap; padding: 3px; background: var(--color-inset); border-radius: 10px; }
+.strength-metrics label { position: relative; display: grid; cursor: pointer; }
+.strength-metrics input { position: absolute; width: 1px; height: 1px; opacity: 0; }
+.strength-metrics span { display: grid; align-items: center; min-height: 36px; padding-inline: 12px; border-radius: 8px; font-size: .84rem; color: #495465; }
+.strength-metrics :checked + span { background: white; color: #182534; box-shadow: 0 1px 3px #16223621; font-weight: 600; }
+.strength-metrics :focus-visible + span, .exercise-detail :is(button,select,summary):focus-visible { outline: 2px solid #0069cb; outline-offset: 1px; }
+.strength-note, .strength-empty { color: #56616f; font-size: .85rem; line-height: 1.45; }
+.strength-note { margin-block: 9px; }
+.strength-empty { padding-block: 7px 12px; }
+.strength-bests { display: flex; gap: clamp(22px, 7vw, 52px); margin-block: 16px 10px; }
+.strength-bests dt { display: flex; align-items: center; gap: 6px; color: #53606c; font-size: .8rem; }
+.strength-bests dd { font-size: 1.42rem; font-weight: 650; line-height: 1.5; letter-spacing: -.035em; font-variant-numeric: tabular-nums; }
+.strength-bests dd small { display: inline; font-size: .82rem; font-weight: 500; letter-spacing: 0; }
+.strength-bests i { width: 15px; border-top: 2px solid; }
+.strength-bests .strength-key-planned { color: #4d7096; border-top-style: dashed; }
+.strength-key-recorded { color: #11705a; }
+.strength-chart { display: grid; grid-template-columns: max-content minmax(0,1fr); column-gap: 7px; font-size: .71rem; color: #56616f; font-variant-numeric: tabular-nums; }
+.strength-axis { display: flex; flex-direction: column; justify-content: space-between; text-align: end; }
+.strength-chart svg { width: 100%; height: clamp(108px, 21vw, 142px); overflow: visible; }
+.strength-grid { stroke: #e3e7eb; }
+.strength-chart g line { stroke-width: 1.7; }
+.strength-planned { stroke: #4d7096; fill: white; }
+.strength-planned line { stroke-dasharray: 5 3; }
+.strength-recorded { stroke: #11705a; fill: #11705a; }
+.strength-range { grid-column: 2; display: flex; justify-content: space-between; gap: 12px; margin-top: 3px; overflow-wrap: anywhere; }
+.strength-range span + span { text-align: end; }
+.strength-weeks { margin-top: 12px; border-block-start: 1px solid #dce1e6; }
+.strength-weeks summary { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 44px; font-size: .87rem; font-weight: 600; cursor: pointer; }
+.strength-weeks summary::-webkit-details-marker { display: none; }
+.strength-weeks summary svg { color: #56616f; }
+.strength-weeks[open] summary svg { transform: rotate(180deg); }
+.strength-weeks table { width: 100%; border-collapse: collapse; font-size: .82rem; font-variant-numeric: tabular-nums; }
+.strength-weeks :is(td,th) { padding: 8px 3px; border-block-end: 1px solid #e4e8ec; text-align: end; }
+.strength-weeks th:first-child { text-align: start; overflow-wrap: anywhere; }
+.strength-weeks td { white-space: nowrap; }
+.strength-weeks tbody th { font-weight: 500; }
+.strength-weeks thead { color: #556270; }
+.movement-trigger { display: flex; width: 100%; min-height: 48px; align-items: center; gap: 10px; text-align: start; color: #19212a; cursor: pointer; }
+.movement-trigger > span:nth-child(2) { flex: 1; min-width: 0; font-weight: 680; font-size: 1.31rem; letter-spacing: -.03em; line-height: 1.2; overflow-wrap: anywhere; }
+.movement-thumb { display: grid; flex: 0 0 40px; height: 40px; place-items: center; color: #687585; }
+.movement-thumb img { width: 100%; height: 100%; object-fit: contain; }
+.movement-change { display: inline-flex; align-items: center; gap: 5px; color: #075eab; font-size: .86rem; font-weight: 580; }
+.movement-backdrop { display: grid; justify-items: center; align-items: start; min-height: 100%; padding: min(12dvh, 96px) 16px 16px; background: #151c295e; }
+.movement-panel { display: flex; flex-direction: column; width: min(100%, 30rem); max-height: min(33rem, 74dvh); overflow: hidden; background: white; color: #19212a; border-radius: 16px; box-shadow: 0 8px 40px #18212e24; }
+.movement-searchbar { display: flex; align-items: center; gap: 8px; padding: 5px 6px 5px 16px; border-bottom: 1px solid #dce1e6; }
+.movement-searchbar label { color: #54616f; cursor: text; }
+.movement-searchbar input { min-width: 0; flex: 1; min-height: 44px; padding-inline: 6px; font-size: 1rem; }
+.movement-close { display: grid; place-items: center; width: 44px; height: 44px; flex: none; border-radius: 8px; color: #56616f; cursor: pointer; }
+.movement-searchbar input::placeholder { color: #59616c; opacity: 1; }
+.movement-options { min-height: 0; overflow-y: auto; overscroll-behavior: contain; scrollbar-gutter: stable; }
+.movement-options li { display: flex; align-items: center; gap: 10px; padding: 5px 14px; min-height: 52px; cursor: pointer; }
+.movement-options li + li { border-block-start: 1px solid #e9ecf0; }
+.movement-option-name { flex: 1; min-width: 0; overflow-wrap: anywhere; font-size: .94rem; font-weight: 600; }
+.movement-option-name small { display: block; color: #536171; font-size: .78rem; font-weight: 400; }
+.movement-options li > svg { flex-shrink: 0; color: #075eab; }
+.movement-options [data-active] { background: #e9f2fc; box-shadow: inset 3px 0 #075eab; }
+.movement-no-match { padding: 18px 16px; font-size: .9rem; color: #536171; }
+.movement-trigger:focus-visible, .movement-panel :is(input, button):focus-visible { outline: 2px solid #075eab; outline-offset: -2px; border-radius: 6px; }
+@media (hover: hover) { .movement-options li:hover, .movement-close:hover { background-color: #f1f4f7; } }
+@media (max-width: 540px) {
+    .movement-backdrop { padding: max(8px, env(safe-area-inset-top)) 8px max(8px, env(safe-area-inset-bottom)); }
+    .movement-panel { max-height: min(33rem, 82dvh, calc(var(--visible-height, 100dvh) - max(8px, env(safe-area-inset-top)) - max(8px, env(safe-area-inset-bottom)))); }
+}
+@media (prefers-reduced-motion: no-preference) { .movement-panel { animation: image-appear 160ms ease-out; } }

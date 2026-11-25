@@ -13,10 +13,6 @@ export type NormalizedSheetsError = {
      * Mensaje listo para mostrar al usuario.
      */
     message: string;
-    /**
-     * Detalle técnico (para logs / debug).
-     */
-    details?: string;
 };
 
 function getStatusFromError(error: any): number | null {
@@ -59,7 +55,6 @@ export function normalizeSheetsError(error: any): NormalizedSheetsError {
             code: "SHEETS_BAD_RANGE",
             message:
                 "No pudimos leer tu plantilla de Google Sheets. Asegurate de estar usando una copia de la plantilla oficial y que existan las pestañas (por ejemplo: “Semana 1”, “Ejercicios”, “RM”).",
-            details: msg,
         };
     }
 
@@ -73,7 +68,6 @@ export function normalizeSheetsError(error: any): NormalizedSheetsError {
             code: "SHEETS_NOT_FOUND",
             message:
                 "No encontramos ese Google Sheet. Revisá que el link/ID sea correcto y que el archivo todavía exista.",
-            details: msg,
         };
     }
 
@@ -88,7 +82,6 @@ export function normalizeSheetsError(error: any): NormalizedSheetsError {
             code: "SHEETS_PERMISSION",
             message:
                 "No tenés permiso para acceder a ese Google Sheet. Verificá que estés logueado con la misma cuenta que hizo la copia, o compartí el archivo con tu cuenta (permiso de edición).",
-            details: msg,
         };
     }
 
@@ -98,9 +91,5 @@ export function normalizeSheetsError(error: any): NormalizedSheetsError {
         code: "SHEETS_UNKNOWN",
         message:
             "No pudimos conectar con Google Sheets. Probá de nuevo o revisá la configuración del Spreadsheet.",
-        details: msg,
     };
 }
-
-
-

@@ -1,0 +1,135 @@
+-- Run in an isolated Supabase database after migration 004:
+-- psql -X -v ON_ERROR_STOP=1 -f supabase/tests/block_workouts.psql
+\set ON_ERROR_STOP on
+begin;
+insert into auth.users(id) values ('00000000-0000-4000-8000-000000000001'), ('00000000-0000-4000-8000-000000000002');
+insert into public.block_plans(user_id, routine, spreadsheet_id)
+select id, '{"blocks":[{"id":"b","weeks":[{"number":1,"days":[{"number":1,"exercises":[{"id":"sq","name":"Sentadilla"}]},{"number":2,"exercises":[]}]}]}]}'::jsonb,
+    case when id::text like '%001' then 'test-sheet' end
+from auth.users where id in ('00000000-0000-4000-8000-000000000001', '00000000-0000-4000-8000-000000000002');
+
+set local role authenticated;
+set local request.jwt.claim.sub = '00000000-0000-4000-8000-000000000001';
+do $$
+declare
+    sid text := '["b",1,1]';
+    new_entry jsonb := '{"startedAt":"2026-11-23T14:20:00.000Z","sets":{"sq":[{"kg":"72,","reps":"4","effort":"","confirmed":false,"beforePlan":null}]},"note":"primera","rating":2}';
+    pid uuid;
+    invalid jsonb;
+    r integer;
+begin
+    assert (select count(*) from public.block_plans) = 1;
+    select plan_id into strict pid from public.block_plans;
+    r := public.save_block_workout(sid, new_entry, 0, pid);
+    assert r = 1 and (select sheet_row from public.block_workouts) = 2;
+    assert (select plan_id from public.block_workouts) = pid;
+    assert public.save_block_workout(sid, new_entry, 0, pid) = 1; -- response lost/retried
+    begin
+        perform public.save_block_workout(sid, new_entry || '{"rating":3}', 0, pid);
+        raise exception 'Expected conflict';
+    exception when serialization_failure then null; end;
+    begin
+        perform public.save_block_workout(sid, new_entry, 1, gen_random_uuid());
+        raise exception 'Expected obsolete plan to be rejected';
+    exception when invalid_parameter_value then null; end;
+    begin
+        perform public.save_block_workout('["b", 1, 1]', new_entry, 0, pid);
+        raise exception 'Expected alternate key to be rejected';
+    exception when invalid_parameter_value then null; end;
+    begin
+        perform public.save_block_workout('["b",1,3]', new_entry, 0, pid);
+        raise exception 'Expected missing day to be rejected';
+    exception when invalid_parameter_value then null; end;
+    for invalid in select value from jsonb_array_elements('[
+        {"sets":{"sq":[{}]}}, {"sets":{"sq":[{"kg":"80","reps":"4","effort":"","beforePlan":1}]}},
+        {"completed":{"foreign":true}}, {"exerciseNotes":{"sq":5}},
+        {"rating":4}, {"startedAt":"2026-02-30T12:00:00Z"}
+    ]') loop
+        begin
+            perform public.save_block_workout(sid, new_entry || invalid, 1, pid);
+            raise exception 'Expected invalid workout to be rejected';
+        exception when invalid_parameter_value then null; end;
+    end loop;
+    begin
+        update public.block_workouts set revision=200;
+        raise exception 'Expected direct edit to be rejected';
+    exception when insufficient_privilege then null; end;
+    begin
+        update public.block_plans set spreadsheet_id='another-target';
+        raise exception 'Expected plan edit to be rejected';
+    exception when insufficient_privilege then null; end;
+    begin
+        perform public.claim_block_workout_exports(1);
+        raise exception 'Expected athlete claim to be rejected';
+    exception when insufficient_privilege then null; end;
+    begin
+        perform 1 from public.block_workout_exports;
+        raise exception 'Expected athlete outbox query to be rejected';
+    exception when insufficient_privilege then null; end;
+end;
+$$;
+
+set local request.jwt.claim.sub = '00000000-0000-4000-8000-000000000002';
+do $$ begin
+    assert (select count(*) from public.block_workouts) = 0;
+    assert (select count(*) from public.block_plans) = 1;
+    assert public.save_block_workout('["b",1,1]',
+        '{"startedAt":"2026-11-23T14:20:00Z","sets":{},"note":"","rating":null}',0) = 1;
+    assert (select sheet_row from public.block_workouts) = 2;
+end; $$;
+
+reset role;
+set local role service_role;
+create temp table claim1 as select * from public.claim_block_workout_exports(10);
+do $$ begin
+    assert (select count(*) from claim1) = 1; -- second athlete has no sheet
+    assert (select sheet_row=2 and revision=1 and exercise_names->>'sq'='Sentadilla' from claim1);
+    assert not exists (select from public.claim_block_workout_exports(10)); -- concurrent lease
+end; $$;
+
+reset role;
+set local role authenticated;
+set local request.jwt.claim.sub = '00000000-0000-4000-8000-000000000001';
+do $$ begin
+    assert public.save_block_workout('["b",1,1]',(select workout || '{"note":"editada"}' from public.block_workouts),1) = 2;
+    assert public.save_block_workout('["b",1,2]','{"startedAt":"2026-11-24T08:00:00Z","sets":{},"note":"","rating":3}',0) = 1;
+    assert (select sheet_row from public.block_workouts where session_key='["b",1,1]') = 2;
+    assert (select sheet_row from public.block_workouts where session_key='["b",1,2]') = 3;
+end; $$;
+
+reset role;
+set local role service_role;
+do $$
+declare first_claim record; next_claim record;
+begin
+    select * into strict first_claim from claim1;
+    assert not public.finish_block_workout_export(first_claim.user_id, first_claim.session_key, 2, first_claim.lease_token, true);
+    assert public.finish_block_workout_export(first_claim.user_id, first_claim.session_key, 1, first_claim.lease_token, true);
+    for next_claim in select * from public.claim_block_workout_exports(10) loop
+        if next_claim.sheet_row=2 then
+            assert next_claim.revision=2 and next_claim.workout->>'note'='editada';
+            assert public.finish_block_workout_export(next_claim.user_id,next_claim.session_key,2,next_claim.lease_token,true);
+        else
+            assert next_claim.sheet_row=3;
+            assert public.finish_block_workout_export(next_claim.user_id,next_claim.session_key,1,next_claim.lease_token,false);
+        end if;
+    end loop;
+    assert (select delivered_revision=2 from public.block_workout_exports where user_id=first_claim.user_id and session_key=first_claim.session_key);
+    assert (select failures=1 and available_at>now() from public.block_workout_exports where user_id=first_claim.user_id and session_key='["b",1,2]');
+    assert not exists (select from public.claim_block_workout_exports(10));
+    update public.block_plans set spreadsheet_id='replacement-test-sheet' where user_id=first_claim.user_id;
+    assert (select count(*) from public.claim_block_workout_exports(10) where spreadsheet_id='replacement-test-sheet')=2;
+end; $$;
+reset role;
+set local role anon;
+do $$ begin
+    begin
+        perform * from public.block_workouts;
+        raise exception 'Expected anonymous read to be rejected';
+    exception when insufficient_privilege then null; end;
+    begin
+        perform public.save_block_workout('["b",1,1]','{}',0);
+        raise exception 'Expected anonymous save to be rejected';
+    exception when insufficient_privilege then null; end;
+end; $$;
+rollback;

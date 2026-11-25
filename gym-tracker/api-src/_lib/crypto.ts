@@ -1,3 +1,5 @@
+import { webcrypto } from "node:crypto";
+
 // AES-GCM encryption for sensitive data (refresh tokens)
 
 const ALGORITHM = "AES-GCM";
@@ -20,9 +22,9 @@ function getEncryptionKey(): string {
     return key;
 }
 
-async function deriveKey(password: string): Promise<CryptoKey> {
+async function deriveKey(password: string): Promise<webcrypto.CryptoKey> {
     const encoder = new TextEncoder();
-    const keyMaterial = await crypto.subtle.importKey(
+    const keyMaterial = await webcrypto.subtle.importKey(
         "raw",
         encoder.encode(password),
         { name: "PBKDF2" },
@@ -30,7 +32,7 @@ async function deriveKey(password: string): Promise<CryptoKey> {
         ["deriveKey"]
     );
 
-    return crypto.subtle.deriveKey(
+    return webcrypto.subtle.deriveKey(
         {
             name: "PBKDF2",
             salt: encoder.encode("gym-tracker-salt"),
@@ -47,9 +49,9 @@ async function deriveKey(password: string): Promise<CryptoKey> {
 export async function encrypt(plaintext: string): Promise<string> {
     const key = await deriveKey(getEncryptionKey());
     const encoder = new TextEncoder();
-    const iv = crypto.getRandomValues(new Uint8Array(IV_LENGTH));
+    const iv = webcrypto.getRandomValues(new Uint8Array(IV_LENGTH));
 
-    const encrypted = await crypto.subtle.encrypt(
+    const encrypted = await webcrypto.subtle.encrypt(
         { name: ALGORITHM, iv },
         key,
         encoder.encode(plaintext)
@@ -70,7 +72,7 @@ export async function decrypt(ciphertext: string): Promise<string> {
     const iv = combined.slice(0, IV_LENGTH);
     const encrypted = combined.slice(IV_LENGTH);
 
-    const decrypted = await crypto.subtle.decrypt(
+    const decrypted = await webcrypto.subtle.decrypt(
         { name: ALGORITHM, iv },
         key,
         encrypted

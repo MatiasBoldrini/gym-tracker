@@ -44,13 +44,7 @@ export async function upsertUserIntegration(
         .single();
 
     if (error) {
-        console.error("[upsertUserIntegration] Error upserting user integration:", {
-            code: error.code,
-            message: error.message,
-            details: error.details,
-            hint: error.hint,
-            userId,
-        });
+        console.error("Error upserting the Supabase user integration");
         return null;
     }
 

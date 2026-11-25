@@ -1,18 +1,18 @@
 "use client";
 
 import { useMemo, useState, useEffect, useRef, useCallback } from "react";
-import { saveExerciseSets, fetchExerciseSets, fetchExerciseSetsBulk, fetchWeekData, fetchWeeksList, saveSessionRating, setupSpreadsheet, completeOnboarding, dismissOnboarding } from "@/lib/sheets-client";
-import type { Week, PersonalRecord, Exercise, Set } from "@/types";
-import { ExerciseCard } from "@/components/ui/ExerciseCard";
-import Stack from "@/components/ui/Stack";
-import { ExerciseModal } from "@/components/ui/ExerciseModal";
+import { type SheetsError, saveExerciseSets, fetchExerciseSets, fetchExerciseSetsBulk, fetchWeekData, fetchWeeksList, saveSessionRating, setupSpreadsheet, completeOnboarding, dismissOnboarding } from "@/lib/sheets-client";
+import type { Week, PersonalRecord, Set } from "@/types";
+import { ProgressRing } from "@/components/ui/ProgressRing";
+import { ExerciseList } from "@/components/ui/ExerciseList";
+import { ClassicExerciseEditor, type ClassicExerciseTarget } from "@/components/screens/ClassicExerciseEditor";
 import { DaySelector } from "@/components/ui/DaySelector";
 import { SessionRatingModal } from "@/components/ui/SessionRatingModal";
 import { useAuth } from "@/lib/hooks/useAuth";
-import { EyeOff, Loader2, Sparkles } from "lucide-react";
+import { EyeOff, Loader2 } from "lucide-react";
 import { OnboardingWizard } from "@/components/screens/OnboardingWizard";
 import { normalizeExerciseKey } from "@/lib/normalize";
-import { cacheUrls, clearRuntimeDataCaches } from "@/lib/pwa";
+import { accountScope, readAccountStorage, writeAccountStorage } from "@/lib/account-storage";
 import { useLocation } from "react-router-dom";
 
 type WeekListItem = { id: number; name: string };
@@ -21,26 +21,58 @@ type HomeScreenProps = {
     initialWeek: Week;
     initialWeeks: WeekListItem[];
     initialPrs: PersonalRecord[];
+    initialLoaded: boolean;
     initialSetupError?: { message: string; code?: string } | null;
 };
 
-export function HomeScreen({ initialWeek, initialWeeks, initialPrs, initialSetupError }: HomeScreenProps) {
-    const [week, setWeek] = useState<Week>(initialWeek);
-    const [prs] = useState<PersonalRecord[]>(initialPrs);
+function validSet(set: Set): boolean {
+    return set.reps !== null && Number.isInteger(set.reps) && set.reps > 0 && set.reps <= 500 &&
+        set.weight !== null && Number.isFinite(set.weight) && set.weight >= 0 && set.weight <= 500;
+}
+
+function recordedSets(sets: Set[]): Set[] {
+    const slots = sets.map((set) => validSet(set) ? { weight: set.weight, reps: set.reps } : { weight: null, reps: null });
+    while (slots.length && !validSet(slots[slots.length - 1])) slots.pop();
+    return slots;
+}
+
+function updateDay(week: Week, dayId: number, update: (day: Week["days"][number]) => Week["days"][number]): Week {
+    return { ...week, days: week.days.map((day) => day.id === dayId ? update(day) : day) };
+}
+
+function saveKey(weekId: number, dayId: number, name: string) {
+    return JSON.stringify([weekId, dayId, name]);
+}
+
+export function HomeScreen({ initialWeek, initialWeeks, initialPrs, initialSetupError, initialLoaded }: HomeScreenProps) {
+    const [loadedWeek, setWeek] = useState<Week | null>(null);
+    const [requestedWeekId, setRequestedWeekId] = useState<number | null>(null);
+    const selectedWeekId = requestedWeekId ?? initialWeek.id;
+    const week = useMemo(() => {
+        if (loadedWeek?.id === selectedWeekId) return loadedWeek;
+        if (requestedWeekId === null) return initialWeek;
+        return { id: selectedWeekId, days: [] };
+    }, [initialWeek, loadedWeek, requestedWeekId, selectedWeekId]);
     const [currentDayIndex, setCurrentDayIndex] = useState(0);
-    const [selectedExercise, setSelectedExercise] = useState<Exercise | null>(null);
-    const [isModalOpen, setIsModalOpen] = useState(false);
+    const [activeEditor, setActiveEditor] = useState<{ id: string; requestId: number } | null>(null);
 
     const [showWeekPicker, setShowWeekPicker] = useState(false);
-    // Initialize weeks from server data to avoid duplicate fetch
-    const [weeks, setWeeks] = useState<WeekListItem[]>(initialWeeks);
-    const [selectedWeekId, setSelectedWeekId] = useState<number>(initialWeek?.id || 1);
-    const [selectedWeekName, setSelectedWeekName] = useState(initialWeek?.id ? `Semana ${initialWeek.id}` : "Semana 1");
+    const [refreshedWeeks, setWeeks] = useState<WeekListItem[] | null>(null);
+    const weeks = refreshedWeeks ?? initialWeeks;
+    const selectedWeekName = weeks.find((item) => item.id === selectedWeekId)?.name ?? `Semana ${selectedWeekId}`;
 
     // Auth state
     const auth = useAuth();
-    const [errorMessage, setErrorMessage] = useState<string | null>(initialSetupError?.message ?? null);
+    const userId = auth.userId ?? undefined;
+    const onboardingScope = userId ? accountScope(userId) : null;
+    const [localError, setErrorMessage] = useState<string | null>(null);
+    const errorMessage = localError ?? initialSetupError?.message ?? null;
+    const { refresh: refreshAuth } = auth;
     const location = useLocation();
+    const isLoadingWeek = !errorMessage && (requestedWeekId === null
+        ? auth.hasSpreadsheet && !initialLoaded
+        : loadedWeek?.id !== selectedWeekId);
+
 
     // Info popover (rutina + progreso)
     const [showInfoPopover, setShowInfoPopover] = useState(false);
@@ -55,23 +87,16 @@ export function HomeScreen({ initialWeek, initialWeeks, initialPrs, initialSetup
     // Session rating modal
     const [showRatingModal, setShowRatingModal] = useState(false);
 
-    // Track if we've consumed initial server data (to avoid duplicate fetches only on first mount)
-    const hasConsumedInitialWeeksRef = useRef(initialWeeks.length > 0);
-    const hasConsumedInitialWeekRef = useRef(initialWeek?.days?.length > 0);
-    const hasRetriedEmptyWeekRef = useRef(false);
-
-    // Track if week data has been loaded (either from SSR or fetch)
-    // Esto evita tomar decisiones de onboarding antes de tener la data real
-    const [hasLoadedWeekData, setHasLoadedWeekData] = useState(() => {
-        // "Cargado" significa: ya tenemos una respuesta de week (SSR o fetch),
-        // aunque esa respuesta sea una rutina vacía.
-        return (initialWeek?.days?.length ?? 0) > 0;
-    });
+    const hasLoadedWeekData = initialLoaded || loadedWeek !== null;
+    const exerciseRequestId = useRef(0);
+    const weekSelectionVersion = useRef(0);
+    const daySelectionVersion = useRef(0);
+    const writeVersion = useRef(0);
+    const pendingExerciseSaves = useRef(new Map<string, Promise<void>>());
 
     // Onboarding wizard for new users or empty routines
     const [showOnboardingWizard, setShowOnboardingWizard] = useState(false);
     const [onboardingStartMode, setOnboardingStartMode] = useState<"auto" | "resume" | "force">("auto");
-    const ONBOARDING_SYNC_ACTION_KEY = "onboarding_sync_action_v1";
 
     // Async setup state (runs in background while user does onboarding)
     const [isSettingUp, setIsSettingUp] = useState(false);
@@ -81,34 +106,34 @@ export function HomeScreen({ initialWeek, initialWeeks, initialPrs, initialSetup
 
     // Check if routine is empty (all days have no exercises)
     const isRoutineEmpty = useMemo(() => {
-        if (!week?.days?.length) return true;
-        return week.days.every((d) => d.exercises.length === 0);
-    }, [week]);
+        const firstWeek = loadedWeek?.id === initialWeek.id ? loadedWeek : initialWeek;
+        return firstWeek.days.every((day) => day.exercises.length === 0);
+    }, [initialWeek, loadedWeek]);
 
     // Run setup in background (called once when setup_pending detected)
     const runSetupInBackground = useCallback(async () => {
-        if (setupStartedRef.current) return;
+        if (!userId || setupStartedRef.current) return;
         setupStartedRef.current = true;
 
         setIsSettingUp(true);
         setSetupError(null);
 
         try {
-            const result = await setupSpreadsheet();
+            const result = await setupSpreadsheet(userId);
             if (result.ok) {
                 setSetupComplete(true);
                 // Refresh auth state to get new spreadsheet info
-                auth.refresh();
+                refreshAuth();
             } else {
                 console.error("Setup spreadsheet failed:", result);
                 setSetupError(result.error || "Error al crear la planilla");
             }
-        } catch (err: any) {
-            setSetupError(err?.message || "Error al crear la planilla");
+        } catch (error) {
+            setSetupError(error instanceof Error ? error.message : "Error al crear la planilla");
         } finally {
             setIsSettingUp(false);
         }
-    }, [auth]);
+    }, [refreshAuth, userId]);
 
     // Check for new user flag in URL or empty routine
     useEffect(() => {
@@ -168,8 +193,8 @@ export function HomeScreen({ initialWeek, initialWeeks, initialPrs, initialSetup
         }
 
         // Priority 2: Fallback to localStorage (for compat / offline)
-        const hasCompletedOnboarding = localStorage.getItem("onboarding_completed_v1") === "true";
-        const hasDismissedOnboarding = localStorage.getItem("onboarding_dismissed_v1") === "true";
+        const hasCompletedOnboarding = readAccountStorage<boolean>(onboardingScope, "onboardingCompleted") === true;
+        const hasDismissedOnboarding = readAccountStorage<boolean>(onboardingScope, "onboardingDismissed") === true;
         if (hasCompletedOnboarding || hasDismissedOnboarding) return;
 
         // Priority 3: Si el usuario tiene spreadsheet, esperar a que cargue la data de la semana
@@ -198,7 +223,7 @@ export function HomeScreen({ initialWeek, initialWeeks, initialPrs, initialSetup
             setOnboardingStartMode("auto");
             setShowOnboardingWizard(true);
         }
-    }, [location.search, location.pathname, isRoutineEmpty, hasLoadedWeekData, runSetupInBackground, auth.isLoading, auth.hasSpreadsheet, auth.onboarding.hasCompleted, auth.onboarding.hasDismissed, auth.onboarding.hasProgress]);
+    }, [location.search, location.pathname, isRoutineEmpty, hasLoadedWeekData, runSetupInBackground, auth.isLoading, auth.hasSpreadsheet, auth.onboarding.hasCompleted, auth.onboarding.hasDismissed, auth.onboarding.hasProgress, auth.isAuthenticated, onboardingScope]);
 
     // Retry onboarding sync if we ever completed/dismissed offline or if the server write failed.
     useEffect(() => {
@@ -206,7 +231,7 @@ export function HomeScreen({ initialWeek, initialWeeks, initialPrs, initialSetup
         if (auth.isLoading) return;
         if (!auth.isAuthenticated) return;
 
-        const pending = localStorage.getItem(ONBOARDING_SYNC_ACTION_KEY);
+        const pending = readAccountStorage<string>(onboardingScope, "onboardingSyncAction");
         if (!pending) return;
 
         let cancelled = false;
@@ -215,16 +240,16 @@ export function HomeScreen({ initialWeek, initialWeeks, initialPrs, initialSetup
             try {
                 const res =
                     pending === "complete"
-                        ? await completeOnboarding()
+                        ? await completeOnboarding(userId)
                         : pending === "dismiss"
-                            ? await dismissOnboarding()
+                            ? await dismissOnboarding(userId)
                             : { ok: true };
 
                 if (cancelled) return;
 
                 if (res.ok) {
-                    localStorage.removeItem(ONBOARDING_SYNC_ACTION_KEY);
-                    auth.refresh();
+                    writeAccountStorage(onboardingScope, "onboardingSyncAction", null);
+                    refreshAuth();
                 } else {
                     console.warn("Onboarding sync pending (will retry):", res.error);
                 }
@@ -237,7 +262,7 @@ export function HomeScreen({ initialWeek, initialWeeks, initialPrs, initialSetup
         return () => {
             cancelled = true;
         };
-    }, [auth.isLoading, auth.isAuthenticated, auth.refresh]);
+    }, [auth.isLoading, auth.isAuthenticated, refreshAuth, onboardingScope, userId]);
 
     // Backfill: if localStorage says completed/dismissed but server still says "shouldShow",
     // we persist it to Supabase so it works across devices.
@@ -248,38 +273,32 @@ export function HomeScreen({ initialWeek, initialWeeks, initialPrs, initialSetup
         if (!auth.onboarding.shouldShow) return;
 
         // If there is already a pending sync, let the other effect handle it.
-        if (localStorage.getItem(ONBOARDING_SYNC_ACTION_KEY)) return;
+        if (readAccountStorage<string>(onboardingScope, "onboardingSyncAction")) return;
 
-        const hasCompletedLocal = localStorage.getItem("onboarding_completed_v1") === "true";
-        const hasDismissedLocal = localStorage.getItem("onboarding_dismissed_v1") === "true";
+        const hasCompletedLocal = readAccountStorage<boolean>(onboardingScope, "onboardingCompleted") === true;
+        const hasDismissedLocal = readAccountStorage<boolean>(onboardingScope, "onboardingDismissed") === true;
         if (!hasCompletedLocal && !hasDismissedLocal) return;
 
         const action = hasCompletedLocal ? "complete" : "dismiss";
-        localStorage.setItem(ONBOARDING_SYNC_ACTION_KEY, action);
-    }, [auth.isLoading, auth.isAuthenticated, auth.onboarding.shouldShow]);
-
-    // Si el server detectó un problema de acceso (403/404) lo mostramos
-    useEffect(() => {
-        const msg = initialSetupError?.message;
-        if (!msg) return;
-        setErrorMessage(msg);
-    }, [initialSetupError?.message]);
+        writeAccountStorage(onboardingScope, "onboardingSyncAction", action);
+    }, [auth.isLoading, auth.isAuthenticated, auth.onboarding.shouldShow, onboardingScope]);
 
     // Auto-trigger setup if authenticated but no spreadsheet (returning user case)
     useEffect(() => {
         if (auth.isLoading) return;
-        if (!auth.isAuthenticated) return;
+        if (!auth.isAuthenticated || !userId) return;
         if (auth.hasSpreadsheet) return;
         if (setupComplete) return;
 
         // User is authenticated but has no spreadsheet - run setup
         runSetupInBackground();
-    }, [auth.isLoading, auth.isAuthenticated, auth.hasSpreadsheet, setupComplete, runSetupInBackground]);
+    }, [auth.isLoading, auth.isAuthenticated, auth.hasSpreadsheet, setupComplete, runSetupInBackground, userId]);
 
-    const handleSheetsError = (err: any) => {
-        const code = err?.code as string | undefined;
-        const status = err?.status as number | undefined;
-        const message = typeof err?.message === "string" ? err.message : "";
+    const handleSheetsError = (error: unknown) => {
+        const sheetsError = error instanceof Error ? error as SheetsError : null;
+        const code = sheetsError?.code;
+        const status = sheetsError?.status;
+        const message = sheetsError?.message ?? "";
         const messageLower = message.toLowerCase();
 
         const isBlocking =
@@ -310,146 +329,36 @@ export function HomeScreen({ initialWeek, initialWeeks, initialPrs, initialSetup
     };
 
     useEffect(() => {
-        // Skip fetching weeks if we already have them from the server (SSR) - only on first mount
-        if (hasConsumedInitialWeeksRef.current) {
-            hasConsumedInitialWeeksRef.current = false; // Consume initial data, next time we'll fetch
-            return;
-        }
-
-        if (auth.isLoading) return;
-        if (!auth.isAuthenticated) return;
-        // Evita 401 mientras el setup todavía está creando la planilla.
-        if (!auth.hasSpreadsheet && !setupComplete) return;
-
+        if (requestedWeekId === null || auth.isLoading || !auth.isAuthenticated || !auth.hasSpreadsheet) return;
         let cancelled = false;
+        const selectionVersion = weekSelectionVersion.current;
 
-        const loadWeeks = async () => {
+        async function loadWeek(weekId: number) {
             try {
-                const fetchedWeeks = await fetchWeeksList();
-                if (cancelled) return;
-
-                const sorted = fetchedWeeks.sort((a, b) => a.id - b.id);
-                setWeeks(sorted);
-
-                const resolvedWeekId =
-                    sorted.some((w) => w.id === selectedWeekId)
-                        ? selectedWeekId
-                        : (sorted[0]?.id ?? 1);
-
-                setSelectedWeekId(resolvedWeekId);
-                setSelectedWeekName(`Semana ${resolvedWeekId}`);
-            } catch (e) {
-                if (!handleSheetsError(e)) {
-                    console.error("Failed to load weeks:", e);
+                const data = await fetchWeekData(weekId, { userId });
+                if (cancelled || selectionVersion !== weekSelectionVersion.current) return;
+                if (data.week.id !== weekId) throw new Error("La respuesta pertenece a otra semana.");
+                setWeek(data.week);
+            } catch (error) {
+                if (cancelled || selectionVersion !== weekSelectionVersion.current) return;
+                if (!handleSheetsError(error)) {
+                    console.error("Error loading week:", error);
+                    setErrorMessage("No pudimos cargar la semana.");
                 }
             }
-        };
+        }
 
-        loadWeeks();
-
+        void loadWeek(requestedWeekId);
         return () => {
             cancelled = true;
         };
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [auth.isLoading, auth.isAuthenticated, auth.hasSpreadsheet, setupComplete]);
-
-    useEffect(() => {
-        // Skip fetching week if we have initial data for THIS week - only on first mount
-        if (hasConsumedInitialWeekRef.current && initialWeek?.id === selectedWeekId) {
-            hasConsumedInitialWeekRef.current = false; // Consume initial data
-            // Ya tenemos la semana del SSR para este weekId: considerarla "cargada"
-            // aunque no tenga ejercicios, para no bloquear decisiones de onboarding.
-            setHasLoadedWeekData(true);
-            return;
-        }
-
-        if (auth.isLoading) return;
-        if (!auth.isAuthenticated) return;
-        // Evita 401 mientras el setup todavía está creando la planilla.
-        if (!auth.hasSpreadsheet && !setupComplete) return;
-
-        let cancelled = false;
-
-        const loadWeek = async () => {
-            try {
-                const data = await fetchWeekData(selectedWeekId);
-                if (cancelled) return;
-                // Guard rail: si por cache/SW vuelve una semana vacía, no pisar una rutina válida ya renderizada (SSR).
-                // Esto evita el "flash" donde se ve 300ms y desaparece.
-                setWeek((prev) => {
-                    const prevHasData = Array.isArray(prev?.days) && prev.days.some((d) => (d.exercises?.length ?? 0) > 0);
-                    const nextHasData = Array.isArray(data?.week?.days) && data.week.days.some((d: any) => (d.exercises?.length ?? 0) > 0);
-                    if (prevHasData && !nextHasData) {
-                        console.warn("fetchWeekData devolvió semana vacía; se mantiene el estado previo:", {
-                            selectedWeekId,
-                        });
-                        return prev;
-                    }
-                    return data.week;
-                });
-                setCurrentDayIndex(0);
-                setSelectedWeekName(`Semana ${selectedWeekId}`);
-
-                // Marcar que la data de la semana fue cargada (para decisiones de onboarding)
-                if (!cancelled) {
-                    setHasLoadedWeekData(true);
-                }
-
-                // Auto-recovery: si llegó vacío, probablemente es un entry stale en `sheets-api-cache`.
-                // Borramos caches de datos y reintentamos UNA sola vez con cache-buster.
-                // (Esto también ayuda aunque el SW sea viejo / esté sirviendo stale).
-                const nextHasData = Array.isArray(data?.week?.days) && data.week.days.some((d: any) => (d.exercises?.length ?? 0) > 0);
-                const prevHasData = Array.isArray(week?.days) && week.days.some((d) => (d.exercises?.length ?? 0) > 0);
-                if (prevHasData && !nextHasData && !hasRetriedEmptyWeekRef.current) {
-                    hasRetriedEmptyWeekRef.current = true;
-                    try {
-                        await clearRuntimeDataCaches();
-                        const retry = await fetchWeekData(selectedWeekId, { cacheBust: Date.now() });
-                        const retryHasData = Array.isArray(retry?.week?.days) && retry.week.days.some((d: any) => (d.exercises?.length ?? 0) > 0);
-                        if (!cancelled && retryHasData) {
-                            setWeek(retry.week);
-                        }
-                    } catch (e) {
-                        console.warn("Auto-recovery de week falló:", e);
-                    }
-                }
-            } catch (e) {
-                if (!handleSheetsError(e)) {
-                    console.error("Failed to load week:", e);
-                }
-                // Incluso si hay error, marcamos como "cargado" para evitar bloquear la decisión de onboarding
-                if (!cancelled) {
-                    setHasLoadedWeekData(true);
-                }
-            }
-        };
-
-        loadWeek();
-
-        return () => {
-            cancelled = true;
-        };
-    }, [auth.isLoading, auth.isAuthenticated, auth.hasSpreadsheet, setupComplete, selectedWeekId, initialWeek?.id]);
-
-    // Cache selectivo: precachear SOLO las imágenes de la rutina cargada (toda la semana).
-    useEffect(() => {
-        if (!auth.isAuthenticated) return;
-        if (!week?.days?.length) return;
-
-        const urls = week.days
-            .flatMap((d) => d.exercises || [])
-            .map((e) => (e?.image ? `/images/exercises/${e.image}` : null))
-            .filter((u): u is string => !!u);
-
-        // Fire-and-forget: el SW cachea en background.
-        void cacheUrls(urls);
-    }, [auth.isAuthenticated, week]);
+    }, [auth.isLoading, auth.isAuthenticated, auth.hasSpreadsheet, requestedWeekId, userId]);
 
     const prByExercise = useMemo(() => {
         const map = new Map<string, PersonalRecord>();
-        for (const pr of prs) map.set(normalizeExerciseKey(pr.exercise), pr);
+        for (const pr of initialPrs) map.set(normalizeExerciseKey(pr.exercise), pr);
         return map;
-    }, [prs]);
+    }, [initialPrs]);
 
     // Filter to only show days with exercises
     const visibleDays = useMemo(() => {
@@ -467,46 +376,37 @@ export function HomeScreen({ initialWeek, initialWeeks, initialPrs, initialSetup
         }
     }, [visibleDays.length, currentDayIndex]);
 
-    const isExerciseComplete = (exercise: Exercise) => {
-        const targetSetCount = Math.max(
-            1,
-            parseInt(exercise.prescribedSeries?.toString().split(/[\sxX]+/)[0]) || 3
-        );
-        const completedSetsCount = exercise.sets?.slice(0, targetSetCount).filter(s =>
-            s.weight !== null && s.weight !== undefined && s.weight >= 0 &&
-            s.reps !== null && s.reps !== undefined && s.reps > 0
-        ).length || 0;
-
-        return completedSetsCount >= targetSetCount;
-    };
-
-    const visibleExercises = useMemo(() => {
-        if (!currentDay) return [];
-        if (!hideCompleted) return currentDay.exercises;
-        return currentDay.exercises.filter((exercise) => !isExerciseComplete(exercise));
-    }, [currentDay, hideCompleted]);
-
     const routineProgress = useMemo(() => {
         if (!currentDay) return [];
 
-        const isValidSet = (s: Set) =>
-            s.weight !== null && s.weight !== undefined && s.weight >= 0 &&
-            s.reps !== null && s.reps !== undefined && s.reps > 0;
-
-        return currentDay.exercises.map((exercise) => {
-            const targetSetCount = Math.max(
-                1,
-                parseInt(exercise.prescribedSeries?.toString().split(/[\sxX]+/)[0]) || 3
-            );
-            const completedSetsCount = exercise.sets?.slice(0, targetSetCount).filter(isValidSet).length || 0;
+        return currentDay.exercises.map((exercise, rowIndex) => {
+            const prescription = String(exercise.prescribedSeries ?? "");
+            const match = prescription.match(/^\s*(\d+)\s*[x×]/i);
+            const target = match ? Math.max(1, Number(match[1])) : /\b(?:min|seg|s)\b/i.test(prescription) ? 1 : 3;
+            const sets = exercise.sets ?? [];
+            const completed = sets.slice(0, target).filter(validSet).length;
             return {
+                id: `${week.id}:${currentDay.id}:${rowIndex}`,
+                rowIndex,
                 name: exercise.name,
-                completed: completedSetsCount,
-                target: targetSetCount,
-                isComplete: completedSetsCount >= targetSetCount,
+                prescription,
+                notes: String(exercise.notes ?? "").trim(),
+                completed,
+                target,
+                isComplete: completed >= target,
             };
         });
-    }, [currentDay]);
+    }, [currentDay, week.id]);
+
+    const displayedRows = routineProgress
+        .filter((row) => !hideCompleted || !row.isComplete || row.id === activeEditor?.id)
+        .map((row) => ({
+            id: row.id,
+            name: row.name,
+            prescription: row.prescription,
+            completed: row.isComplete,
+            countLabel: `${row.completed}/${row.target}`,
+        }));
 
     // Calcular porcentaje total de la rutina del día
     const routinePercentage = useMemo(() => {
@@ -543,10 +443,7 @@ export function HomeScreen({ initialWeek, initialWeeks, initialPrs, initialSetup
     }, [showInfoPopover]);
 
     useEffect(() => {
-        if (!showInfoPopover) return;
-        if (auth.isLoading) return;
-        if (!auth.isAuthenticated) return;
-        if (!currentDay) return;
+        if (!showInfoPopover || !userId || auth.isLoading || !auth.isAuthenticated || !currentDay) return;
 
         const weekId = week.id;
         const dayId = currentDay.id;
@@ -554,46 +451,26 @@ export function HomeScreen({ initialWeek, initialWeeks, initialPrs, initialSetup
 
         let cancelled = false;
 
+        const readVersion = writeVersion.current;
+        const selectionVersion = weekSelectionVersion.current;
+
         const refresh = async () => {
             setIsRefreshingInfo(true);
             try {
-                // Batch fetch: single request for all exercises
-                const bulkResults = await fetchExerciseSetsBulk({ weekId, dayId, exerciseNames });
-
-                if (cancelled) return;
-
-                // Normalize sets (0/0 -> null)
-                const results = bulkResults.map((r) => ({
-                    exerciseName: r.exerciseName,
-                    sets: (r.sets || []).map((s): Set => ({
-                        weight: (s.weight === 0 && s.reps === 0) ? null : (s.weight ?? null),
-                        reps: (s.weight === 0 && s.reps === 0) ? null : (s.reps ?? null),
-                    })),
-                }));
-
-                setWeek((prev) => {
-                    const updated = { ...prev };
-                    const dayIdx = updated.days.findIndex((d) => d.id === dayId);
-                    if (dayIdx < 0) return prev;
-
-                    const day = updated.days[dayIdx];
-                    updated.days = [...updated.days];
-                    updated.days[dayIdx] = { ...day, exercises: [...day.exercises] };
-
-                    for (const r of results) {
-                        const exIdx = updated.days[dayIdx].exercises.findIndex((e) => e.name === r.exerciseName);
-                        if (exIdx < 0) continue;
-                        updated.days[dayIdx].exercises[exIdx] = {
-                            ...updated.days[dayIdx].exercises[exIdx],
-                            sets: r.sets,
-                        };
-                    }
-
-                    return updated;
-                });
-            } catch (err) {
-                // Fail silently on bulk error (same UX as before per-exercise errors)
-                console.error("Failed to fetch exercise sets bulk:", err);
+                if (pendingExerciseSaves.current.size) return;
+                const results = await fetchExerciseSetsBulk({ weekId, dayId, exerciseNames, userId });
+                if (cancelled || readVersion !== writeVersion.current ||
+                    selectionVersion !== weekSelectionVersion.current || pendingExerciseSaves.current.size) return;
+                const byExercise = new Map(results.map((result) => [result.exerciseName, recordedSets(result.sets)]));
+                setWeek((previous) => updateDay(previous?.id === weekId ? previous : week, dayId, (day) => ({
+                    ...day,
+                    exercises: day.exercises.map((exercise) => {
+                        const sets = byExercise.get(exercise.name);
+                        return sets ? { ...exercise, sets } : exercise;
+                    }),
+                })));
+            } catch (error) {
+                if (!cancelled) console.error("Failed to fetch exercise sets:", error);
             } finally {
                 if (!cancelled) setIsRefreshingInfo(false);
             }
@@ -605,13 +482,16 @@ export function HomeScreen({ initialWeek, initialWeeks, initialPrs, initialSetup
             cancelled = true;
         };
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [showInfoPopover, auth.isLoading, auth.isAuthenticated, week.id, currentDayIndex]);
+    }, [showInfoPopover, auth.isLoading, auth.isAuthenticated, week.id, currentDayIndex, userId]);
 
-    useEffect(() => {
-        return () => {
-            if (toastTimeoutRef.current) clearTimeout(toastTimeoutRef.current);
-        };
+    const invalidateTrainingView = useCallback(() => {
+        exerciseRequestId.current++;
+        weekSelectionVersion.current++;
+        daySelectionVersion.current++;
+        if (toastTimeoutRef.current) clearTimeout(toastTimeoutRef.current);
     }, []);
+
+    useEffect(() => invalidateTrainingView, [invalidateTrainingView]);
 
     const showToast = (message: string) => {
         if (toastTimeoutRef.current) clearTimeout(toastTimeoutRef.current);
@@ -619,105 +499,29 @@ export function HomeScreen({ initialWeek, initialWeeks, initialPrs, initialSetup
         toastTimeoutRef.current = setTimeout(() => setToastMessage(null), 1800);
     };
 
-    const exerciseCards = visibleExercises.map((exercise, idx) => {
-        const pr = prByExercise.get(normalizeExerciseKey(exercise.name));
-        return (
-            <div
-                key={idx}
-                className="w-full h-full"
-                onClick={async () => {
-                    setSelectedExercise(exercise);
-                    setIsModalOpen(true);
+    const loadExerciseSets = useCallback(async (target: ClassicExerciseTarget) => {
+        if (!userId) throw new Error("Volvé a iniciar sesión para cargar las series.");
+        const { weekId, dayId, name } = target;
+        const key = saveKey(weekId, dayId, name);
+        await pendingExerciseSaves.current.get(key)?.catch(() => undefined);
+        const { sets } = await fetchExerciseSets({ weekId, dayId, exerciseName: name, userId });
+        return recordedSets(sets);
+    }, [userId]);
 
-                    if (!auth.isAuthenticated) return;
+    const closeExercise = (requestId: number) => {
+        if (exerciseRequestId.current !== requestId) return;
+        exerciseRequestId.current++;
+        setActiveEditor(null);
+    };
 
-                    try {
-                        const { sets } = await fetchExerciseSets({
-                            weekId: week.id,
-                            dayId: currentDay.id,
-                            exerciseName: exercise.name,
-                        });
-
-                        const normalizedSets: Set[] = (sets || []).map((s) => ({
-                            weight: (s.weight === 0 && s.reps === 0) ? null : (s.weight ?? null),
-                            reps: (s.weight === 0 && s.reps === 0) ? null : (s.reps ?? null),
-                        }));
-
-                        const hasFetchedFilled = normalizedSets.some((s) =>
-                            s.weight !== null && s.weight !== undefined && s.weight >= 0 &&
-                            s.reps !== null && s.reps !== undefined && s.reps > 0
-                        );
-                        const hasExistingFilled = (exercise.sets || []).some((s) =>
-                            s.weight !== null && s.weight !== undefined && s.weight >= 0 &&
-                            s.reps !== null && s.reps !== undefined && s.reps > 0
-                        );
-
-                        if (!hasFetchedFilled && hasExistingFilled) {
-                            console.warn("fetchExerciseSets devolvió vacío; se mantiene el estado local:", {
-                                weekId: week.id,
-                                dayId: currentDay.id,
-                                exerciseName: exercise.name,
-                            });
-                            return;
-                        }
-
-                        setWeek((prev) => {
-                            const updated = { ...prev };
-                            const dayIdx = updated.days.findIndex((d) => d.id === currentDay.id);
-                            if (dayIdx < 0) return prev;
-                            const exIdx = updated.days[dayIdx].exercises.findIndex((e) => e.name === exercise.name);
-                            if (exIdx < 0) return prev;
-                            updated.days = [...updated.days];
-                            updated.days[dayIdx] = { ...updated.days[dayIdx] };
-                            updated.days[dayIdx].exercises = [...updated.days[dayIdx].exercises];
-                            updated.days[dayIdx].exercises[exIdx] = {
-                                ...updated.days[dayIdx].exercises[exIdx],
-                                sets: normalizedSets,
-                            };
-                            return updated;
-                        });
-
-                        setSelectedExercise((prev) => (prev && prev.name === exercise.name ? { ...prev, sets: normalizedSets } : prev));
-                    } catch (e) {
-                        if (!handleSheetsError(e)) {
-                            console.error("Failed to preload sets:", e);
-                        }
-                    }
-                }}
-            >
-                <ExerciseCard
-                    exercise={exercise}
-                    pr={pr}
-                    isStacked
-                    priority={idx === (visibleExercises.length - 1)}
-                />
-            </div>
-        );
-    }) || [];
-
-    const shouldShowCompletionCard =
-        hideCompleted &&
-        !!currentDay &&
-        currentDay.exercises.length > 0 &&
-        visibleExercises.length === 0;
-
-    const completionCard = (
-        <div className="bg-white rounded-[32px] p-6 h-full flex flex-col border border-black/5 shadow-[0_10px_30px_-14px_rgba(0,0,0,0.28)]">
-            <div className="flex-1 flex flex-col items-center justify-center gap-3 text-center">
-                <div className="w-12 h-12 rounded-full bg-ios-green/15 text-ios-green flex items-center justify-center">
-                    <Sparkles size={22} />
-                </div>
-                <div className="text-xl font-black text-black">
-                    ¡Rutina completada!
-                </div>
-                <p className="text-sm font-bold text-gray-500">
-                    No quedan ejercicios pendientes hoy.
-                </p>
-            </div>
-        </div>
-    );
-
-    const cardsToRender = shouldShowCompletionCard ? [completionCard] : exerciseCards;
+    const selectExercise = (id: string) => {
+        if (!auth.isAuthenticated || !userId) return;
+        if (activeEditor?.id === id) {
+            closeExercise(activeEditor.requestId);
+            return;
+        }
+        setActiveEditor({ id, requestId: ++exerciseRequestId.current });
+    };
 
     const handleToggleHideCompleted = () => {
         setHideCompleted((prev) => {
@@ -729,92 +533,65 @@ export function HomeScreen({ initialWeek, initialWeeks, initialPrs, initialSetup
         setShowInfoPopover(false);
     };
 
-    const handleSaveSeries = async (sets: Set[]) => {
-        if (!selectedExercise || !week || !currentDay) return;
+    const handleSaveSeries = async (target: ClassicExerciseTarget, sets: Set[]) => {
+        if (!userId) throw new Error("Volvé a iniciar sesión para guardar las series.");
+        const { weekId, dayId, name, rowIndex } = target;
+        const key = saveKey(weekId, dayId, name);
+        const pending = pendingExerciseSaves.current;
+        const previousSave = pending.get(key);
+        const weekVersion = weekSelectionVersion.current;
+        const dayVersion = daySelectionVersion.current;
+        const editorVersion = exerciseRequestId.current;
+        writeVersion.current++;
 
+        async function save() {
+            await previousSave?.catch(() => undefined);
+            const result = await saveExerciseSets(weekId, dayId, name, sets, userId);
+            if (!result.ok) {
+                const message = result.status ? result.error : null;
+                throw new Error(message || "No pudimos guardar las series. Volvé a intentar.");
+            }
+
+            if (weekVersion !== weekSelectionVersion.current) return;
+            setWeek((previous) => updateDay(previous?.id === weekId ? previous : week, dayId, (day) => ({
+                ...day,
+                exercises: day.exercises.map((item, index) => index === rowIndex && item.name === name ? { ...item, sets } : item),
+            })));
+            showToast("Series guardadas");
+
+            const unrated = week.days.find((day) => day.id === dayId)?.stars === undefined;
+            if (sets.some(validSet) && unrated && dayVersion === daySelectionVersion.current &&
+                editorVersion === exerciseRequestId.current) {
+                setShowRatingModal(true);
+            }
+        }
+
+        const operation = save();
+        pending.set(key, operation);
         try {
-            const validSets = sets
-                .filter(s => s.weight !== null && s.reps !== null && !(s.weight === 0 && s.reps === 0))
-                .map(s => ({ weight: s.weight!, reps: s.reps! }));
-
-            if (validSets.length > 0) {
-                const result = await saveExerciseSets(week.id, currentDay.id, selectedExercise.name, validSets);
-                if (!result.ok) {
-                    const err = new Error(result.error || "Error al guardar");
-                    (err as any).code = result.code;
-                    (err as any).status = result.status;
-                    throw err;
-                }
-            }
-
-            const dayId = currentDay.id;
-            const exerciseName = selectedExercise.name;
-
-            // IMPORTANT: immutable update so derived memos (routineProgress/visibleExercises)
-            // recompute immediately and UI reflects the saved sets without waiting for refetch.
-            setWeek((prev) => {
-                const dayIdx = prev.days.findIndex((d) => d.id === dayId);
-                if (dayIdx < 0) return prev;
-                const exIdx = prev.days[dayIdx].exercises.findIndex((e) => e.name === exerciseName);
-                if (exIdx < 0) return prev;
-
-                const nextDays = [...prev.days];
-                const nextDay = {
-                    ...nextDays[dayIdx],
-                    exercises: [...nextDays[dayIdx].exercises],
-                };
-                nextDay.exercises[exIdx] = { ...nextDay.exercises[exIdx], sets };
-                nextDays[dayIdx] = nextDay;
-
-                return { ...prev, days: nextDays };
-            });
-
-            setSelectedExercise((prev) => (prev && prev.name === exerciseName ? { ...prev, sets } : prev));
-
-            const completedNow = isExerciseComplete({ ...selectedExercise, sets });
-            if (completedNow) {
-                setIsModalOpen(false);
-            }
-
-            // If the day wasn't rated yet, prompt rating after a successful save.
-            if (validSets.length > 0) {
-                const dayIdxForRating = week.days.findIndex((d) => d.id === dayId);
-                const isUnrated = dayIdxForRating >= 0 && week.days[dayIdxForRating].stars === undefined;
-                if (isUnrated) {
-                    setTimeout(() => setShowRatingModal(true), 200);
-                }
-            }
-        } catch (error) {
-            if (!handleSheetsError(error)) {
-                console.error("Failed to save series:", error);
-                showToast("Error al guardar");
-            }
+            await operation;
+        } finally {
+            if (pending.get(key) === operation) pending.delete(key);
         }
     };
 
     const handleSaveRating = async (stars: number) => {
-        if (!week || !currentDay) return;
-
+        if (!currentDay || !userId) return;
+        const dayId = currentDay.id;
+        const version = weekSelectionVersion.current;
         setShowRatingModal(false);
 
         try {
-            const result = await saveSessionRating(week.id, currentDay.id, stars);
+            const result = await saveSessionRating(week.id, dayId, stars, userId);
             if (!result.ok) {
-                const err = new Error(result.error || "Error al guardar calificación");
-                (err as any).code = result.code;
-                (err as any).status = result.status;
-                throw err;
+                throw Object.assign(new Error(result.error || "Error al guardar calificación"), {
+                    code: result.code,
+                    status: result.status,
+                });
             }
 
-            setWeek((prev) => {
-                const updated = { ...prev };
-                const dayIdx = updated.days.findIndex((d) => d.id === currentDay.id);
-                if (dayIdx < 0) return prev;
-                updated.days = [...updated.days];
-                updated.days[dayIdx] = { ...updated.days[dayIdx], stars };
-                return updated;
-            });
-
+            if (version !== weekSelectionVersion.current) return;
+            setWeek((previous) => updateDay(previous?.id === week.id ? previous : week, dayId, (day) => ({ ...day, stars })));
             showToast("Calificación guardada");
         } catch (error) {
             if (!handleSheetsError(error)) {
@@ -822,6 +599,14 @@ export function HomeScreen({ initialWeek, initialWeeks, initialPrs, initialSetup
                 showToast("Error al guardar calificación");
             }
         }
+    };
+
+    const changeDay = (index: number) => {
+        exerciseRequestId.current++;
+        daySelectionVersion.current++;
+        setActiveEditor(null);
+        setShowRatingModal(false);
+        setCurrentDayIndex(index);
     };
 
     const handleConnectGoogle = () => {
@@ -832,7 +617,7 @@ export function HomeScreen({ initialWeek, initialWeeks, initialPrs, initialSetup
     // This avoids blocking SSR content while auth hydrates
     const hasInitialData = initialWeek?.days && initialWeek.days.length > 0;
     // Importante: si el onboarding está abierto, NO desmontar toda la UI por un refresh de auth
-    // (por ejemplo cuando termina el setup y hacemos auth.refresh()) porque eso resetea el wizard.
+    // (por ejemplo cuando termina el setup y hacemos refreshAuth()) porque eso resetea el wizard.
     if (auth.isLoading && !hasInitialData && !showOnboardingWizard) {
         return (
             <div className="min-h-[calc(100dvh-(var(--bottom-nav-base)+env(safe-area-inset-bottom)))] w-full flex flex-col items-center justify-center bg-[#F2F2F7]">
@@ -847,6 +632,9 @@ export function HomeScreen({ initialWeek, initialWeeks, initialPrs, initialSetup
         return (
             <div className="min-h-[calc(100dvh-(var(--bottom-nav-base)+env(safe-area-inset-bottom)))] w-full flex flex-col bg-[#F2F2F7]">
                 <div className="flex-1 flex flex-col items-center justify-center px-8">
+                    {errorMessage && (
+                        <p role="alert" className="mb-5 max-w-xs text-center text-sm font-medium text-red-700">{errorMessage}</p>
+                    )}
                     <div className="w-20 h-20 bg-ios-blue/10 rounded-full flex items-center justify-center mb-6">
                         <svg className="w-10 h-10" viewBox="0 0 24 24">
                             <path
@@ -886,28 +674,29 @@ export function HomeScreen({ initialWeek, initialWeeks, initialPrs, initialSetup
 
     const handleOnboardingComplete = async () => {
         // Persist to localStorage (immediate, for compat/offline)
-        localStorage.setItem("onboarding_completed_v1", "true");
-        localStorage.removeItem("onboarding_dismissed_v1");
-        localStorage.setItem(ONBOARDING_SYNC_ACTION_KEY, "complete");
+        writeAccountStorage(onboardingScope, "onboardingCompleted", true);
+        writeAccountStorage(onboardingScope, "onboardingDismissed", null);
+        writeAccountStorage(onboardingScope, "onboardingSyncAction", "complete");
         setShowOnboardingWizard(false);
 
         // Persist to server (reliable, cross-device)
-        completeOnboarding()
+        completeOnboarding(userId)
             .then((res) => {
                 if (res.ok) {
-                    localStorage.removeItem(ONBOARDING_SYNC_ACTION_KEY);
-                    auth.refresh();
+                    writeAccountStorage(onboardingScope, "onboardingSyncAction", null);
+                    refreshAuth();
                 }
             })
             .catch((e) => console.error("Failed to persist onboarding complete:", e));
 
         // Refresh week data after onboarding
         try {
-            const data = await fetchWeekData(selectedWeekId);
-            setWeek(data.week);
-            // Also refresh weeks list
-            const fetchedWeeks = await fetchWeeksList();
-            setWeeks(fetchedWeeks.sort((a, b) => a.id - b.id));
+            const fetchedWeeks = await fetchWeeksList(userId);
+            const firstWeekId = fetchedWeeks[0]?.id ?? 1;
+            const { week: next } = await fetchWeekData(firstWeekId, { userId });
+            setWeeks(fetchedWeeks);
+            setRequestedWeekId(firstWeekId);
+            setWeek(next);
         } catch (e) {
             console.error("Failed to refresh data after onboarding:", e);
         }
@@ -915,16 +704,16 @@ export function HomeScreen({ initialWeek, initialWeeks, initialPrs, initialSetup
 
     const handleOnboardingSkip = () => {
         // Persist to localStorage (immediate, for compat/offline)
-        localStorage.setItem("onboarding_dismissed_v1", "true");
-        localStorage.setItem(ONBOARDING_SYNC_ACTION_KEY, "dismiss");
+        writeAccountStorage(onboardingScope, "onboardingDismissed", true);
+        writeAccountStorage(onboardingScope, "onboardingSyncAction", "dismiss");
         setShowOnboardingWizard(false);
 
         // Persist to server (reliable, cross-device)
-        dismissOnboarding()
+        dismissOnboarding(userId)
             .then((res) => {
                 if (res.ok) {
-                    localStorage.removeItem(ONBOARDING_SYNC_ACTION_KEY);
-                    auth.refresh();
+                    writeAccountStorage(onboardingScope, "onboardingSyncAction", null);
+                    refreshAuth();
                 }
             })
             .catch((e) => console.error("Failed to persist onboarding dismiss:", e));
@@ -998,10 +787,14 @@ export function HomeScreen({ initialWeek, initialWeeks, initialPrs, initialSetup
                                     key={String(w.id)}
                                     className="w-full text-left px-4 py-3 font-bold text-sm hover:bg-black/5 active:bg-black/10 transition-colors border-b border-black/5 last:border-0"
                                     onClick={() => {
-                                        setSelectedWeekId(w.id);
-                                        setSelectedWeekName(w.name);
                                         setShowWeekPicker(false);
-                                        setCurrentDayIndex(0);
+                                        if (w.id === selectedWeekId) return;
+                                        weekSelectionVersion.current++;
+                                        changeDay(0);
+                                        setShowInfoPopover(false);
+                                        setWeek(null);
+                                        setErrorMessage(null);
+                                        setRequestedWeekId(w.id);
                                     }}
                                 >
                                     {w.name}
@@ -1035,34 +828,7 @@ export function HomeScreen({ initialWeek, initialWeeks, initialPrs, initialSetup
                             aria-label="Info de rutina de hoy"
                             aria-expanded={showInfoPopover}
                         >
-                            {/* Circular progress ring */}
-                            <svg className="absolute inset-0 w-full h-full -rotate-90" viewBox="0 0 40 40">
-                                {/* Background circle */}
-                                <circle
-                                    cx="20"
-                                    cy="20"
-                                    r="18"
-                                    fill="white"
-                                    stroke="#E5E5EA"
-                                    strokeWidth="2.5"
-                                />
-                                {/* Progress circle */}
-                                <circle
-                                    cx="20"
-                                    cy="20"
-                                    r="18"
-                                    fill="none"
-                                    stroke={routinePercentage === 100 ? "#34C759" : "#007AFF"}
-                                    strokeWidth="2.5"
-                                    strokeLinecap="round"
-                                    strokeDasharray={`${(routinePercentage / 100) * 113.1} 113.1`}
-                                    className="transition-all duration-500"
-                                />
-                            </svg>
-                            {/* Percentage text */}
-                            <span className={`relative z-10 text-[10px] font-black tabular-nums ${routinePercentage === 100 ? "text-ios-green" : "text-black"}`}>
-                                {routinePercentage}%
-                            </span>
+                            <ProgressRing percent={routinePercentage} />
                         </button>
                     </div>
                 </div>
@@ -1123,7 +889,7 @@ export function HomeScreen({ initialWeek, initialWeeks, initialPrs, initialSetup
                         <ul className="max-h-80 overflow-auto">
                             {routineProgress.map((item) => (
                                 <li
-                                    key={item.name}
+                                    key={item.id}
                                     className="px-5 py-3.5 flex items-center justify-between gap-3 border-b border-black/5 last:border-0"
                                 >
                                     <span className="text-sm font-bold text-black truncate">
@@ -1145,43 +911,44 @@ export function HomeScreen({ initialWeek, initialWeeks, initialPrs, initialSetup
                     <DaySelector
                         days={visibleDays}
                         selectedIndex={currentDayIndex}
-                        onSelect={setCurrentDayIndex}
+                        onSelect={(index) => {
+                            if (index !== currentDayIndex) changeDay(index);
+                        }}
                     />
                 </div>
             )}
 
-            {/* Active Day Content - fills remaining space */}
-            <div className="flex-1 flex flex-col items-center justify-center relative min-h-0 -mt-4 overflow-hidden">
-                {currentDay ? (
-                    <div className="w-full max-w-sm h-full flex flex-col">
-                        {/* Card Stack Container */}
-                        <div className="w-full h-[420px] relative flex items-center justify-center px-4">
-                            <Stack
-                                cards={cardsToRender}
-                                sensitivity={150}
-                                randomRotation={true}
-                                animationConfig={{ stiffness: 300, damping: 25 }}
-                                disabled={isModalOpen || shouldShowCompletionCard}
-                            />
-                        </div>
-                    </div>
+            <div key={`${selectedWeekId}-${currentDay?.id}`} className="workout-section flex-1">
+                {currentDay && displayedRows.length > 0 ? (
+                    <ExerciseList
+                        rows={displayedRows}
+                        activeId={activeEditor?.id}
+                        onSelect={selectExercise}
+                        renderEditor={(id) => {
+                            const row = routineProgress.find((item) => item.id === id);
+                            if (!row || activeEditor?.id !== id) return null;
+                            const { requestId } = activeEditor;
+                            return (
+                                <ClassicExerciseEditor
+                                    key={`${requestId}:${row.name}`}
+                                    target={{ weekId: week.id, dayId: currentDay.id, rowIndex: row.rowIndex, name: row.name }}
+                                    record={prByExercise.get(normalizeExerciseKey(row.name))}
+                                    notes={row.notes}
+                                    load={loadExerciseSets}
+                                    save={handleSaveSeries}
+                                    onClose={() => closeExercise(requestId)}
+                                />
+                            );
+                        }}
+                    />
+                ) : isLoadingWeek ? (
+                    <Loader2 role="status" aria-label="Cargando semana" className="mx-auto w-8 h-8 animate-spin text-ios-blue" />
                 ) : (
-                    <div className="text-center p-8 text-ios-gray">
-                        <p>No hay rutina programada para hoy.</p>
-                    </div>
+                    <p className="p-5 text-center text-sm text-ios-gray">
+                        {currentDay ? "No quedan ejercicios pendientes hoy." : "No hay rutina programada para hoy."}
+                    </p>
                 )}
             </div>
-
-            {/* Exercise Modal */}
-            {selectedExercise && (
-                <ExerciseModal
-                    exercise={selectedExercise}
-                    pr={prByExercise.get(normalizeExerciseKey(selectedExercise.name))}
-                    isOpen={isModalOpen}
-                    onClose={() => setIsModalOpen(false)}
-                    onSave={handleSaveSeries}
-                />
-            )}
 
             {/* Session Rating Modal */}
             <SessionRatingModal
@@ -1193,7 +960,7 @@ export function HomeScreen({ initialWeek, initialWeeks, initialPrs, initialSetup
 
             {/* Toast inferior */}
             {toastMessage && (
-                <div className="fixed bottom-[calc(var(--bottom-nav-base)+env(safe-area-inset-bottom)+1rem)] left-1/2 -translate-x-1/2 z-50">
+                <div role="status" className="fixed bottom-[calc(var(--bottom-nav-base)+env(safe-area-inset-bottom)+1rem)] left-1/2 -translate-x-1/2 z-50">
                     <div className="bg-black text-white px-4 py-3 rounded-full shadow-lg text-sm font-semibold">
                         {toastMessage}
                     </div>

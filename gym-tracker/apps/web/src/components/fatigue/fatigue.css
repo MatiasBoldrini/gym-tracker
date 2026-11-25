@@ -1,0 +1,59 @@
+.fatigue-screen { padding: 22px var(--gutter, 20px) 32px; color: #1c2933; font-variant-numeric: tabular-nums; }
+.fatigue-screen > header h1 { font-size: 1.75rem; font-weight: 720; letter-spacing: -.035em; }
+.fatigue-screen > header p { font-size: .9rem; color: #536572; }
+.fatigue-map { scroll-margin-block-start: 12px; }
+.fatigue-figure { margin: 0; }
+.fatigue-stage {
+    display: grid; grid-template-columns: minmax(0, 2fr) minmax(0, 3fr); align-items: center;
+    column-gap: 4px; padding: 8px clamp(8px, 3vw, 18px) 0;
+    background: radial-gradient(ellipse at 72% 48%, #f1eee7, #faf9f6 55%, transparent 90%);
+}
+.fatigue-model { position: relative; isolation: isolate; }
+.fatigue-model::before {
+    content: ""; position: absolute; left: 50%; bottom: 1.7%; width: 54%; height: 11px;
+    transform: translateX(-50%); background: radial-gradient(ellipse, #81746855, transparent 70%); z-index: -1;
+}
+.fatigue-model canvas {
+    display: block; width: 100%; height: clamp(300px, 44svh, 430px); touch-action: pan-y pinch-zoom;
+    -webkit-user-select: none; user-select: none; cursor: grab;
+}
+.fatigue-model canvas:active { cursor: grabbing; }
+.fatigue-readout { min-width: 0; color: #232724; }
+.fatigue-kicker { margin-bottom: 7px; color: #62655f; font-size: .76rem; font-weight: 580; }
+.fatigue-group-name { font-size: clamp(1.13rem, 4.6vw, 1.65rem); font-weight: 660; line-height: 1.2; letter-spacing: -.025em; }
+.fatigue-count { line-height: 1.18; font-size: .9rem; }
+.fatigue-count strong { font-size: clamp(1.9rem, 6.9vw, 2.5rem); font-weight: 650; letter-spacing: -.045em; }
+.fatigue-group-name + .fatigue-count { margin-top: 4px; }
+.fatigue-hint, .fatigue-empty { max-width: 17ch; margin-top: 9px; font-size: .82rem; line-height: 1.45; color: #65665e; }
+.fatigue-reset { display: inline-flex; gap: 3px; align-items: center; min-height: 44px; font-size: .78rem; color: #55584e; cursor: pointer; }
+.fatigue-day-split { max-width: 9.5rem; border-top: 1px solid #dcdad2; margin-top: 12px; padding-top: 5px; font-size: .77rem; }
+.fatigue-day-split > div { display: flex; align-items: baseline; justify-content: space-between; gap: 5px; padding-block: 2px; }
+.fatigue-day-split dt { color: #60645e; }
+.fatigue-day-split dd { font-weight: 650; }
+.fatigue-notice { position: absolute; inset-inline: 0; top: 42%; text-align: center; font-size: .82rem; color: #64655f; }
+.fatigue-stage[data-state=missing] canvas { height: 125px; }
+.fatigue-stage:not([data-state=ready]) .fatigue-model::before,
+.fatigue-stage[data-focused=true] .fatigue-model::before { opacity: 0; }
+@media (prefers-reduced-motion: no-preference) {
+    .fatigue-model::before { transition: opacity 200ms ease; }
+}
+.zone-volume { border-top: 1px solid #e0dfd8; }
+.zone-volume i { display: inline-block; width: 10px; height: 10px; flex: none; border-radius: 50%; }
+.zone-volume h2 { display: flex; justify-content: space-between; align-items: baseline; padding: 18px 23px 4px 0; font-size: 1.04rem; font-weight: 670; }
+.zone-volume h2 span { font-size: .74rem; font-weight: 500; color: #62655f; }
+.zone-volume li { border-bottom: 1px solid #e3e4df; }
+.zone-volume button { display: flex; width: 100%; min-height: 44px; align-items: center; gap: 9px; text-align: start; font-size: .9rem; cursor: pointer; }
+.zone-volume button[aria-pressed=true] { font-weight: 650; background: #f5f4ef; }
+.zone-volume button svg { color: #6e7068; }
+.zone-volume strong { margin-inline-start: auto; font-weight: 650; }
+@media (hover: hover) { .zone-volume button:hover, .fatigue-reset:hover { background: #f6f6f1; } }
+.fatigue-details { margin-top: 12px; }
+.fatigue-details summary { cursor: pointer; padding-block: 12px; font-weight: 620; }
+.fatigue-credits { font-size: .8rem; color: #536572; }
+.fatigue-credits p { margin-block: .4em; }
+.fatigue-credits a { text-decoration: underline; }
+.fatigue-scroll { overflow: auto; }
+.fatigue-details table { width: 100%; font-size: .82rem; white-space: nowrap; }
+.fatigue-details th, .fatigue-details td { padding: 8px 6px; text-align: right; border-bottom: 1px solid #e1e6e9; }
+.fatigue-details th:first-child { text-align: start; }
+.fatigue-screen :is(button,summary,[tabindex]):focus-visible { outline: 2px solid #0764a5; outline-offset: -2px; }

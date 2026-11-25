@@ -1,11 +1,5 @@
 import { google } from "googleapis";
 
-const SCOPES = [
-    "https://www.googleapis.com/auth/spreadsheets",
-    "https://www.googleapis.com/auth/drive.readonly",
-    "https://www.googleapis.com/auth/drive.file",
-];
-
 type TokenCacheEntry = {
     accessToken: string;
     expiresAt: number; // epoch ms
@@ -30,22 +24,6 @@ export function getOAuth2Client() {
     );
 }
 
-export function getAuthUrl(state?: string): string {
-    const oauth2Client = getOAuth2Client();
-    return oauth2Client.generateAuthUrl({
-        access_type: "offline",
-        scope: SCOPES,
-        prompt: "consent", // Force to get refresh_token every time
-        state,
-    });
-}
-
-export async function exchangeCodeForTokens(code: string) {
-    const oauth2Client = getOAuth2Client();
-    const { tokens } = await oauth2Client.getToken(code);
-    return tokens;
-}
-
 export async function refreshAccessToken(refreshToken: string): Promise<string> {
     // 1) Cache hit (con margen para evitar usarlo casi vencido)
     const cached = tokenCache.get(refreshToken);
@@ -67,10 +45,7 @@ export async function refreshAccessToken(refreshToken: string): Promise<string> 
         if (!accessToken) throw new Error("Failed to refresh access token");
 
         // Google suele devolver `expiry_date` (ms). Si no viene, ponemos ~55 min.
-        const expiresAt =
-            typeof (credentials as any).expiry_date === "number"
-                ? (credentials as any).expiry_date
-                : Date.now() + 55 * 60_000;
+        const expiresAt = credentials.expiry_date ?? Date.now() + 55 * 60_000;
 
         tokenCache.set(refreshToken, { accessToken, expiresAt });
         return accessToken;
@@ -89,12 +64,3 @@ export function getAuthenticatedClient(accessToken: string) {
     oauth2Client.setCredentials({ access_token: accessToken });
     return oauth2Client;
 }
-
-
-
-
-
-
-
-
-

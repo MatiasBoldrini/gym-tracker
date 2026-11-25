@@ -11,6 +11,8 @@ export function createClient() {
             auth: {
                 persistSession: true,
                 autoRefreshToken: true,
+                // AuthCallbackPage owns the exchange and registers the Google integration.
+                detectSessionInUrl: false,
             },
         }
     );

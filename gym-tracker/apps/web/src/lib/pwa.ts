@@ -10,7 +10,7 @@ export async function cacheUrls(urls: string[]) {
     if (unique.length === 0) return { ok: true as const, cached: 0 };
 
     try {
-        const cache = await caches.open("exercise-images");
+        const cache = await caches.open("exercise-images-v2");
         let cached = 0;
         await Promise.all(
             unique.map(async (url) => {
@@ -31,39 +31,12 @@ export async function cacheUrls(urls: string[]) {
     }
 }
 
-/**
- * Borra caches de datos (APIs) manejadas por Workbox.
- *
- * Importante:
- * - El cache key NO incluye el header Authorization, así que puede quedar cacheado un 401
- *   de "antes del login" y seguir devolviéndose.
- * - También evita "leaks" de datos entre usuarios si se loguea otro usuario en el mismo device.
- */
+/** Elimina las respuestas privadas que cacheaban versiones anteriores de la PWA. */
 export async function clearRuntimeDataCaches() {
-    if (typeof window === "undefined") return { ok: false as const, reason: "no-window" as const };
-    if (!("caches" in window)) return { ok: false as const, reason: "no-cache" as const };
-
-    // Nota: nombres de caches pueden variar entre versiones del SW (Workbox).
-    // Para evitar que quede un 401/response vieja “pegada”, borramos caches que claramente no son assets.
-    const keep = new Set(["exercise-images", "static-images"]);
-    const keys = await caches.keys();
-    const results = await Promise.all(
-        keys.map(async (name) => {
-            if (keep.has(name)) return { name, deleted: false, skipped: true as const };
-            const looksLikeRuntimeDataCache = /(api|workbox|runtime|sheets|fatiga|bodymap)/i.test(name);
-            if (!looksLikeRuntimeDataCache) return { name, deleted: false, skipped: true as const };
-            try {
-                const deleted = await caches.delete(name);
-                return { name, deleted };
-            } catch {
-                return { name, deleted: false };
-            }
-        })
-    );
-
-    return { ok: true as const, results };
+    if (typeof window === "undefined" || !("caches" in window)) return;
+    await Promise.allSettled([
+        caches.delete("sheets-api-cache"),
+        caches.delete("fatiga-api-cache"),
+        caches.delete("bodymap-api-cache"),
+    ]);
 }
-
-
-
-

@@ -37,14 +37,13 @@ function copiarRutinaComoPrompt() {
 
     dias.forEach((dia) => {
         prompt += `DIA ${dia.numero}\n`;
-        for (let fila = dia.filaInicio; fila <= dia.filaFin; fila++) {
+        for (let fila = dia.filaInicio + 1; fila <= dia.filaFin; fila++) {
             const row = datosSemana[fila - 1];
             const ejercicio = (row?.[0] ?? "").toString().trim();
             const series = (row?.[1] ?? "").toString().trim();
 
             if (!ejercicio) continue;
-            if (ejercicio.toUpperCase().includes("DIA")) continue;
-            if (ejercicio.toLowerCase().includes("ejercicio")) continue;
+            if (ejercicio.toLowerCase() === "ejercicio") continue;
 
             prompt += `- ${ejercicio}${series ? ` | ${series}` : ""}\n`;
         }
@@ -87,7 +86,7 @@ function copiarRutinaComoPrompt() {
         </head>
         <body>
           <div style="margin-bottom:8px;">Click en <b>Copiar</b> para copiar el prompt (puede ser largo).</div>
-          <textarea id="prompt" readonly style="position:fixed;left:-9999px;opacity:0;height:1px;width:1px;"></textarea>
+          <textarea id="prompt" readonly style="position:fixed;left:-9999px;opacity:0;height:1px;width:1px;"><?= prompt ?></textarea>
           <div class="row">
             <button onclick="copiar()">📋 Copiar</button>
             <button onclick="google.script.host.close()">Cerrar</button>
@@ -95,8 +94,8 @@ function copiarRutinaComoPrompt() {
             <span id="err" class="err">❌ No se pudo copiar</span>
           </div>
           <script>
-            const texto = <?!= JSON.stringify(prompt) ?>;
-            document.getElementById('prompt').value = texto;
+            const promptField = document.getElementById('prompt');
+            const texto = promptField.value;
 
             async function copiar() {
               const okEl = document.getElementById('ok');
@@ -114,9 +113,8 @@ function copiarRutinaComoPrompt() {
 
               if (!ok) {
                 try {
-                  const ta = document.getElementById('prompt');
-                  ta.focus();
-                  ta.select();
+                  promptField.focus();
+                  promptField.select();
                   ok = document.execCommand('copy');
                 } catch (e) {}
               }
@@ -303,8 +301,21 @@ function procesarRutinaJSON(jsonString, nombreHoja) {
         // Parsear JSON
         const datos = JSON.parse(jsonString);
 
-        if (!datos.dias || !Array.isArray(datos.dias)) {
+        if (!Array.isArray(datos?.dias)) {
             return { success: false, message: "El JSON debe tener una propiedad 'dias' con un array." };
+        }
+
+        const esTextoOpcional = (valor) => valor == null ||
+            (typeof valor === "string" && !valor.trimStart().startsWith("="));
+        const formatoValido = datos.dias.every((dia) => {
+            if (!Number.isInteger(dia?.dia) || dia.dia < 1) return false;
+            const ejercicios = dia.ejercicios ?? [];
+            return Array.isArray(ejercicios) && ejercicios.every((ejercicio) =>
+                ejercicio && typeof ejercicio === "object" && !Array.isArray(ejercicio) &&
+                esTextoOpcional(ejercicio.ejercicio) && esTextoOpcional(ejercicio.series));
+        });
+        if (!formatoValido) {
+            return { success: false, message: "Revisá los días y ejercicios. Los nombres y las series deben ser texto sin fórmulas." };
         }
 
         // Detectar días en la hoja (detectarDias está en BorrarDatosDia.gs)
@@ -319,7 +330,7 @@ function procesarRutinaJSON(jsonString, nombreHoja) {
 
         datos.dias.forEach((diaData) => {
             const numDia = diaData.dia;
-            const ejercicios = diaData.ejercicios || [];
+            const ejercicios = diaData.ejercicios ?? [];
 
             // Encontrar el día correspondiente en la hoja
             const diaHoja = diasHoja.find((d) => d.numero === numDia);

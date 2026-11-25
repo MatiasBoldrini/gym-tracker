@@ -102,8 +102,8 @@ export function PwaDebugPage() {
                 } else if (!cancelled) {
                     setCacheInfo({ keys: [], entriesByCache: {}, hasOfflineHtml: false });
                 }
-            } catch (e: any) {
-                if (!cancelled) setErr(e?.message || String(e));
+            } catch (error) {
+                if (!cancelled) setErr(error instanceof Error && error.message ? error.message : String(error));
             }
         }
 

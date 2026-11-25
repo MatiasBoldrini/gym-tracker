@@ -103,6 +103,12 @@ function borrarDatosDia(diaSeleccionado) {
 // ========== DETECTAR DÍAS EN UNA HOJA ==========
 // Detecta los días y sus rangos de filas en una hoja
 // Esta función es usada por múltiples archivos
+function parsearEncabezadoDia_(valor) {
+    if (typeof valor !== "string") return null;
+    const encabezado = valor.trim().match(/^D[IÍ]A\s*(\d+)(?=$|[\s·:–-])/i);
+    return encabezado ? Number(encabezado[1]) : null;
+}
+
 function detectarDias(hoja) {
     const datos = hoja.getDataRange().getValues();
     const dias = [];
@@ -110,22 +116,17 @@ function detectarDias(hoja) {
 
     datos.forEach((fila, index) => {
         const filaNum = index + 1;
-        const colA = fila[0] ? fila[0].toString() : "";
-
-        // Detectar inicio de un día
-        if (colA.toUpperCase().includes("DIA")) {
+        // El nombre de un ejercicio también puede contener «dia».
+        const numero = parsearEncabezadoDia_(fila[0]);
+        if (numero !== null) {
             // Cerrar día anterior
             if (diaActual !== null) {
                 diaActual.filaFin = filaNum - 1;
                 dias.push(diaActual);
             }
 
-            // Extraer número de día
-            const match = colA.match(/\d+/);
-            const numDia = match ? parseInt(match[0]) : dias.length + 1;
-
             diaActual = {
-                numero: numDia,
+                numero,
                 filaInicio: filaNum,
                 filaFin: null,
             };

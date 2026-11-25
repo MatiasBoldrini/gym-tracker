@@ -13,16 +13,6 @@ type DemoExerciseItem = {
     image: string;
 };
 
-type DemoRoutineExercise = {
-    name: string;
-    prescribedSeries: string;
-};
-
-type DemoDaySummary = {
-    id: number;
-    exercisesCount: number;
-};
-
 type DemoFatigaData = {
     muscleRows: FatigaMuscleRow[];
     daySummary: FatigaDaySummaryRow[];
@@ -236,12 +226,6 @@ const baseWeek3: Week = {
     })),
 };
 
-export const demoWeeksList = [
-    { id: 1, name: "Semana 1" },
-    { id: 2, name: "Semana 2" },
-    { id: 3, name: "Semana 3" },
-];
-
 export const demoPrs: PersonalRecord[] = [
     { exercise: "Press banca plano", weight: 100, reps: 1, date: "2024-12-02", estimated1RM: 103 },
     { exercise: "Sentadilla búlgara", weight: 42.5, reps: 8, date: "2024-12-04", estimated1RM: 52 },
@@ -298,22 +282,6 @@ export const demoExercises: DemoExerciseItem[] = [
 
 export const demoSeriesOptions = ["3 x 8-10", "4 x 6-8", "4 x 12-15", "3 x 10-12", "20 min"];
 
-export const demoRoutineDays: Record<number, DemoRoutineExercise[]> = {
-    1: baseWeek1.days[0].exercises.map(({ name, prescribedSeries }) => ({ name, prescribedSeries })),
-    2: baseWeek1.days[1].exercises.map(({ name, prescribedSeries }) => ({ name, prescribedSeries })),
-    3: baseWeek1.days[2].exercises.map(({ name, prescribedSeries }) => ({ name, prescribedSeries })),
-    4: baseWeek1.days[3].exercises.map(({ name, prescribedSeries }) => ({ name, prescribedSeries })),
-    5: baseWeek1.days[4].exercises.map(({ name, prescribedSeries }) => ({ name, prescribedSeries })),
-};
-
-export const demoRoutineSummary: DemoDaySummary[] = [
-    { id: 1, exercisesCount: demoRoutineDays[1].length },
-    { id: 2, exercisesCount: demoRoutineDays[2].length },
-    { id: 3, exercisesCount: demoRoutineDays[3].length },
-    { id: 4, exercisesCount: demoRoutineDays[4].length },
-    { id: 5, exercisesCount: demoRoutineDays[5].length },
-];
-
 export function cloneWeek(week: Week): Week {
     return structuredClone(week);
 }
@@ -326,26 +294,8 @@ export function getDemoWeeksMap(): Map<number, Week> {
     ]);
 }
 
-export function getDemoHomeData() {
-    return {
-        week: cloneWeek(baseWeek1),
-        weeks: demoWeeksList,
-        prs: demoPrs,
-        setupError: null as { message: string; code?: string } | null,
-    };
-}
-
 export function getDemoFatigaData(): DemoFatigaData {
     return structuredClone(demoFatiga);
-}
-
-export function getDemoRoutineDay(dayId: number): DemoRoutineExercise[] {
-    const found = demoRoutineDays[dayId];
-    return found ? structuredClone(found) : [];
-}
-
-export function getDemoRoutineSummary(): DemoDaySummary[] {
-    return structuredClone(demoRoutineSummary);
 }
 
 export function getDemoExercises(): DemoExerciseItem[] {

@@ -1,5 +1,5 @@
 import * as esbuild from 'esbuild';
-import { mkdirSync, writeFileSync, cpSync } from 'fs';
+import { mkdirSync, writeFileSync } from 'node:fs';
 
 const OUTPUT_DIR = '.vercel/output';
 const FUNC_DIR = `${OUTPUT_DIR}/functions/api/index.func`;
@@ -13,7 +13,7 @@ await esbuild.build({
     entryPoints: ['api-src/[[...path]].ts'],
     bundle: true,
     platform: 'node',
-    target: 'node20',
+    target: 'node24',
     format: 'cjs',
     outfile: `${FUNC_DIR}/handler.js`,
     minify: true,
@@ -28,7 +28,7 @@ module.exports = handler.default || handler;
 
 // Create function config for Vercel Node.js
 writeFileSync(`${FUNC_DIR}/.vc-config.json`, JSON.stringify({
-    runtime: 'nodejs20.x',
+    runtime: 'nodejs24.x',
     handler: 'index.js',
     launcherType: 'Nodejs'
 }));
@@ -37,9 +37,9 @@ writeFileSync(`${FUNC_DIR}/.vc-config.json`, JSON.stringify({
 writeFileSync(`${OUTPUT_DIR}/config.json`, JSON.stringify({
     version: 3,
     routes: [
-        { src: '/api/(.*)', dest: '/api/index' },
+        { src: '/api(?:/.*)?', dest: '/api/index' },
         { handle: 'filesystem' },
-        { src: '/(.*)', dest: '/$1' }
+        { src: '/(?:rutina|fatiga|progreso|perfil|bloques(?:/.*)?|pwa-debug|auth/callback)/?', dest: '/index.html' }
     ]
 }));
 

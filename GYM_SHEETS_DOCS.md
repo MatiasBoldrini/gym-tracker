@@ -1,5 +1,7 @@
 # 🏋️ Documentación - Sistema de Rutinas de Gimnasio en Google Sheets
 
+> Referencia histórica del formato Rutina Gym v3, con pestañas `Semana N`. Para trabajar en la aplicación actual, empezá por [AGENTS.md](AGENTS.md). El código de `scripts/` corresponde a este formato. La vista `/bloques` usa el historial de Rutina Gym v4, organizado por bloques, semanas y días.
+
 ## 📁 Estructura de Hojas
 
 | Hoja                        | Propósito                                                     |
@@ -267,7 +269,7 @@ Ideal para llenar la grilla de Fatiga con una sola fórmula que se "derrama".
 
 **Ubicación:** Extensiones → Apps Script
 
-> Ver archivo `proyect.js` para el código completo actualizado.
+> Las fuentes archivadas están en [scripts/](scripts/agents.md). `proyect.js.backup` conserva una versión monolítica anterior.
 
 ### Resumen de funciones:
 

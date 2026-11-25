@@ -1,10 +1,14 @@
 "use client";
 
+import { prescriptionInputState } from "@/lib/setInput";
+
 import { useState, useMemo, useEffect, useRef } from "react";
 import { X, Search, Plus, Check, ChevronDown, Filter } from "lucide-react";
 import type { ExerciseItem } from "@/lib/sheets-client";
 import { cacheUrls } from "@/lib/pwa";
 import { normalizeMuscleKey } from "@/lib/normalize";
+import { ModalFrame } from "./ModalFrame";
+import "./exercise-list.css";
 
 interface ExerciseSearchModalProps {
     isOpen: boolean;
@@ -19,41 +23,39 @@ interface ExerciseSearchModalProps {
     multiMuscleMode?: boolean;
 }
 
-export function ExerciseSearchModal({
-    isOpen,
+export function ExerciseSearchModal({ isOpen, ...props }: ExerciseSearchModalProps) {
+    if (!isOpen) return null;
+
+    const muscles = Array.from(new Set(
+        props.defaultSelectedMuscles?.map(normalizeMuscleKey).filter(Boolean) ?? []
+    ));
+    return <ExerciseSearchContent key={JSON.stringify([...muscles].sort())} {...props} defaultSelectedMuscles={muscles} />;
+}
+
+function ExerciseSearchContent({
     onClose,
     exercises,
     seriesOptions,
     onAddExercise,
     existingExerciseNames,
-    defaultSelectedMuscles = [],
+    defaultSelectedMuscles: normalizedDefaultMuscles = [],
     multiMuscleMode = false,
-}: ExerciseSearchModalProps) {
+}: Omit<ExerciseSearchModalProps, "isOpen">) {
     const [searchQuery, setSearchQuery] = useState("");
     // Single muscle mode (legacy)
     const [selectedMuscle, setSelectedMuscle] = useState<string>("");
     // Multi muscle mode (for onboarding)
-    const normalizedDefaultMuscles = useMemo(
-        () => defaultSelectedMuscles.map((m) => normalizeMuscleKey(m)).filter((m): m is string => Boolean(m)),
-        [defaultSelectedMuscles]
-    );
-    const [selectedMuscles, setSelectedMuscles] = useState<Set<string>>(new Set(normalizedDefaultMuscles));
+    const [selectedMuscles, setSelectedMuscles] = useState(() => new Set(normalizedDefaultMuscles));
     // Focused muscle (when clicking on a selected muscle chip)
     const [focusedMuscle, setFocusedMuscle] = useState<string | null>(null);
     const [selectedExercise, setSelectedExercise] = useState<ExerciseItem | null>(null);
     const [selectedSeries, setSelectedSeries] = useState<string>("");
     const [customSeries, setCustomSeries] = useState("");
+    const [showSeriesError, setShowSeriesError] = useState(false);
     const [showSeriesPicker, setShowSeriesPicker] = useState(false);
     const [showMusclePicker, setShowMusclePicker] = useState(false);
     const seriesPickerRef = useRef<HTMLDivElement>(null);
     const musclePickerRef = useRef<HTMLDivElement>(null);
-
-    // Initialize selectedMuscles from defaultSelectedMuscles when modal opens
-    useEffect(() => {
-        if (isOpen && normalizedDefaultMuscles.length > 0) {
-            setSelectedMuscles(new Set(normalizedDefaultMuscles));
-        }
-    }, [isOpen, normalizedDefaultMuscles]);
 
     const muscleOptions = useMemo(() => {
         const map = new Map<string, { key: string; label: string }>();
@@ -153,7 +155,6 @@ export function ExerciseSearchModal({
 
     // Cache images when filtered exercises change
     useEffect(() => {
-        if (!isOpen) return;
         const urls = filteredExercises
             .slice(0, 20) // Cache first 20 visible
             .map((e) => (e.image ? `/images/exercises/${e.image}` : null))
@@ -162,7 +163,7 @@ export function ExerciseSearchModal({
         if (urls.length > 0) {
             void cacheUrls(urls);
         }
-    }, [isOpen, filteredExercises]);
+    }, [filteredExercises]);
 
     // Close pickers when clicking outside
     useEffect(() => {
@@ -181,23 +182,10 @@ export function ExerciseSearchModal({
         return () => document.removeEventListener("mousedown", handleClick);
     }, [showSeriesPicker, showMusclePicker]);
 
-    // Reset state when closing
-    useEffect(() => {
-        if (!isOpen) {
-            setSearchQuery("");
-            setSelectedMuscle("");
-            setSelectedMuscles(new Set(normalizedDefaultMuscles));
-            setFocusedMuscle(null);
-            setSelectedExercise(null);
-            setSelectedSeries("");
-            setCustomSeries("");
-            setShowSeriesPicker(false);
-            setShowMusclePicker(false);
-        }
-    }, [isOpen, normalizedDefaultMuscles]);
-
     const handleSelectExercise = (exercise: ExerciseItem) => {
         setSelectedExercise(exercise);
+        setCustomSeries("");
+        setShowSeriesError(false);
         setSelectedSeries(seriesOptions[0] || "3 x 10-12");
     };
 
@@ -206,6 +194,11 @@ export function ExerciseSearchModal({
 
         const series = customSeries || selectedSeries;
         if (!series) return;
+        if (customSeries && prescriptionInputState(customSeries) !== "complete") {
+            setShowSeriesPicker(true);
+            setShowSeriesError(true);
+            return;
+        }
 
         onAddExercise({
             name: selectedExercise.name,
@@ -225,10 +218,8 @@ export function ExerciseSearchModal({
         );
     };
 
-    if (!isOpen) return null;
-
     return (
-        <div className="fixed inset-0 z-[110] flex items-end justify-center">
+        <ModalFrame label="Agregar ejercicio" onClose={onClose}><div className="relative flex h-full items-end justify-center">
             {/* Backdrop */}
             <div
                 className="absolute inset-0 bg-black/40 backdrop-blur-sm"
@@ -236,13 +227,13 @@ export function ExerciseSearchModal({
             />
 
             {/* Modal */}
-            <div className="relative w-full max-w-lg bg-white rounded-t-3xl h-[85vh] min-h-[500px] flex flex-col animate-in slide-in-from-bottom duration-300 pb-[calc(var(--bottom-nav-base)+env(safe-area-inset-bottom))]">
+            <div className="exercise-search-sheet relative w-full max-w-lg bg-white rounded-t-3xl flex flex-col pb-[env(safe-area-inset-bottom)]">
                 {/* Header */}
                 <div className="flex items-center justify-between px-6 py-4 border-b border-black/5">
                     <h2 className="text-xl font-black text-black">Agregar Ejercicio</h2>
                     <button
                         onClick={onClose}
-                        className="w-8 h-8 rounded-full bg-gray-100 flex items-center justify-center"
+                        aria-label="Cerrar buscador" className="size-11 rounded-full flex items-center justify-center"
                     >
                         <X size={18} />
                     </button>
@@ -258,6 +249,7 @@ export function ExerciseSearchModal({
                         <input
                             type="text"
                             placeholder="Buscar ejercicio..."
+                            aria-label="Buscar ejercicio"
                             value={searchQuery}
                             onChange={(e) => setSearchQuery(e.target.value)}
                             className="w-full pl-10 pr-4 py-3 bg-gray-100 rounded-xl text-sm font-medium focus:outline-none focus:ring-2 focus:ring-ios-blue/30"
@@ -399,7 +391,7 @@ export function ExerciseSearchModal({
                                             }`}
                                     >
                                         {/* Image */}
-                                        <div className="w-14 h-14 rounded-xl bg-white border border-black/5 overflow-hidden flex-shrink-0">
+                                        <div className="w-14 h-14 overflow-hidden flex-shrink-0">
                                             {exercise.image ? (
                                                 <img
                                                     src={`/images/exercises/${exercise.image}`}
@@ -457,6 +449,7 @@ export function ExerciseSearchModal({
                                 </div>
                                 <div className="relative" ref={seriesPickerRef}>
                                     <button
+                                        aria-label="Series asignadas" aria-expanded={showSeriesPicker}
                                         onClick={() => setShowSeriesPicker(!showSeriesPicker)}
                                         className="w-full flex items-center justify-between px-4 py-3 bg-white rounded-xl border border-black/10 text-sm font-bold"
                                     >
@@ -471,6 +464,7 @@ export function ExerciseSearchModal({
                                                     key={series}
                                                     onClick={() => {
                                                         setSelectedSeries(series);
+                                                        setShowSeriesError(false);
                                                         setCustomSeries("");
                                                         setShowSeriesPicker(false);
                                                     }}
@@ -485,14 +479,25 @@ export function ExerciseSearchModal({
                                             <div className="border-t border-black/5 p-2">
                                                 <input
                                                     type="text"
+                                                    aria-label="Serie personalizada" aria-invalid={showSeriesError || undefined}
+                                                    aria-describedby={showSeriesError ? "custom-series-error" : undefined}
+                                                    autoComplete="off" autoCorrect="off" spellCheck={false}
                                                     placeholder="Serie personalizada (ej: 4 x 6-8)"
                                                     value={customSeries}
+                                                    onPaste={e => {
+                                                        if (/[\t\r\n]/.test(e.clipboardData.getData("text/plain"))) e.preventDefault();
+                                                    }}
                                                     onChange={(e) => {
-                                                        setCustomSeries(e.target.value);
+                                                        const next = e.target.value;
+                                                        if (prescriptionInputState(next) !== "invalid") {
+                                                            setCustomSeries(next);
+                                                            setShowSeriesError(false);
+                                                        }
                                                     }}
                                                     onClick={(e) => e.stopPropagation()}
                                                     className="w-full px-3 py-2 bg-gray-100 rounded-lg text-sm font-medium focus:outline-none focus:ring-2 focus:ring-ios-blue/30"
                                                 />
+                                                {showSeriesError && <p id="custom-series-error" className="form-error">Completá la indicación, por ejemplo 4 x 6-8 o 20 min.</p>}
                                             </div>
                                         </div>
                                     )}
@@ -511,6 +516,6 @@ export function ExerciseSearchModal({
                 )}
 
             </div>
-        </div>
+        </div></ModalFrame>
     );
 }

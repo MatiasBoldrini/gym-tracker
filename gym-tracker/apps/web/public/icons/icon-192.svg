@@ -1,16 +1,20 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 192 192" fill="none">
-  <rect width="192" height="192" rx="32" fill="#000"/>
-  <g transform="translate(32, 48)">
-    <!-- Barbell -->
-    <rect x="0" y="36" width="20" height="24" rx="3" fill="#fff"/>
-    <rect x="108" y="36" width="20" height="24" rx="3" fill="#fff"/>
-    <rect x="20" y="28" width="12" height="40" rx="2" fill="#fff"/>
-    <rect x="96" y="28" width="12" height="40" rx="2" fill="#fff"/>
-    <rect x="32" y="44" width="64" height="8" rx="4" fill="#fff"/>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="192" height="192">
+  <defs>
+    <linearGradient id="cobalt" gradientUnits="userSpaceOnUse" x1="64" y1="0" x2="390" y2="512">
+      <stop stop-color="#315cdb"/>
+      <stop offset="1" stop-color="#112f86"/>
+    </linearGradient>
+  </defs>
+  <rect width="512" height="512" rx="108" fill="url(#cobalt)"/>
+  <g transform="rotate(-28 256 256)">
+    <rect x="90" y="237" width="332" height="38" rx="15" fill="#e4ecff"/>
+    <g fill="#c5d6ff">
+      <rect x="86" y="201" width="40" height="110" rx="17"/>
+      <rect x="386" y="201" width="40" height="110" rx="17"/>
+    </g>
+    <g fill="#fcfcff">
+      <rect x="136" y="160" width="58" height="192" rx="23"/>
+      <rect x="318" y="160" width="58" height="192" rx="23"/>
+    </g>
   </g>
 </svg>
-
-
-
-
-

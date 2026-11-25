@@ -1,0 +1,129 @@
+@property --dock-anchor-position {
+    syntax: "<percentage>";
+    inherits: false;
+    initial-value: 0%;
+}
+@property --dock-finger-offset {
+    syntax: "<percentage>";
+    inherits: false;
+    initial-value: 0%;
+}
+
+.bottom-nav {
+    --tab-padding: 4px;
+    position: fixed;
+    z-index: 30;
+    inset: auto max(14px, env(safe-area-inset-right, 0px))
+        max(8px, env(safe-area-inset-bottom, 0px)) max(14px, env(safe-area-inset-left, 0px));
+    display: grid;
+    grid-template-columns: repeat(var(--tab-count), minmax(0, 1fr));
+    max-width: calc(var(--tab-count) * 6.25rem + 2 * var(--tab-padding));
+    min-height: 60px;
+    margin-inline: auto;
+    padding: var(--tab-padding);
+    border-radius: 999px;
+    touch-action: pan-y pinch-zoom;
+    -webkit-user-select: none;
+    user-select: none;
+    background-color: #f1f2f4;
+    box-shadow:
+        inset 0 1.5px 1px rgb(255 255 255 / 98%),
+        inset 1px 0 1px rgb(255 255 255 / 80%),
+        inset 0 -1px 1.5px rgb(67 75 90 / 26%),
+        0 0 0 .5px rgb(31 42 59 / 13%),
+        0 2px 5px rgb(30 42 60 / 8%),
+        0 7px 22px -6px rgb(30 42 60 / 22%);
+}
+
+@supports ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+    .bottom-nav {
+        background-color: rgb(247 249 252 / 64%);
+        background-image: linear-gradient(155deg in oklab, rgb(255 255 255 / 38%), transparent 40%, rgb(235 238 243 / 18%) 76%, rgb(255 255 255 / 62%));
+        -webkit-backdrop-filter: saturate(165%) blur(9px);
+        backdrop-filter: saturate(165%) blur(9px);
+    }
+}
+
+/* A narrow highlight stays on the glass edge as content moves behind it. */
+@supports (mask-composite: exclude) {
+    .bottom-nav::before {
+        content: "";
+        position: absolute;
+        inset: 0;
+        padding: 1.5px;
+        border-radius: inherit;
+        pointer-events: none;
+        background: linear-gradient(155deg in oklab, white 8%, transparent 30%, rgb(94 110 130 / 19%) 53%, rgb(255 255 255 / 92%) 78%, transparent);
+        mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+        mask-composite: exclude;
+    }
+}
+
+.bottom-nav[data-selected]::after {
+    content: "";
+    position: absolute;
+    inset-block: var(--tab-padding);
+    left: var(--tab-padding);
+    width: calc((100% - 2 * var(--tab-padding)) / var(--tab-count));
+    border-radius: inherit;
+    pointer-events: none;
+    background-color: rgb(107 119 139 / 13%);
+    /* Even a drag that interrupts a tab animation stays between the two end tabs. */
+    --dock-anchor-position: calc(var(--tab-anchor) * 100%);
+    --dock-finger-offset: var(--drag-offset, 0%);
+    translate: clamp(0%, calc(var(--dock-anchor-position) + var(--dock-finger-offset)), calc((var(--tab-count) - 1) * 100%)) 0;
+}
+
+.bottom-nav[data-pressed]::after {
+    background-color: rgb(255 255 255 / 55%);
+    box-shadow: inset 0 1px 1px white, inset 0 -1px 2px rgb(79 92 111 / 24%), 0 2px 8px rgb(36 49 68 / 18%);
+}
+
+.bottom-nav-link {
+    position: relative;
+    z-index: 1;
+    display: flex;
+    min-width: 0;
+    min-height: 44px;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 2px;
+    border-radius: inherit;
+    color: #272b32;
+    font: 600 .6875rem/1.2 -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    touch-action: pan-y pinch-zoom;
+    -webkit-tap-highlight-color: transparent;
+    -webkit-touch-callout: none;
+}
+
+.bottom-nav-link[data-highlighted] { color: #0054a8; }
+.bottom-nav-link:focus-visible { outline: 2px solid #0054a8; outline-offset: -3px; }
+html:has(.bottom-nav) { scroll-padding-bottom: calc(var(--bottom-nav-base) + env(safe-area-inset-bottom, 0px)); }
+
+@media (hover: hover) {
+    .bottom-nav:not([data-pressed]) .bottom-nav-link:not([data-highlighted]):hover { background-color: rgb(90 106 126 / 7%); }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+    .bottom-nav::after {
+        --settle: 180ms cubic-bezier(.2, .75, .3, 1);
+        transition: --dock-anchor-position var(--settle), --dock-finger-offset var(--settle), background-color 100ms ease, box-shadow 100ms ease;
+    }
+    .bottom-nav[data-dragging]::after { transition-duration: 180ms, 0s, 100ms, 100ms; }
+}
+
+@media (prefers-reduced-transparency: reduce), (prefers-contrast: more) {
+    .bottom-nav {
+        background: #f4f5f7;
+        -webkit-backdrop-filter: none;
+        backdrop-filter: none;
+        border: 1px solid #737d8b;
+    }
+    .bottom-nav[data-selected]::after { background: #dce4ef; border: 1px solid #66768c; }
+}
+
+@media (forced-colors: active) {
+    .bottom-nav { background: Canvas; border: 1px solid CanvasText; backdrop-filter: none; }
+    .bottom-nav-link[aria-current] { outline: 2px solid Highlight; outline-offset: -3px; }
+}

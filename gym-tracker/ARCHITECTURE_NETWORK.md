@@ -1,5 +1,16 @@
 # 🏋️ Gym Tracker - Arquitectura de Network Requests & Caching
 
+## Aplicación actual
+
+- El frontend es una SPA de React y Vite con React Router. Consultá [el README de la web](apps/web/README.md) para arrancar y [la guía de entorno](SETUP_GUIDE.md) para activar la integración.
+- `apps/web/src/lib/sheets-client.ts` llama a `/api/*`. En Vercel, `scripts/build-api.mjs` empaqueta `api-src/[[...path]].ts` como una función Hono. La capa `api-src/_lib/` se encarga de Supabase, Google y el parseo de las pestañas de rutina.
+- `api-src/[[...path]].ts` responde con `Cache-Control: private, no-store` en autenticación, Sheets, preferencias y fatiga. La configuración PWA en `apps/web/vite.config.ts` usa `NetworkOnly` para la API del mismo origen. `apps/web/src/lib/pwa.ts` y `apps/web/src/components/PwaRegister.tsx` manejan el registro del service worker y la limpieza de cachés en el navegador.
+- La vista `/bloques` usa un enlace privado por hoja para leer y escribir el historial v4 en Supabase. El worker sincroniza la planilla en ambos sentidos. El modo local admite una copia de desarrollo. Revisá la documentación de esa vista antes de cambiar los parsers de la plantilla `Semana N`.
+
+---
+
+> Los diagramas y tablas que siguen describen una versión histórica de Next.js. Se conservan como referencia del flujo anterior. Para consultar rutas, cachés y archivos vigentes, usá los enlaces y los puntos de entrada de la sección anterior.
+
 ## 📊 Diagrama General de Arquitectura
 
 ```

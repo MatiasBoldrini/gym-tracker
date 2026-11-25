@@ -2,10 +2,10 @@
  * Client-side functions for interacting with Google Sheets via our API routes.
  * This replaces the previous Apps Script approach with proper server-side handling.
  */
-import { DEMO_MODE, demoWeeksList, getDemoWeeksMap, demoPrs, getDemoExercises, getDemoSeries, getDemoRoutineDay, getDemoRoutineSummary } from "@/lib/demo-data";
+import { DEMO_MODE, getDemoWeeksMap, demoPrs, getDemoExercises, getDemoSeries, cloneWeek } from "@/lib/demo-data";
 import { createClient } from "@/lib/supabase/client";
-import { clearRuntimeDataCaches } from "@/lib/pwa";
-import type { Week, PersonalRecord } from "@/types";
+import { normalizeExerciseKey } from "@/lib/normalize";
+import type { Week, Set } from "@/types";
 
 export interface SaveResult {
     ok: boolean;
@@ -21,76 +21,85 @@ export interface WeekListItem {
 
 const IS_DEMO = DEMO_MODE;
 
-async function authFetch(input: RequestInfo, init: RequestInit = {}) {
-    const supabase = createClient();
-    const { data } = await supabase.auth.getSession();
-    const accessToken = data.session?.access_token;
-    const headers = {
-        ...(init.headers || {}),
-        ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
-    };
-
-    // Importante: el Service Worker cachea por URL (no por Authorization). Si quedó un 401 cacheado,
-    // limpiamos caches de datos y reintentamos una sola vez.
-    const res = await fetch(input, { ...init, headers });
-    if (res.status === 401) {
-        try {
-            await clearRuntimeDataCaches();
-        } catch {
-            // best-effort
-        }
-        return fetch(input, { ...init, headers });
+export async function authFetch(input: RequestInfo, init: RequestInit = {}, expectedUserId?: string) {
+    const { data: { session } } = await createClient().auth.getSession();
+    if (expectedUserId && session?.user.id !== expectedUserId) {
+        throw createApiError({ message: "La sesión cambió. Volvé a intentar.", status: 401, code: "NO_AUTH" });
     }
-    return res;
+
+    const headers = new Headers(init.headers);
+    if (session?.access_token) headers.set("Authorization", `Bearer ${session.access_token}`);
+    return fetch(input, { ...init, headers, cache: "no-store" });
 }
 
 type DemoState = {
     weeks: Map<number, Week>;
-    prs: PersonalRecord[];
     onboardingProgress: OnboardingProgress | null;
     onboardingCompleted: boolean;
     onboardingDismissed: boolean;
 };
 
+const demoWeeksStorageKey = "gymtracker.demo.weeks.v1";
+
+function loadDemoWeeks() {
+    try {
+        const saved = JSON.parse(window.localStorage.getItem(demoWeeksStorageKey) ?? "null");
+        if (Array.isArray(saved) && saved.length && saved.every((week) => Number.isInteger(week?.id) && Array.isArray(week.days))) {
+            return new Map<number, Week>(saved.map((week) => [week.id, week]));
+        }
+    } catch {
+        // The demo still works when storage is unavailable.
+    }
+    return getDemoWeeksMap();
+}
+
 const demoState: DemoState | null = IS_DEMO
     ? {
-        weeks: getDemoWeeksMap(),
-        prs: demoPrs,
+        weeks: loadDemoWeeks(),
         onboardingProgress: null,
         onboardingCompleted: true,
         onboardingDismissed: false,
     }
     : null;
 
-function cloneWeek(week: Week): Week {
-    return structuredClone(week);
+function persistDemoWeeks() {
+    if (!demoState) return;
+    try {
+        window.localStorage.setItem(demoWeeksStorageKey, JSON.stringify([...demoState.weeks.values()]));
+    } catch {
+        // Keep the changes in memory when storage is unavailable.
+    }
 }
 
-function ensureDemoWeek(weekId: number): Week | null {
-    if (!demoState) return null;
-    const existing = demoState.weeks.get(weekId);
-    if (existing) return existing;
-    const fallback = demoState.weeks.get(1);
-    const next = fallback ? cloneWeek({ ...fallback, id: weekId }) : { id: weekId, days: [] };
-    demoState.weeks.set(weekId, next);
-    return next;
+function demoWeekList(): WeekListItem[] {
+    return [...(demoState?.weeks.keys() ?? [])].sort((a, b) => a - b).map((id) => ({ id, name: `Semana ${id}` }));
+}
+
+export function getDemoHomePayload() {
+    const weeks = demoWeekList();
+    const week = demoState?.weeks.get(weeks[0]?.id);
+    return {
+        week: week ? cloneWeek(week) : { id: 1, days: [] },
+        weeks,
+        prs: demoPrs,
+        setupError: null,
+    };
 }
 
 export async function saveExerciseSets(
     weekId: number,
     dayId: number,
     exerciseName: string,
-    sets: { weight: number; reps: number }[]
+    sets: Set[],
+    userId?: string
 ): Promise<SaveResult> {
     if (IS_DEMO) {
-        const week = ensureDemoWeek(weekId);
-        if (!week) return { ok: true };
-        const day = week.days.find((d) => d.id === dayId);
-        if (!day) return { ok: true };
-        const exercise = day.exercises.find((e) => e.name === exerciseName);
-        if (exercise) {
-            exercise.sets = sets.map((s) => ({ reps: s.reps, weight: s.weight }));
-        }
+        const week = demoState?.weeks.get(weekId);
+        const day = week?.days.find((d) => d.id === dayId);
+        const exercise = day?.exercises.find((e) => e.name === exerciseName);
+        if (!exercise) return { ok: false, error: "No encontramos el ejercicio." };
+        exercise.sets = structuredClone(sets);
+        persistDemoWeeks();
         return { ok: true };
     }
     try {
@@ -105,7 +114,7 @@ export async function saveExerciseSets(
                 exerciseName,
                 sets,
             }),
-        });
+        }, userId);
 
         const data = await response.json();
 
@@ -119,31 +128,34 @@ export async function saveExerciseSets(
         }
 
         return { ok: true };
-    } catch (error: any) {
+    } catch (error) {
         console.error("Error saving to Sheets:", error);
         return {
             ok: false,
-            error: error.message || "Network error",
+            error: getErrorMessage(error),
         };
     }
 }
 
-function createApiError(params: { message: string; status: number; code?: string }) {
-    const err = new Error(params.message);
-    (err as any).status = params.status;
-    (err as any).code = params.code;
-    return err;
+export type SheetsError = Error & { status?: number; code?: string };
+
+function createApiError({ message, status, code }: { message: string; status: number; code?: string }): SheetsError {
+    return Object.assign(new Error(message), { status, code });
+}
+
+function getErrorMessage(error: unknown) {
+    return error instanceof Error ? error.message : "Network error";
 }
 
 /**
  * Fetch list of weeks from the user's spreadsheet.
  */
-export async function fetchWeeksList(): Promise<WeekListItem[]> {
+export async function fetchWeeksList(userId?: string): Promise<WeekListItem[]> {
     if (IS_DEMO) {
-        return demoWeeksList;
+        return demoWeekList();
     }
-    const response = await authFetch("/api/sheets/weeks", { method: "GET" });
-    const data = await response.json().catch(() => ({} as any));
+    const response = await authFetch("/api/sheets/weeks", { method: "GET" }, userId);
+    const data = await response.json().catch(() => ({}));
     if (!response.ok) {
         throw createApiError({
             message: data?.error || `Error ${response.status}`,
@@ -154,34 +166,35 @@ export async function fetchWeeksList(): Promise<WeekListItem[]> {
     return Array.isArray(data.weeks) ? (data.weeks as WeekListItem[]) : [];
 }
 
-export async function fetchWeekData(weekId: number, opts?: { cacheBust?: string | number }) {
+export async function fetchWeekData(weekId: number, opts?: { cacheBust?: string | number; userId?: string }) {
     if (IS_DEMO) {
-        const week = ensureDemoWeek(weekId);
+        const week = demoState?.weeks.get(weekId);
         return { week: week ? cloneWeek(week) : { id: weekId, days: [] } };
     }
     const cacheBust = opts?.cacheBust;
     const url = `/api/sheets/week?weekId=${encodeURIComponent(String(weekId))}${cacheBust !== undefined ? `&cb=${encodeURIComponent(String(cacheBust))}` : ""}`;
     const response = await authFetch(url, {
         method: "GET",
-    });
+    }, opts?.userId);
     if (!response.ok) {
         const data = await response.json().catch(() => ({}));
         throw createApiError({
             message: data?.error || `Error ${response.status}`,
             status: response.status,
-            code: (data as any)?.code,
+            code: data?.code,
         });
     }
-    return (await response.json()) as { week: any };
+    return (await response.json()) as { week: Week };
 }
 
 export async function fetchExerciseSets(params: {
     weekId: number;
     dayId: number;
+    userId?: string;
     exerciseName: string;
 }) {
     if (IS_DEMO) {
-        const week = ensureDemoWeek(params.weekId);
+        const week = demoState?.weeks.get(params.weekId);
         const day = week?.days.find((d) => d.id === params.dayId);
         const exercise = day?.exercises.find((e) => e.name === params.exerciseName);
         return {
@@ -190,13 +203,13 @@ export async function fetchExerciseSets(params: {
     }
     const { weekId, dayId, exerciseName } = params;
     const url = `/api/sheets/exercise?weekId=${encodeURIComponent(String(weekId))}&dayId=${encodeURIComponent(String(dayId))}&exerciseName=${encodeURIComponent(exerciseName)}`;
-    const response = await authFetch(url, { method: "GET" });
+    const response = await authFetch(url, { method: "GET" }, params.userId);
     if (!response.ok) {
         const data = await response.json().catch(() => ({}));
         throw createApiError({
             message: data?.error || `Error ${response.status}`,
             status: response.status,
-            code: (data as any)?.code,
+            code: data?.code,
         });
     }
     return (await response.json()) as { sets: { weight: number; reps: number }[] };
@@ -213,10 +226,11 @@ export interface BulkExerciseSetsResult {
 export async function fetchExerciseSetsBulk(params: {
     weekId: number;
     dayId: number;
+    userId?: string;
     exerciseNames: string[];
 }): Promise<BulkExerciseSetsResult[]> {
     if (IS_DEMO) {
-        const week = ensureDemoWeek(params.weekId);
+        const week = demoState?.weeks.get(params.weekId);
         const day = week?.days.find((d) => d.id === params.dayId);
         return (params.exerciseNames || []).map((name) => {
             const exercise = day?.exercises.find((e) => e.name === name);
@@ -231,13 +245,13 @@ export async function fetchExerciseSetsBulk(params: {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ weekId, dayId, exerciseNames }),
-    });
+    }, params.userId);
     if (!response.ok) {
         const data = await response.json().catch(() => ({}));
         throw createApiError({
             message: data?.error || `Error ${response.status}`,
             status: response.status,
-            code: (data as any)?.code,
+            code: data?.code,
         });
     }
     const json = await response.json();
@@ -253,14 +267,15 @@ export async function fetchExerciseSetsBulk(params: {
 export async function saveSessionRating(
     weekId: number,
     dayId: number,
-    stars: number
+    stars: number,
+    userId?: string
 ): Promise<SaveResult> {
     if (IS_DEMO) {
-        const week = ensureDemoWeek(weekId);
+        const week = demoState?.weeks.get(weekId);
         const day = week?.days.find((d) => d.id === dayId);
-        if (day) {
-            day.stars = stars;
-        }
+        if (!day) return { ok: false, error: "No encontramos el día." };
+        day.stars = stars;
+        persistDemoWeeks();
         return { ok: true };
     }
     try {
@@ -274,7 +289,7 @@ export async function saveSessionRating(
                 dayId,
                 stars,
             }),
-        });
+        }, userId);
 
         const data = await response.json();
 
@@ -288,11 +303,11 @@ export async function saveSessionRating(
         }
 
         return { ok: true };
-    } catch (error: any) {
+    } catch (error) {
         console.error("Error saving rating to Sheets:", error);
         return {
             ok: false,
-            error: error.message || "Network error",
+            error: getErrorMessage(error),
         };
     }
 }
@@ -321,7 +336,7 @@ export async function fetchExercisesList(): Promise<ExerciseItem[]> {
         return getDemoExercises();
     }
     const response = await authFetch("/api/sheets/exercises", { method: "GET" });
-    const data = await response.json().catch(() => ({} as any));
+    const data = await response.json().catch(() => ({}));
     if (!response.ok) {
         throw createApiError({
             message: data?.error || `Error ${response.status}`,
@@ -340,7 +355,7 @@ export async function fetchSeriesOptions(): Promise<string[]> {
         return getDemoSeries();
     }
     const response = await authFetch("/api/sheets/series", { method: "GET" });
-    const data = await response.json().catch(() => ({} as any));
+    const data = await response.json().catch(() => ({}));
     if (!response.ok) {
         throw createApiError({
             message: data?.error || `Error ${response.status}`,
@@ -366,7 +381,7 @@ export async function fetchOnboardingData(): Promise<{
         };
     }
     const response = await authFetch("/api/sheets/onboarding-data", { method: "GET" });
-    const data = await response.json().catch(() => ({} as any));
+    const data = await response.json().catch(() => ({}));
     if (!response.ok) {
         throw createApiError({
             message: data?.error || `Error ${response.status}`,
@@ -385,12 +400,13 @@ export async function fetchOnboardingData(): Promise<{
  */
 export async function fetchDayRoutine(dayId: number): Promise<RoutineExercise[]> {
     if (IS_DEMO) {
-        return getDemoRoutineDay(dayId).map((e) => ({ ...e }));
+        const day = demoState?.weeks.get(1)?.days.find((item) => item.id === dayId);
+        return day?.exercises.map(({ name, prescribedSeries }) => ({ name, prescribedSeries })) ?? [];
     }
     const response = await authFetch(`/api/sheets/routine?dayId=${encodeURIComponent(String(dayId))}`, {
         method: "GET",
     });
-    const data = await response.json().catch(() => ({} as any));
+    const data = await response.json().catch(() => ({}));
     if (!response.ok) {
         throw createApiError({
             message: data?.error || `Error ${response.status}`,
@@ -409,17 +425,26 @@ export async function saveRoutine(
     exercises: RoutineExercise[]
 ): Promise<SaveResult> {
     if (IS_DEMO) {
-        const week = ensureDemoWeek(1);
-        if (week) {
-            const dayIndex = week.days.findIndex((d) => d.id === dayId);
-            if (dayIndex >= 0) {
-                const setsTemplate = (week.days[dayIndex].exercises || []).map((e) => e.sets || []);
-                week.days[dayIndex].exercises = exercises.map((e, idx) => ({
-                    ...e,
-                    sets: setsTemplate[idx] || [],
-                }));
-            }
-        }
+        const week = demoState?.weeks.get(1);
+        if (!week) return { ok: false, error: "No encontramos la primera semana." };
+        const existing = week.days.find((day) => day.id === dayId);
+        const catalog = getDemoExercises();
+        const nextExercises = exercises.map((exercise) => {
+            const key = normalizeExerciseKey(exercise.name);
+            const match = existing?.exercises.find((previous) => normalizeExerciseKey(previous.name) === key);
+            const catalogMatch = catalog.find((item) => normalizeExerciseKey(item.name) === key);
+            return {
+                ...match,
+                ...exercise,
+                muscleGroup: match?.muscleGroup ?? catalogMatch?.muscle,
+                image: match?.image ?? catalogMatch?.image,
+                sets: match?.sets ?? [],
+            };
+        });
+        if (existing) existing.exercises = nextExercises;
+        else week.days.push({ id: dayId, name: `DIA ${dayId}`, exercises: nextExercises });
+        week.days.sort((a, b) => a.id - b.id);
+        persistDemoWeeks();
         return { ok: true };
     }
     try {
@@ -446,11 +471,11 @@ export async function saveRoutine(
         }
 
         return { ok: true };
-    } catch (error: any) {
+    } catch (error) {
         console.error("Error saving routine to Sheets:", error);
         return {
             ok: false,
-            error: error.message || "Network error",
+            error: getErrorMessage(error),
         };
     }
 }
@@ -470,15 +495,15 @@ export interface DaySummary {
  */
 export async function fetchRoutineDaysSummary(): Promise<DaySummary[]> {
     if (IS_DEMO) {
-        const week = ensureDemoWeek(1);
-        if (!week) return getDemoRoutineSummary();
+        const week = demoState?.weeks.get(1);
+        if (!week) return [];
         return week.days.map((d) => ({
             id: d.id,
             exercisesCount: d.exercises.length,
         }));
     }
     const response = await authFetch("/api/sheets/routine/days", { method: "GET" });
-    const data = await response.json().catch(() => ({} as any));
+    const data = await response.json().catch(() => ({}));
     if (!response.ok) {
         throw createApiError({
             message: data?.error || `Error ${response.status}`,
@@ -504,16 +529,23 @@ export interface CreateMesocicloResult {
  */
 export async function createMesociclo(weeks: number): Promise<CreateMesocicloResult> {
     if (IS_DEMO) {
-        const created: number[] = [];
-        for (let i = 2; i <= weeks; i++) {
-            const base = ensureDemoWeek(1);
-            if (base) {
-                const clone = cloneWeek({ ...base, id: i });
-                demoState?.weeks.set(i, clone);
-                created.push(i);
-            }
+        const base = demoState?.weeks.get(1);
+        if (!demoState || !base) return { ok: false, error: "No encontramos la primera semana." };
+        const weeksCreated: number[] = [];
+        for (let id = 2; id <= weeks; id++) {
+            if (demoState.weeks.has(id)) continue;
+            demoState.weeks.set(id, {
+                id,
+                days: base.days.map(({ id: dayId, name, exercises }) => ({
+                    id: dayId,
+                    name,
+                    exercises: exercises.map((exercise) => ({ ...exercise, sets: [] })),
+                })),
+            });
+            weeksCreated.push(id);
         }
-        return { ok: true, weeksCreated: created, totalWeeks: Math.max(weeks, 1) };
+        persistDemoWeeks();
+        return { ok: true, weeksCreated, totalWeeks: weeks };
     }
     try {
         const response = await authFetch("/api/sheets/mesociclo", {
@@ -540,11 +572,11 @@ export async function createMesociclo(weeks: number): Promise<CreateMesocicloRes
             weeksCreated: data.weeksCreated,
             totalWeeks: data.totalWeeks,
         };
-    } catch (error: any) {
+    } catch (error) {
         console.error("Error creating mesociclo:", error);
         return {
             ok: false,
-            error: error.message || "Network error",
+            error: getErrorMessage(error),
         };
     }
 }
@@ -553,18 +585,20 @@ export async function createMesociclo(weeks: number): Promise<CreateMesocicloRes
  * Reset mesociclo by deleting all weeks except Semana 1.
  * Used when redoing the onboarding wizard.
  */
-export async function resetMesociclo(): Promise<SaveResult> {
+export async function resetMesociclo(userId?: string): Promise<SaveResult> {
     if (IS_DEMO) {
         if (demoState) {
-            const base = ensureDemoWeek(1);
-            demoState.weeks = new Map<number, Week>([[1, base ? cloneWeek({ ...base, id: 1 }) : { id: 1, days: [] }]]);
+            const base = demoState?.weeks.get(1);
+            const days = base?.days.map(({ id, name }) => ({ id, name, exercises: [] })) ?? [];
+            demoState.weeks = new Map<number, Week>([[1, { id: 1, days }]]);
+            persistDemoWeeks();
         }
         return { ok: true };
     }
     try {
         const response = await authFetch("/api/sheets/mesociclo", {
             method: "DELETE",
-        });
+        }, userId);
 
         const data = await response.json();
 
@@ -578,11 +612,11 @@ export async function resetMesociclo(): Promise<SaveResult> {
         }
 
         return { ok: true };
-    } catch (error: any) {
+    } catch (error) {
         console.error("Error resetting mesociclo:", error);
         return {
             ok: false,
-            error: error.message || "Network error",
+            error: getErrorMessage(error),
         };
     }
 }
@@ -604,14 +638,14 @@ export interface SetupResult {
  * Setup user's spreadsheet (create copy from template if needed).
  * Called after auth when setup_pending=true.
  */
-export async function setupSpreadsheet(): Promise<SetupResult> {
+export async function setupSpreadsheet(userId?: string): Promise<SetupResult> {
     if (IS_DEMO) {
         return { ok: true, spreadsheetId: "demo-sheet", alreadyExists: true };
     }
     try {
         const response = await authFetch("/api/sheets/setup", {
             method: "POST",
-        });
+        }, userId);
 
         const data = await response.json();
 
@@ -629,11 +663,11 @@ export async function setupSpreadsheet(): Promise<SetupResult> {
             spreadsheetId: data.spreadsheetId,
             alreadyExists: data.alreadyExists,
         };
-    } catch (error: any) {
+    } catch (error) {
         console.error("Error setting up spreadsheet:", error);
         return {
             ok: false,
-            error: error.message || "Network error",
+            error: getErrorMessage(error),
         };
     }
 }
@@ -669,7 +703,7 @@ export async function checkSetupStatus(): Promise<{
 /**
  * Mark onboarding as completed (persisted in Supabase)
  */
-export async function completeOnboarding(): Promise<{ ok: boolean; error?: string }> {
+export async function completeOnboarding(userId?: string): Promise<{ ok: boolean; error?: string }> {
     if (IS_DEMO) {
         if (demoState) {
             demoState.onboardingCompleted = true;
@@ -682,22 +716,22 @@ export async function completeOnboarding(): Promise<{ ok: boolean; error?: strin
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ action: "complete" }),
-        });
+        }, userId);
         const data = await response.json();
         if (!response.ok) {
             return { ok: false, error: data.error || `Error ${response.status}` };
         }
         return { ok: true };
-    } catch (error: any) {
+    } catch (error) {
         console.error("Error completing onboarding:", error);
-        return { ok: false, error: error.message || "Network error" };
+        return { ok: false, error: getErrorMessage(error) };
     }
 }
 
 /**
  * Mark onboarding as dismissed (persisted in Supabase)
  */
-export async function dismissOnboarding(): Promise<{ ok: boolean; error?: string }> {
+export async function dismissOnboarding(userId?: string): Promise<{ ok: boolean; error?: string }> {
     if (IS_DEMO) {
         if (demoState) {
             demoState.onboardingCompleted = false;
@@ -710,22 +744,22 @@ export async function dismissOnboarding(): Promise<{ ok: boolean; error?: string
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ action: "dismiss" }),
-        });
+        }, userId);
         const data = await response.json();
         if (!response.ok) {
             return { ok: false, error: data.error || `Error ${response.status}` };
         }
         return { ok: true };
-    } catch (error: any) {
+    } catch (error) {
         console.error("Error dismissing onboarding:", error);
-        return { ok: false, error: error.message || "Network error" };
+        return { ok: false, error: getErrorMessage(error) };
     }
 }
 
 /**
  * Reset onboarding state (for "redo onboarding" feature)
  */
-export async function resetOnboarding(): Promise<{ ok: boolean; error?: string }> {
+export async function resetOnboarding(userId?: string): Promise<{ ok: boolean; error?: string }> {
     if (IS_DEMO) {
         if (demoState) {
             demoState.onboardingCompleted = false;
@@ -737,15 +771,15 @@ export async function resetOnboarding(): Promise<{ ok: boolean; error?: string }
     try {
         const response = await authFetch("/api/user/preferences/onboarding", {
             method: "DELETE",
-        });
+        }, userId);
         const data = await response.json();
         if (!response.ok) {
             return { ok: false, error: data.error || `Error ${response.status}` };
         }
         return { ok: true };
-    } catch (error: any) {
+    } catch (error) {
         console.error("Error resetting onboarding:", error);
-        return { ok: false, error: error.message || "Network error" };
+        return { ok: false, error: getErrorMessage(error) };
     }
 }
 
@@ -777,9 +811,9 @@ export async function saveOnboardingProgress(progress: OnboardingProgress): Prom
             return { ok: false, error: data.error || `Error ${response.status}` };
         }
         return { ok: true };
-    } catch (error: any) {
+    } catch (error) {
         console.error("Error saving onboarding progress:", error);
-        return { ok: false, error: error.message || "Network error" };
+        return { ok: false, error: getErrorMessage(error) };
     }
 }
 

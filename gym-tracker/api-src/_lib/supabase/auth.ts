@@ -22,17 +22,10 @@ export type AuthContextResult =
 
 const SUPABASE_FETCH_TIMEOUT_MS = 10_000;
 
-function fetchWithTimeout(input: RequestInfo | URL, init?: RequestInit) {
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), SUPABASE_FETCH_TIMEOUT_MS);
-
-    // If caller already passed a signal, combine them (when supported)
-    const signal =
-        init?.signal && typeof (AbortSignal as any)?.any === "function"
-            ? (AbortSignal as any).any([init.signal, controller.signal])
-            : controller.signal;
-
-    return fetch(input, { ...init, signal }).finally(() => clearTimeout(timeout));
+function fetchWithTimeout(input: Parameters<typeof fetch>[0], init?: RequestInit) {
+    const timeout = AbortSignal.timeout(SUPABASE_FETCH_TIMEOUT_MS);
+    const signal = init?.signal ? AbortSignal.any([init.signal, timeout]) : timeout;
+    return fetch(input, { ...init, signal });
 }
 
 function getSupabaseClient(accessToken?: string) {
@@ -65,8 +58,8 @@ export async function getUserFromRequest(authHeader?: string | null) {
         const { data, error } = await supabase.auth.getUser(token);
         if (error || !data.user) return null;
         return { user: data.user, token, supabase };
-    } catch (e) {
-        console.error("getUserFromRequest failed:", e);
+    } catch {
+        console.error("Error verifying the Supabase session");
         return null;
     }
 }
@@ -145,9 +138,4 @@ export async function getAuthContextResult(authHeader?: string | null): Promise<
             refreshToken,
         },
     };
-}
-
-export async function getAuthContext(authHeader?: string | null): Promise<AuthContext | null> {
-    const res = await getAuthContextResult(authHeader);
-    return res.ok ? res.ctx : null;
 }

@@ -35,12 +35,13 @@ function TABLA_PRS(recalcToken) {
 
         let diaActual = 0;
 
-        datos.forEach((fila, rowIndex) => {
+        datos.forEach((fila) => {
             const ejercicio = fila[0];
 
             // Detectar cambio de día
-            if (ejercicio && typeof ejercicio === "string" && ejercicio.toUpperCase().includes("DIA")) {
-                diaActual++;
+            const encabezado = parsearEncabezadoDia_(ejercicio);
+            if (encabezado !== null) {
+                diaActual = encabezado;
                 return;
             }
 
@@ -160,12 +161,13 @@ function FRECUENCIA_MUSCULO(musculo, hoja) {
     let diaActual = 0;
 
     datos.forEach((fila) => {
-        const colA = fila[0] ? fila[0].toString() : "";
         const colN = fila[13] ? fila[13].toString().trim().toLowerCase() : "";
 
         // Detectar cambio de día
-        if (colA.toUpperCase().includes("DIA")) {
-            diaActual++;
+        const encabezado = parsearEncabezadoDia_(fila[0]);
+        if (encabezado !== null) {
+            diaActual = encabezado;
+            return;
         }
 
         // Si el músculo coincide y estamos en un día válido
@@ -215,14 +217,13 @@ function SERIES_MUSCULO_EN_DIA(musculo, numDia, hoja) {
     const musculoNorm = musculo.toString().trim().toLowerCase();
 
     datos.forEach((fila) => {
-        const colA = fila[0] ? fila[0].toString() : "";
         const colB = fila[1] ? fila[1].toString() : "";
         const colN = fila[13] ? fila[13].toString().trim().toLowerCase() : "";
 
         // Detectar cambio de día
-        if (colA.toUpperCase().includes("DIA")) {
-            const match = colA.match(/\d+/);
-            diaActual = match ? parseInt(match[0]) : diaActual + 1;
+        const encabezado = parsearEncabezadoDia_(fila[0]);
+        if (encabezado !== null) {
+            diaActual = encabezado;
             return;
         }
 
@@ -316,14 +317,13 @@ function GRILLA_SERIES_FATIGA(musculos, diasSemana, mapeo, hoja, modo, maxSeries
     let diaActual = 0;
 
     datos.forEach((fila) => {
-        const colA = fila[0] ? fila[0].toString() : "";
         const colB = fila[1] ? fila[1].toString() : "";
         const colN = fila[13] ? fila[13].toString().trim().toLowerCase() : "";
 
         // Detectar cambio de día
-        if (colA.toUpperCase().includes("DIA")) {
-            const match = colA.match(/\d+/);
-            diaActual = match ? parseInt(match[0]) : diaActual + 1;
+        const encabezado = parsearEncabezadoDia_(fila[0]);
+        if (encabezado !== null) {
+            diaActual = encabezado;
             return;
         }
 

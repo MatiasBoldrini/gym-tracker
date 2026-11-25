@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { accountScope, writeAccountStorage } from "@/lib/account-storage";
 import { ExternalLink, Copy, Check, Loader2, AlertCircle, LogOut, FileSpreadsheet, RefreshCw } from "lucide-react";
-import { fetchWeekData, resetMesociclo, resetOnboarding } from "@/lib/sheets-client";
+import { type SheetsError, fetchWeekData, resetMesociclo, resetOnboarding } from "@/lib/sheets-client";
 import type { Week } from "@/types";
 import { useAuth } from "@/lib/hooks/useAuth";
 import { Link, useNavigate } from "react-router-dom";
@@ -36,6 +37,11 @@ function buildToonRoutine(week: Week): string {
 }
 
 export function PerfilPage() {
+    const { userId, spreadsheetId } = useAuth();
+    return <PerfilScreen key={userId ? accountScope(userId, spreadsheetId) : "guest"} />;
+}
+
+function PerfilScreen() {
     const auth = useAuth();
     const navigate = useNavigate();
     const [week, setWeek] = useState<Week | null>(null);
@@ -50,7 +56,7 @@ export function PerfilPage() {
     const hasAutoLoadedWeekRef = useRef(false);
 
     const loadWeek = useCallback(async () => {
-        if (!isReady) return;
+        if (!isReady || !auth.userId) return;
         // Evitar requests innecesarias/401 si el usuario todavía no tiene planilla creada.
         if (!auth.hasSpreadsheet) {
             setLoadError("Tu cuenta todavía no tiene una planilla configurada. Volvé al inicio y completá el setup.");
@@ -59,12 +65,13 @@ export function PerfilPage() {
         setIsLoadingWeek(true);
         setLoadError(null);
         try {
-            const data = await fetchWeekData(1);
+            const data = await fetchWeekData(1, { userId: auth.userId ?? undefined });
             setWeek(data.week);
-        } catch (error: any) {
+        } catch (error) {
             console.error("Error cargando Semana 1:", error);
-            const status = (error as any)?.status as number | undefined;
-            const code = (error as any)?.code as string | undefined;
+            const sheetsError = error instanceof Error ? error as SheetsError : null;
+            const status = sheetsError?.status;
+            const code = sheetsError?.code;
             if (status === 401 && code === "NO_SPREADSHEET") {
                 setLoadError("Tu cuenta todavía no tiene una planilla configurada. Volvé al inicio y completá el setup.");
             } else if (status === 401) {
@@ -75,7 +82,7 @@ export function PerfilPage() {
         } finally {
             setIsLoadingWeek(false);
         }
-    }, [isReady, auth.hasSpreadsheet]);
+    }, [isReady, auth.hasSpreadsheet, auth.userId]);
 
     useEffect(() => {
         if (auth.isLoading) return;
@@ -102,7 +109,7 @@ export function PerfilPage() {
         try {
             let currentWeek = week;
             if (!currentWeek) {
-                const data = await fetchWeekData(1);
+                const data = await fetchWeekData(1, { userId: auth.userId ?? undefined });
                 currentWeek = data.week;
                 setWeek(currentWeek);
             }
@@ -134,7 +141,8 @@ export function PerfilPage() {
     };
 
     const handleRedoOnboarding = async () => {
-        if (!isReady) return;
+        const userId = auth.userId;
+        if (!isReady || !userId) return;
 
         const confirmed = window.confirm(
             "⚠️ Esto borrará todas las semanas excepto Semana 1, limpiará tu Semana 1 y reiniciará el wizard de configuración.\n\n¿Estás seguro?"
@@ -146,26 +154,26 @@ export function PerfilPage() {
 
         try {
             // Reset mesociclo (delete Semana 2..N)
-            const result = await resetMesociclo();
+            const result = await resetMesociclo(userId);
 
             if (!result.ok) {
                 throw new Error(result.error || "Error al resetear mesociclo");
             }
 
-            // Clear onboarding flags (localStorage for compat)
-            localStorage.removeItem("onboarding_completed_v1");
-            localStorage.removeItem("onboarding_dismissed_v1");
-            // También limpiar cualquier sync pendiente (si no, puede re-marcar complete/dismiss al refrescar)
-            localStorage.removeItem("onboarding_sync_action_v1");
+            const preferences = await resetOnboarding(userId);
+            if (!preferences.ok) throw new Error(preferences.error || "Error al reiniciar el asistente.");
 
-            // Reset onboarding in server DB
-            await resetOnboarding();
+            const scope = accountScope(userId);
+            writeAccountStorage(scope, "onboardingCompleted", null);
+            writeAccountStorage(scope, "onboardingDismissed", null);
+            writeAccountStorage(scope, "onboardingSyncAction", null);
+
 
             // Navigate to home with force flag
             navigate("/?force_onboarding=true");
-        } catch (error: any) {
+        } catch (error) {
             console.error("Error resetting onboarding:", error);
-            alert("Error al resetear: " + (error.message || "Intentá de nuevo"));
+            alert("Error al resetear: " + (error instanceof Error ? error.message : "Intentá de nuevo"));
         } finally {
             setIsResettingMesociclo(false);
         }
@@ -175,6 +183,7 @@ export function PerfilPage() {
         <div className="px-5 pt-8 pb-10">
             <header className="mb-6">
                 <h1 className="text-3xl font-extrabold tracking-tight">Perfil</h1>
+                <Link to="/bloques" className="text-sm font-bold text-ios-blue">Abrir rutina por bloques</Link>
                 <p className="text-ios-gray mt-1 text-sm font-medium uppercase tracking-wider">
                     Herramientas rápidas
                 </p>

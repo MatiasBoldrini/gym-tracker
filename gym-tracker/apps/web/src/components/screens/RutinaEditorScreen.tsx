@@ -127,9 +127,10 @@ export function RutinaEditorScreen() {
                     .map((e) => (e.image ? `/images/exercises/${e.image}` : null))
                     .filter((u): u is string => !!u);
                 void cacheUrls(urls);
-            } catch (error: any) {
+            } catch (error) {
+                if (cancelled) return;
                 console.error("Error loading data:", error);
-                setErrorMessage(error.message || "Error al cargar datos");
+                setErrorMessage(error instanceof Error && error.message ? error.message : "Error al cargar datos");
             } finally {
                 if (!cancelled) setIsLoadingData(false);
             }
@@ -174,11 +175,11 @@ export function RutinaEditorScreen() {
                 }));
 
                 setDayExercises(enriched);
-            } catch (error: any) {
+            } catch (error) {
                 // Don't show error if the request was cancelled (user switched days quickly)
                 if (cancelled) return;
                 console.error("Error loading day routine:", error);
-                setErrorMessage(error.message || "Error al cargar la rutina del día");
+                setErrorMessage(error instanceof Error && error.message ? error.message : "Error al cargar la rutina del día");
                 setDayExercises([]);
             } finally {
                 if (!cancelled) setIsLoadingDay(false);
@@ -260,9 +261,9 @@ export function RutinaEditorScreen() {
 
             // Refresh days summary to update visible days
             refreshDaysSummary();
-        } catch (error: any) {
+        } catch (error) {
             console.error("Error saving routine:", error);
-            setErrorMessage(error.message || "Error al guardar la rutina");
+            setErrorMessage(error instanceof Error && error.message ? error.message : "Error al guardar la rutina");
             setHasChanges(true);
             showToast(`${exercise.name} agregado (sin guardar)`);
         } finally {
@@ -308,9 +309,9 @@ export function RutinaEditorScreen() {
 
             // Reset success indicator after a delay
             setTimeout(() => setSaveSuccess(false), 2000);
-        } catch (error: any) {
+        } catch (error) {
             console.error("Error saving routine:", error);
-            setErrorMessage(error.message || "Error al guardar la rutina");
+            setErrorMessage(error instanceof Error && error.message ? error.message : "Error al guardar la rutina");
         } finally {
             setIsSaving(false);
         }

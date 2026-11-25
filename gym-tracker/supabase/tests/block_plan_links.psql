@@ -1,0 +1,81 @@
+-- Run after migration 006 in a disposable transaction.
+begin;
+insert into public.block_plans (spreadsheet_id, routine) values
+    ('link-scope-test-a', '{"blocks":[{"id":"b","weeks":[{"number":1,"days":[{"number":1,"exercises":[]}]}]}]}'),
+    ('link-scope-test-b', '{"blocks":[]}');
+select set_config('test.plan_a',(select plan_id::text from public.block_plans where spreadsheet_id='link-scope-test-a'),true),
+       set_config('test.plan_b',(select plan_id::text from public.block_plans where spreadsheet_id='link-scope-test-b'),true);
+set local role service_role;
+do $$
+declare t text;
+begin
+    t := public.manage_block_plan_link('link-scope-test-a','open');
+    assert length(t)=64 and t=public.manage_block_plan_link('link-scope-test-a','open');
+    perform set_config('test.token',t,true);
+    perform public.manage_block_plan_link('link-scope-test-b','open');
+end;
+$$;
+set local role anon;
+do $$
+declare w jsonb := '{"sets":{},"rating":null,"startedAt":"2026-11-23T12:00:00Z","note":"desde el enlace"}';
+begin
+    assert (select count(plan_id) from public.block_plans)=0;
+    perform set_config('request.headers',jsonb_build_object('x-gym-routine','link-scope-test-a')::text,true);
+    assert (select count(plan_id) from public.block_plans)=0;
+    perform set_config('request.headers',jsonb_build_object('x-gym-routine',current_setting('test.token'))::text,true);
+    assert (select count(plan_id) from public.block_plans)=1;
+    assert not exists(select plan_id from public.block_plans where plan_id=current_setting('test.plan_b')::uuid);
+    assert public.save_linked_block_workout('["b",1,1]', w, 0, current_setting('test.plan_a')::uuid)=1;
+    assert public.save_linked_block_workout('["b",1,1]', w, 0, current_setting('test.plan_a')::uuid)=1;
+    assert (select count(session_key) from public.block_workouts)=1;
+    begin
+        perform public.save_linked_block_workout('["b",1,1]', w, 0, current_setting('test.plan_b')::uuid);
+        raise exception 'Se esperaba rechazo al escribir otro plan';
+    exception when insufficient_privilege then null; end;
+    begin
+        perform public.manage_block_plan_link('link-scope-test-b','open');
+        raise exception 'Se esperaba rechazo al administrar enlaces';
+    exception when insufficient_privilege then null; end;
+end;
+$$;
+reset role;
+do $$
+declare t text; vault_key uuid; plan uuid := current_setting('test.plan_a')::uuid;
+begin
+    t:=public.manage_block_plan_link('link-scope-test-a','rotate');
+    assert t<>current_setting('test.token') and public.linked_block_plan_id() is null;
+    perform set_config('request.headers',jsonb_build_object('x-gym-routine',t)::text,true);
+    assert public.linked_block_plan_id()=plan;
+    select vault_id into vault_key from public.block_plan_links where plan_id=plan;
+    perform public.manage_block_plan_link('link-scope-test-a','revoke');
+    assert public.linked_block_plan_id() is null;
+    assert not exists(select id from vault.secrets where id=vault_key);
+    t:=public.manage_block_plan_link('link-scope-test-a','open');
+    update public.block_plans set spreadsheet_id='link-scope-test-retarget' where plan_id=plan;
+    perform set_config('request.headers',jsonb_build_object('x-gym-routine',t)::text,true);
+    assert public.linked_block_plan_id() is null;
+    assert (select count(*) from public.block_workouts where plan_id=plan)=1;
+end;
+$$;
+-- A legacy athlete can use the old login up to conversion. Removing that login
+-- afterwards cannot delete the independently assigned sheet or its workouts.
+insert into auth.users(id) values ('58b6af23-cef3-4ded-b2e3-0038c88b4710');
+insert into public.block_plans(user_id, spreadsheet_id, routine) values
+ ('58b6af23-cef3-4ded-b2e3-0038c88b4710','link-login-conversion','{"blocks":[]}');
+set local role authenticated;
+set local request.jwt.claim.sub='58b6af23-cef3-4ded-b2e3-0038c88b4710';
+do $$ begin assert (select count(*) from public.block_plans)=1; end; $$;
+reset role;
+do $$ begin perform public.manage_block_plan_link('link-login-conversion','open'); end; $$;
+set local role authenticated;
+do $$ begin
+    assert (select count(*) from public.block_plans)=0;
+    begin
+        perform public.save_block_workout('["b",1,1]','{}',0);
+        raise exception 'Se esperaba rechazo al usar la cuenta anterior';
+    exception when insufficient_privilege then null; end;
+end; $$;
+reset role;
+delete from auth.users where id='58b6af23-cef3-4ded-b2e3-0038c88b4710';
+do $$ begin assert exists(select from public.block_plans where spreadsheet_id='link-login-conversion'); end; $$;
+rollback;

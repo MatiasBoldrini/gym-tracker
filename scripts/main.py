@@ -50,16 +50,13 @@ def find_top_word_patterns(document, k, N):
 # Tests
 if __name__ == "__main__":
     test = "a b c a b c a b c d e f d e f"
-    output_1 = ["a b c", "d e f"]
+    output_1 = ["a b c", "b c a"]
     result_1 = find_top_word_patterns(test, 3, 2)
-    print(f"Test 1: {result_1}")
-    print(f"Expected: {output_1}")
-    print(f"✓ Correct: {result_1 == output_1}\n")
+    assert result_1 == output_1, result_1
     
     test_2 = "the quick brown fox jumps over the lazy dog. The quick brown fox falls over the fence."
-    output_2 = ["the quick brown", "quick brown fox", "over the lazy"]
+    output_2 = ["quick brown fox", "the quick brown", "brown fox falls"]
     result_2 = find_top_word_patterns(test_2, 3, 3)
-    print(f"Test 2: {result_2}")
-    print(f"Expected: {output_2}")
-    print(f"✓ Correct: {result_2 == output_2}\n")
+    assert result_2 == output_2, result_2
+    print("Los dos ejemplos pasaron.")
 

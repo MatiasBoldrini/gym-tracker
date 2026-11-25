@@ -1,6 +1,6 @@
 # Convenciones de código (modularidad) — `scripts/`
 
-Este proyecto corre en **Google Apps Script** (aunque los archivos sean `.js`). Apps Script no usa módulos ES de forma nativa: **todo queda en el scope global del proyecto**, pero igual podemos (y debemos) mantener **separación por archivos** para que sea mantenible.
+Estas convenciones aplican a los archivos `scripts/*.js` de la planilla v3. En Google Apps Script las funciones de estos archivos comparten el ámbito global del proyecto. Usá [AGENTS.md](../AGENTS.md) para ubicar las convenciones de la aplicación web.
 
 ## Objetivo
 

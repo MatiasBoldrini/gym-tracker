@@ -1,8 +1,8 @@
-# Agents / Documentación de `scripts/`
+# Scripts históricos de Rutina Gym v3
 
-Este directorio contiene **código de Google Apps Script** (aunque ahora los archivos tengan extensión `.js`). Se ejecuta dentro de un Spreadsheet y usa servicios como `SpreadsheetApp`, `ScriptApp` y `HtmlService`.
+Los archivos `.js` de este directorio son fuentes de Google Apps Script para una planilla con pestañas `Semana N`. Usan `SpreadsheetApp`, `ScriptApp` y `HtmlService`. Para trabajar sobre la aplicación actual, empezá por [AGENTS.md](../AGENTS.md). El proyecto vinculado a la planilla v4 usa un script de colores propio.
 
-> Guía de estilo/modularidad del repo: ver `scripts/CONVENCIONES.md` (incluye la regla de no superar ~900 líneas por archivo).
+Para cambios en Apps Script, consultá [las convenciones locales](CONVENCIONES.md) y probá las operaciones de escritura en una copia de la planilla v3. `main.py` es un ejercicio independiente de Python y se puede ejecutar con `python3 scripts/main.py` desde la raíz.
 
 ---
 
@@ -104,7 +104,7 @@ Lista de **opciones de calificación con estrellas** para evaluar rendimiento po
 - **Funciones personalizadas de Sheets** (`=...`): `FormulasPersonalizadas.js`
 - **Integración App Web (API)**: `WebAppAPI.js`
 
-> Dependencia clave: `detectarDias()` está en `BorrarDatosDia.js` y lo usa `IntegracionIA.js` para leer/escribir rutinas por “DIA 1..N”.
+> La detección de `DIA N` se comparte desde `BorrarDatosDia.js`. `IntegracionIA.js` y `WebAppAPI.js` usan `detectarDias()`. `FormulasPersonalizadas.js` usa `parsearEncabezadoDia_()` al recorrer las filas.
 
 ---
 
@@ -151,7 +151,7 @@ Lista de **opciones de calificación con estrellas** para evaluar rendimiento po
     - Col D (Notas)
     - Col F..M (Reps/Peso/Estrellas)
 - `detectarDias(hoja)`:
-  - Escanea la columna A buscando filas que contengan “DIA”.
+  - Escanea la columna A buscando encabezados `DIA N` o `DÍA N` al comienzo de la celda.
   - Devuelve un array con `{ numero, filaInicio, filaFin }` para cada día detectado.
 
 **Dependencias**:
@@ -170,7 +170,7 @@ Lista de **opciones de calificación con estrellas** para evaluar rendimiento po
 - `TABLA_PRS()`:
   - Recorre todas las hojas cuyo nombre empieza con `"Semana"`.
   - Detecta series donde hay pares `(reps, peso)` en columnas contiguas.
-  - Calcula 1RM estimado (Epley-like) y guarda el mejor por ejercicio.
+  - Calcula 1RM estimado con Brzycki y guarda el mejor por ejercicio.
   - Devuelve una tabla con: `Ejercicio | Peso PR | Reps | Fecha (SxDy) | 1RM Estimado`.
 - `PROMEDIO_ESTRELLAS(celda)`:
   - Para una referencia tipo `"F10"`, busca ese valor en todas las hojas `"Semana..."`.
@@ -218,9 +218,9 @@ Lista de **opciones de calificación con estrellas** para evaluar rendimiento po
 **Funciones principales**:
 
 - `copiarRutinaComoPrompt()`:
-  - Si no estás en una hoja `Semana...`, usa `Semana 1` como origen.
+  - Usa `Semana 1` como origen.
   - Lee ejercicios por día usando `detectarDias(hoja)` (en `BorrarDatosDia.js`) y construye un prompt.
-  - Si existe hoja `Ejercicios`/`Ejercicio`, agrega catálogo de ejercicios disponibles (agrupados por grupo).
+  - Si existe la hoja `Ejercicios` o `Ejercicio`, agrega los nombres del catálogo.
   - Abre un `HtmlService` mínimo para intentar copiar el prompt al portapapeles (Clipboard API / `execCommand('copy')`).
   - Reporta resultado con `toastResultadoCopia_(ok)`.
 - `pegarRutinaDesdeIA()`:
@@ -230,7 +230,7 @@ Lista de **opciones de calificación con estrellas** para evaluar rendimiento po
   - Devuelve lista de hojas `"Semana..."` ordenadas por número para poblar el selector.
 - `procesarRutinaJSON(jsonString, nombreHoja)`:
   - Valida hoja destino (debe ser `Semana...`).
-  - Parsea JSON con estructura `{ dias: [ { dia: number, ejercicios: [ { ejercicio, series } ] } ] }`.
+  - Valida la estructura `{ dias: [ { dia: number, ejercicios: [ { ejercicio, series } ] } ] }` antes de escribir. Los nombres y series son texto literal.
   - Usa `detectarDias(hoja)` para ubicar dónde escribir cada día.
   - Escribe ejercicio en col A y series en col B, debajo del encabezado del día.
 
@@ -241,9 +241,11 @@ Lista de **opciones de calificación con estrellas** para evaluar rendimiento po
 
 ---
 
-## `WebAppAPI.js` — Punto de enlace para la aplicación web
+## `WebAppAPI.js` — Endpoint histórico
 
-**Propósito**: manejar la persistencia de datos desde la web app externa (Next.js). Permite registrar series (peso/reps) en la hoja correcta.
+**Propósito**: registrar series en la planilla v3 desde la web anterior. La API que usa la aplicación actual está en `gym-tracker/api-src/`.
+
+El POST histórico procesa escrituras sobre la planilla vinculada sin autenticación propia. Si alguien necesita recuperar esta integración, revisá el control de acceso del despliegue y la validación de pedidos en una copia de prueba antes de exponerla.
 
 **Puntos de entrada**:
 
@@ -257,3 +259,7 @@ Lista de **opciones de calificación con estrellas** para evaluar rendimiento po
 **Dependencias**:
 
 - Usa `detectarDias()` (definida en `BorrarDatosDia.js`) para segmentar las semanas por días.
+
+## `BodyMap.js` — Exportación de imágenes de fatiga
+
+Usa la tabla de `Fatiga` para llamar a `/api/bodymap` en la URL configurada en las propiedades del script. Después inserta las vistas frontal y posterior en la hoja. El mapa interactivo de la web actual está en `gym-tracker/apps/web/src/components/ui/BodyMapInteractive.tsx`.

@@ -1,122 +1,59 @@
 import { Hono } from "hono";
 import { getRequestListener } from "@hono/node-server";
-import { google } from "googleapis";
-import { getAuthContext, getAuthContextResult, getUserFromRequest } from "./_lib/supabase/auth";
+import { google, type sheets_v4 } from "googleapis";
+import { getAuthContextResult, getUserFromRequest } from "./_lib/supabase/auth";
 import { getUserIntegration, upsertUserIntegration } from "./_lib/supabase/integrations";
-import { refreshAccessToken } from "./_lib/google/oauth";
-import { getAuthenticatedClient } from "./_lib/google/oauth";
+import { getAuthenticatedClient, refreshAccessToken } from "./_lib/google/oauth";
 import { readSheetValues, readSheetValuesBatch, listSpreadsheetSheetTitles, readExerciseSets, readExerciseSetsBulk, saveExerciseSets, saveSessionRating } from "./_lib/google/sheets";
 import { normalizeSheetsError } from "./_lib/google/sheets-errors";
 import { parseExerciseMapping, parsePRData, parseWeekData } from "./_lib/sheets-parse";
 import { computeFatigaFromSheet } from "./_lib/fatiga";
 import { copyTemplate } from "./_lib/google/drive";
-import { withCache } from "./_lib/cache";
+import {
+    buildRoutineEdits, buildWeekClears, findDayRange, MAX_DAYS, MAX_EXERCISES_PER_DAY,
+    readDayId, readWorkoutSheet, type RoutineExercise,
+} from "./_lib/google/workout-sheet";
+import { normalizeExerciseKey } from "./_lib/normalize";
+import { parseSetSlots } from "./_lib/set-values";
 import { decrypt, encrypt } from "./_lib/crypto";
 
 const CURRENT_ONBOARDING_VERSION = 1;
 
-const MAX_EXERCISES_PER_DAY = 7;
-
-function findDayRange(data: any[][], dayId: number): { startRow: number; endRow: number } | null {
-    let startRow = -1;
-    let endRow = -1;
-    let foundDay = false;
-
-    for (let i = 0; i < data.length; i++) {
-        const cellValue = data[i]?.[0]?.toString().trim().toUpperCase() || "";
-        if (cellValue.startsWith("DIA ")) {
-            const currentDayId = parseInt(cellValue.replace("DIA ", ""));
-            if (currentDayId === dayId) {
-                startRow = i + 1;
-                foundDay = true;
-            } else if (foundDay) {
-                endRow = i;
-                break;
-            }
-        }
-    }
-
-    if (!foundDay) return null;
-
-    if (endRow === -1) {
-        for (let i = startRow; i < data.length; i++) {
-            const cellValue = data[i]?.[0]?.toString().trim() || "";
-            if (!cellValue) {
-                endRow = i;
-                break;
-            }
-        }
-        if (endRow === -1) endRow = data.length;
-    }
-
-    return { startRow, endRow };
+function isWeekId(value: unknown): value is number {
+    return typeof value === "number" && Number.isSafeInteger(value) && value >= 1;
 }
 
-async function cleanWeekData(
-    sheets: ReturnType<typeof google.sheets>,
-    spreadsheetId: string,
-    sheetName: string
-) {
-    const range = `'${sheetName}'!F:M`;
-    const readResponse = await sheets.spreadsheets.values.get({
-        spreadsheetId,
-        range,
-        valueRenderOption: "UNFORMATTED_VALUE",
-    });
-    const rows = readResponse.data.values || [];
-    if (rows.length === 0) return;
-    const newValues: (string | number | null)[][] = rows.map((row) =>
-        Array.from({ length: 8 }, (_, i) => {
-            const value = row[i];
-            if (typeof value === "number") return "";
-            if (typeof value === "string" && value.includes("★")) return "";
-            return value ?? "";
-        })
-    );
-    await sheets.spreadsheets.values.update({
-        spreadsheetId,
-        range: `'${sheetName}'!F1:M${rows.length}`,
-        valueInputOption: "USER_ENTERED",
-        requestBody: { values: newValues },
-    });
+function isDayId(value: unknown): value is number {
+    return isWeekId(value) && value <= MAX_DAYS;
 }
 
-async function clearSemana1Routine(
-    sheets: ReturnType<typeof google.sheets>,
-    spreadsheetId: string,
-    accessToken: string
-) {
-    const sheetName = "Semana 1";
-    const currentData = await readSheetValues(accessToken, spreadsheetId, `'${sheetName}'!A:D`);
+function isExerciseName(value: unknown): value is string {
+    return typeof value === "string" && normalizeExerciseKey(value).length > 0 && readDayId(value) === null;
+}
 
-    const updates: { range: string; values: (string | null)[][] }[] = [];
-    for (let dayId = 1; dayId <= 5; dayId++) {
-        const dayRange = findDayRange(currentData, dayId);
-        if (!dayRange) continue;
-
-        // `dayRange.startRow` es índice 0-based del primer renglón debajo de "DIA X".
-        // Para Sheets API necesitamos números de fila 1-based.
-        const startRowNumber = dayRange.startRow + 1;
-        const endRowNumber = startRowNumber + MAX_EXERCISES_PER_DAY - 1;
-        const values = Array.from({ length: MAX_EXERCISES_PER_DAY }, () => ["", "", "", ""]);
-        updates.push({ range: `'${sheetName}'!A${startRowNumber}:D${endRowNumber}`, values });
-    }
-
-    if (updates.length > 0) {
-        await sheets.spreadsheets.values.batchUpdate({
-            spreadsheetId,
-            requestBody: {
-                valueInputOption: "USER_ENTERED",
-                data: updates.map((u) => ({ range: u.range, values: u.values })),
-            },
-        });
-    }
-
-    // También limpiar sets/ratings para que el reset sea real (misma lógica que para semanas duplicadas).
-    await cleanWeekData(sheets, spreadsheetId, sheetName);
+function listWeeks(titles: string[]) {
+    return titles.flatMap((title) => {
+        const match = title.match(/^Semana ([1-9]\d*)$/);
+        const id = Number(match?.[1]);
+        return isWeekId(id) ? [{ id, name: title }] : [];
+    }).sort((left, right) => left.id - right.id);
 }
 
 const app = new Hono().basePath("/api");
+
+for (const route of ["/auth/*", "/sheets/*", "/user/*", "/fatiga"]) {
+    app.use(route, async (c, next) => {
+        c.header("Cache-Control", "private, no-store");
+        await next();
+    });
+}
+
+app.notFound((c) => c.json({ error: "Ruta no encontrada" }, 404));
+app.onError((_error, c) => {
+    console.error("Unhandled API error");
+    return c.json({ error: "Error interno" }, 500);
+});
+app.get("/auth/ping", (c) => c.json({ ok: true, ts: new Date().toISOString() }));
 
 function getAuthHeader(c: any) {
     return c.req.header("Authorization") ?? null;
@@ -178,7 +115,7 @@ app.get("/auth/me", async (c) => {
                 ensuredPrefs = created ?? null;
             }
         } else if (prefsError) {
-            console.error("Error fetching user_preferences:", prefsError);
+            console.error("Error fetching user_preferences");
         }
 
         return c.json({
@@ -199,7 +136,7 @@ app.get("/auth/me", async (c) => {
             },
         });
     } catch (error) {
-        console.error("Error getting session:", error);
+        console.error("Error getting session");
         return jsonError(c, "Failed to get session", 500);
     }
 });
@@ -212,8 +149,12 @@ app.post("/auth/callback", async (c) => {
     try {
         const auth = await getUserFromRequest(getAuthHeader(c));
         if (!auth) return jsonError(c, "No autenticado", 401);
-        const body = await c.req.json();
-        const providerRefreshToken = body?.providerRefreshToken;
+        const body = await c.req.json().catch(() => null);
+        if (!body || typeof body !== "object" || Array.isArray(body)) return jsonError(c, "JSON inválido", 400);
+        const providerRefreshToken = body.providerRefreshToken;
+        if (providerRefreshToken != null && typeof providerRefreshToken !== "string") {
+            return jsonError(c, "providerRefreshToken debe ser texto", 400);
+        }
         const existing = await getUserIntegration(auth.supabase, auth.user.id);
         const hasSpreadsheet = !!existing?.spreadsheet_id;
 
@@ -244,7 +185,6 @@ app.post("/auth/callback", async (c) => {
         const updated = await upsertUserIntegration(auth.supabase, auth.user.id, {
             email,
             google_refresh_token_enc: encryptedRefreshToken,
-            spreadsheet_id: existing?.spreadsheet_id || null,
         });
         if (!updated) {
             return jsonError(c, "Error al guardar la integración", 500);
@@ -256,7 +196,7 @@ app.post("/auth/callback", async (c) => {
             is_new_user: !hasSpreadsheet,
         });
     } catch (error: any) {
-        console.error("Error in auth callback:", error);
+        console.error("Error in auth callback");
         return jsonError(c, "auth_callback_failed", 500);
     }
 });
@@ -267,41 +207,28 @@ app.get("/sheets/home", async (c) => {
         if (!authRes.ok) return jsonError(c, authRes.message, authRes.status, authRes.code);
         const auth = authRes.ctx;
 
-        const key = `home-${auth.userId}-${auth.spreadsheetId}`;
-        const payload = await withCache(key, 300, async () => {
-            const accessToken = await refreshAccessToken(auth.refreshToken);
-            const titles = await listSpreadsheetSheetTitles(accessToken, auth.spreadsheetId);
-            const availableWeekIds = titles
-                .map((title) => {
-                    const match = title.trim().match(/^Semana\s+(\d+)$/i);
-                    if (!match) return null;
-                    const id = Number(match[1]);
-                    return Number.isFinite(id) && id >= 1 ? Math.trunc(id) : null;
-                })
-                .filter((n): n is number => typeof n === "number")
-                .sort((a, b) => a - b);
-
-            const weeks = availableWeekIds.map((id) => ({ id, name: `Semana ${id}` }));
-            const weekId = availableWeekIds[0] ?? 1;
-
-            const [weekValues, prValues, mappingValues] = await Promise.all([
-                readSheetValues(accessToken, auth.spreadsheetId, `'Semana ${weekId}'!A:N`),
-                readSheetValues(accessToken, auth.spreadsheetId, `'RM A,B,C'!A:E`).catch(async () => {
-                    return await readSheetValues(accessToken, auth.spreadsheetId, `'RM'!A:E`);
-                }),
-                readSheetValues(accessToken, auth.spreadsheetId, `'Ejercicios'!A:D`).catch(() => []),
-            ]);
-
-            const exerciseMapping = parseExerciseMapping(mappingValues);
-            const week = parseWeekData(weekValues, weekId, exerciseMapping);
-            const prs = parsePRData(prValues);
-            return { week, weeks, prs, setupError: null };
-        });
-
-        return c.json(payload);
+        const accessToken = await refreshAccessToken(auth.refreshToken);
+        const titles = await listSpreadsheetSheetTitles(accessToken, auth.spreadsheetId);
+        const weeks = listWeeks(titles);
+        if (weeks.length === 0) {
+            return c.json({
+                week: { id: 1, days: [] }, weeks: [], prs: [],
+                setupError: { message: "La planilla no tiene ninguna pestaña con el formato «Semana 1».", code: "SHEETS_TEMPLATE_MISMATCH" },
+            });
+        }
+        const weekId = weeks[0].id;
+        const [weekValues, prValues, mappingValues] = await Promise.all([
+            readSheetValues(accessToken, auth.spreadsheetId, `'Semana ${weekId}'!A:N`),
+            readSheetValues(accessToken, auth.spreadsheetId, "'RM A,B,C'!A:E").catch(() => {
+                return readSheetValues(accessToken, auth.spreadsheetId, "'RM'!A:E");
+            }),
+            readSheetValues(accessToken, auth.spreadsheetId, "'Ejercicios'!A:D").catch(() => []),
+        ]);
+        const week = parseWeekData(weekValues, weekId, parseExerciseMapping(mappingValues));
+        return c.json({ week, weeks, prs: parsePRData(prValues), setupError: null });
     } catch (error: any) {
-        console.error("Error loading home:", error);
         const normalized = normalizeSheetsError(error);
+        console.error("Error loading home", { code: normalized.code, status: normalized.status });
         return c.json({ week: { id: 1, days: [] }, weeks: [], prs: [], setupError: { message: normalized.message, code: normalized.code } });
     }
 });
@@ -312,25 +239,12 @@ app.get("/sheets/weeks", async (c) => {
         if (!authRes.ok) return jsonError(c, authRes.message, authRes.status, authRes.code);
         const auth = authRes.ctx;
 
-        const key = `weeks-${auth.userId}-${auth.spreadsheetId}`;
-        const weeks = await withCache(key, 300, async () => {
-            const accessToken = await refreshAccessToken(auth.refreshToken);
-            const titles = await listSpreadsheetSheetTitles(accessToken, auth.spreadsheetId);
-            return titles
-                .map((title) => {
-                    const match = title.trim().match(/^Semana\s+(\d+)$/i);
-                    if (!match) return null;
-                    const id = Number(match[1]);
-                    return Number.isFinite(id) && id >= 1 ? { id: Math.trunc(id), name: `Semana ${id}` } : null;
-                })
-                .filter((w): w is { id: number; name: string } => !!w)
-                .sort((a, b) => a.id - b.id);
-        });
-
-        return c.json({ weeks });
+        const accessToken = await refreshAccessToken(auth.refreshToken);
+        const titles = await listSpreadsheetSheetTitles(accessToken, auth.spreadsheetId);
+        return c.json({ weeks: listWeeks(titles) });
     } catch (error: any) {
-        console.error("Error listing weeks:", error);
         const normalized = normalizeSheetsError(error);
+        console.error("Error listing weeks", { code: normalized.code, status: normalized.status });
         return jsonError(c, normalized.message, normalized.status, normalized.code);
     }
 });
@@ -341,28 +255,18 @@ app.get("/sheets/week", async (c) => {
         if (!authRes.ok) return jsonError(c, authRes.message, authRes.status, authRes.code);
         const auth = authRes.ctx;
 
-        const weekIdRaw = c.req.query("weekId");
-        const weekId = Number(weekIdRaw);
-        if (!Number.isFinite(weekId) || weekId < 1) {
-            return jsonError(c, "weekId is required", 400);
-        }
+        const weekId = Number(c.req.query("weekId"));
+        if (!isWeekId(weekId)) return jsonError(c, "weekId debe ser un entero positivo", 400);
 
-        const key = `week-${auth.userId}-${auth.spreadsheetId}-${weekId}`;
-        const week = await withCache(key, 300, async () => {
-            const accessToken = await refreshAccessToken(auth.refreshToken);
-            const weekRange = `'Semana ${weekId}'!A:N`;
-            const mappingRange = `'Ejercicios'!A:D`;
-            const batch = await readSheetValuesBatch(accessToken, auth.spreadsheetId, [mappingRange, weekRange]);
-            const mappingValues = batch[mappingRange] || [];
-            const weekValues = batch[weekRange] || [];
-            const exerciseMapping = parseExerciseMapping(mappingValues);
-            return parseWeekData(weekValues, weekId, exerciseMapping);
-        });
-
+        const accessToken = await refreshAccessToken(auth.refreshToken);
+        const weekRange = `'Semana ${weekId}'!A:N`;
+        const mappingRange = "'Ejercicios'!A:D";
+        const batch = await readSheetValuesBatch(accessToken, auth.spreadsheetId, [mappingRange, weekRange]);
+        const week = parseWeekData(batch[weekRange], weekId, parseExerciseMapping(batch[mappingRange]));
         return c.json({ week });
     } catch (error: any) {
-        console.error("Error loading week:", error);
         const normalized = normalizeSheetsError(error);
+        console.error("Error loading week", { code: normalized.code, status: normalized.status });
         return jsonError(c, normalized.message, normalized.status, normalized.code);
     }
 });
@@ -379,8 +283,8 @@ app.get("/sheets/prs", async (c) => {
         const prs = parsePRData(values);
         return c.json({ prs });
     } catch (error: any) {
-        console.error("Error loading PRs:", error);
         const normalized = normalizeSheetsError(error);
+        console.error("Error loading PRs", { code: normalized.code, status: normalized.status });
         return jsonError(c, normalized.message, normalized.status, normalized.code);
     }
 });
@@ -408,8 +312,8 @@ app.get("/sheets/exercises", async (c) => {
 
         return c.json({ exercises });
     } catch (error: any) {
-        console.error("Error loading exercises:", error);
         const normalized = normalizeSheetsError(error);
+        console.error("Error loading exercises", { code: normalized.code, status: normalized.status });
         return jsonError(c, normalized.message, normalized.status, normalized.code);
     }
 });
@@ -427,8 +331,8 @@ app.get("/sheets/series", async (c) => {
             .filter(Boolean);
         return c.json({ series });
     } catch (error: any) {
-        console.error("Error loading series:", error);
         const normalized = normalizeSheetsError(error);
+        console.error("Error loading series", { code: normalized.code, status: normalized.status });
         return jsonError(c, normalized.message, normalized.status, normalized.code);
     }
 });
@@ -464,8 +368,8 @@ app.get("/sheets/onboarding-data", async (c) => {
 
         return c.json({ exercises, series });
     } catch (error: any) {
-        console.error("Error loading onboarding data:", error);
         const normalized = normalizeSheetsError(error);
+        console.error("Error loading onboarding data", { code: normalized.code, status: normalized.status });
         return jsonError(c, normalized.message, normalized.status, normalized.code);
     }
 });
@@ -478,7 +382,7 @@ app.get("/sheets/exercise", async (c) => {
         const weekId = Number(c.req.query("weekId"));
         const dayId = Number(c.req.query("dayId"));
         const exerciseName = c.req.query("exerciseName") || "";
-        if (!Number.isFinite(weekId) || !Number.isFinite(dayId) || !exerciseName) {
+        if (!isWeekId(weekId) || !isDayId(dayId) || !isExerciseName(exerciseName)) {
             return jsonError(c, "Missing params", 400);
         }
         const accessToken = await refreshAccessToken(auth.refreshToken);
@@ -491,8 +395,8 @@ app.get("/sheets/exercise", async (c) => {
         });
         return c.json({ sets });
     } catch (error: any) {
-        console.error("Error loading exercise sets:", error);
         const normalized = normalizeSheetsError(error);
+        console.error("Error loading exercise sets", { code: normalized.code, status: normalized.status });
         return jsonError(c, normalized.message, normalized.status, normalized.code);
     }
 });
@@ -502,9 +406,11 @@ app.post("/sheets/exercises-bulk", async (c) => {
         const authRes = await getAuthContextResult(getAuthHeader(c));
         if (!authRes.ok) return jsonError(c, authRes.message, authRes.status, authRes.code);
         const auth = authRes.ctx;
-        const body = await c.req.json();
+        const body = await c.req.json().catch(() => null);
+        if (!body || typeof body !== "object" || Array.isArray(body)) return jsonError(c, "JSON inválido", 400);
         const { weekId, dayId, exerciseNames } = body || {};
-        if (!Number.isFinite(weekId) || !Number.isFinite(dayId) || !Array.isArray(exerciseNames)) {
+        if (!isWeekId(weekId) || !isDayId(dayId) || !Array.isArray(exerciseNames) ||
+            exerciseNames.length > MAX_EXERCISES_PER_DAY || !exerciseNames.every(isExerciseName)) {
             return jsonError(c, "Invalid payload", 400);
         }
         const accessToken = await refreshAccessToken(auth.refreshToken);
@@ -517,8 +423,8 @@ app.post("/sheets/exercises-bulk", async (c) => {
         });
         return c.json({ results });
     } catch (error: any) {
-        console.error("Error loading exercise sets bulk:", error);
         const normalized = normalizeSheetsError(error);
+        console.error("Error loading exercise sets bulk", { code: normalized.code, status: normalized.status });
         return jsonError(c, normalized.message, normalized.status, normalized.code);
     }
 });
@@ -528,9 +434,11 @@ app.post("/sheets/save", async (c) => {
         const authRes = await getAuthContextResult(getAuthHeader(c));
         if (!authRes.ok) return jsonError(c, authRes.message, authRes.status, authRes.code);
         const auth = authRes.ctx;
-        const body = await c.req.json();
-        const { weekId, dayId, exerciseName, sets } = body || {};
-        if (!Number.isFinite(weekId) || !Number.isFinite(dayId) || !exerciseName || !Array.isArray(sets)) {
+        const body = await c.req.json().catch(() => null);
+        if (!body || typeof body !== "object" || Array.isArray(body)) return jsonError(c, "JSON inválido", 400);
+        const { weekId, dayId, exerciseName } = body;
+        const sets = parseSetSlots(body.sets);
+        if (!isWeekId(weekId) || !isDayId(dayId) || !isExerciseName(exerciseName) || !sets) {
             return jsonError(c, "Invalid payload", 400);
         }
         const accessToken = await refreshAccessToken(auth.refreshToken);
@@ -544,8 +452,8 @@ app.post("/sheets/save", async (c) => {
         });
         return c.json({ ok: true });
     } catch (error: any) {
-        console.error("Error saving exercise sets:", error);
         const normalized = normalizeSheetsError(error);
+        console.error("Error saving exercise sets", { code: normalized.code, status: normalized.status });
         return jsonError(c, normalized.message, normalized.status, normalized.code);
     }
 });
@@ -555,9 +463,10 @@ app.post("/sheets/rating", async (c) => {
         const authRes = await getAuthContextResult(getAuthHeader(c));
         if (!authRes.ok) return jsonError(c, authRes.message, authRes.status, authRes.code);
         const auth = authRes.ctx;
-        const body = await c.req.json();
+        const body = await c.req.json().catch(() => null);
+        if (!body || typeof body !== "object" || Array.isArray(body)) return jsonError(c, "JSON inválido", 400);
         const { weekId, dayId, stars } = body || {};
-        if (!Number.isFinite(weekId) || !Number.isFinite(dayId) || !Number.isFinite(stars)) {
+        if (!isWeekId(weekId) || !isDayId(dayId) || !Number.isInteger(stars) || stars < 1 || stars > 3) {
             return jsonError(c, "Invalid payload", 400);
         }
         const accessToken = await refreshAccessToken(auth.refreshToken);
@@ -570,8 +479,8 @@ app.post("/sheets/rating", async (c) => {
         });
         return c.json({ ok: true });
     } catch (error: any) {
-        console.error("Error saving rating:", error);
         const normalized = normalizeSheetsError(error);
+        console.error("Error saving rating", { code: normalized.code, status: normalized.status });
         return jsonError(c, normalized.message, normalized.status, normalized.code);
     }
 });
@@ -582,8 +491,8 @@ app.get("/sheets/routine", async (c) => {
         if (!authRes.ok) return jsonError(c, authRes.message, authRes.status, authRes.code);
         const auth = authRes.ctx;
         const dayId = Number(c.req.query("dayId"));
-        if (!Number.isFinite(dayId) || dayId < 1 || dayId > 5) {
-            return jsonError(c, "dayId debe ser un número entre 1 y 5", 400);
+        if (!isDayId(dayId)) {
+            return jsonError(c, "dayId debe ser un entero entre 1 y 5", 400);
         }
         const accessToken = await refreshAccessToken(auth.refreshToken);
         const sheetName = "Semana 1";
@@ -594,7 +503,7 @@ app.get("/sheets/routine", async (c) => {
         for (let i = dayRange.startRow; i < dayRange.endRow; i++) {
             const row = values[i];
             const name = row?.[0]?.toString().trim();
-            if (name && !name.toUpperCase().startsWith("DIA ")) {
+            if (isExerciseName(name)) {
                 exercises.push({
                     name,
                     prescribedSeries: row?.[1]?.toString().trim() || "",
@@ -603,8 +512,8 @@ app.get("/sheets/routine", async (c) => {
         }
         return c.json({ exercises });
     } catch (error: any) {
-        console.error("Error loading routine:", error);
         const normalized = normalizeSheetsError(error);
+        console.error("Error loading routine", { code: normalized.code, status: normalized.status });
         return jsonError(c, normalized.message, normalized.status, normalized.code);
     }
 });
@@ -614,46 +523,28 @@ app.post("/sheets/routine", async (c) => {
         const authRes = await getAuthContextResult(getAuthHeader(c));
         if (!authRes.ok) return jsonError(c, authRes.message, authRes.status, authRes.code);
         const auth = authRes.ctx;
-        const body = await c.req.json();
-        const { dayId, exercises } = body || {};
-        if (!Number.isFinite(dayId) || dayId < 1 || dayId > 5) {
-            return jsonError(c, "dayId debe ser un número entre 1 y 5", 400);
+        const body = await c.req.json().catch(() => null);
+        if (!body || typeof body !== "object" || Array.isArray(body)) return jsonError(c, "JSON inválido", 400);
+        const { dayId, exercises } = body;
+        if (!isDayId(dayId)) return jsonError(c, "dayId debe ser un entero entre 1 y 5", 400);
+        if (!Array.isArray(exercises) || exercises.length > MAX_EXERCISES_PER_DAY) {
+            return jsonError(c, `La rutina admite hasta ${MAX_EXERCISES_PER_DAY} ejercicios por día`, 400);
         }
-        if (!Array.isArray(exercises)) {
-            return jsonError(c, "exercises debe ser un array", 400);
-        }
-        if (exercises.length > MAX_EXERCISES_PER_DAY) {
-            return jsonError(c, `Máximo ${MAX_EXERCISES_PER_DAY} ejercicios por día`, 400);
+        if (!exercises.every((exercise): exercise is RoutineExercise =>
+            isExerciseName(exercise?.name) && typeof exercise.prescribedSeries === "string")) {
+            return jsonError(c, "Cada ejercicio debe tener nombre y series prescritas", 400);
         }
         const accessToken = await refreshAccessToken(auth.refreshToken);
-        const sheetName = "Semana 1";
-        const currentData = await readSheetValues(accessToken, auth.spreadsheetId, `'${sheetName}'!A:B`);
-        const dayRange = findDayRange(currentData, dayId);
-        if (!dayRange) {
-            return jsonError(c, `No se encontró el DIA ${dayId} en la hoja`, 404);
-        }
-        const exerciseStartRow = dayRange.startRow + 1;
-        const exerciseEndRow = exerciseStartRow + MAX_EXERCISES_PER_DAY - 1;
-        const values: (string | null)[][] = [];
-        for (let i = 0; i < MAX_EXERCISES_PER_DAY; i++) {
-            if (i < exercises.length) {
-                values.push([exercises[i].name, exercises[i].prescribedSeries]);
-            } else {
-                values.push(["", ""]);
-            }
-        }
         const sheets = google.sheets({ version: "v4", auth: getAuthenticatedClient(accessToken) });
-        const range = `'${sheetName}'!A${exerciseStartRow}:B${exerciseEndRow}`;
-        await sheets.spreadsheets.values.update({
-            spreadsheetId: auth.spreadsheetId,
-            range,
-            valueInputOption: "USER_ENTERED",
-            requestBody: { values },
-        });
-        return c.json({ ok: true, dayId, exercisesCount: exercises.length, range });
+        const sheet = await readWorkoutSheet(sheets, auth.spreadsheetId, "Semana 1");
+        const edit = buildRoutineEdits(sheet, dayId, exercises);
+        if (edit.status !== 200) return jsonError(c, edit.message, edit.status);
+
+        await sheets.spreadsheets.batchUpdate({ spreadsheetId: auth.spreadsheetId, requestBody: { requests: edit.requests } });
+        return c.json({ ok: true, dayId, exercisesCount: exercises.length, range: edit.range });
     } catch (error: any) {
-        console.error("Error saving routine:", error);
         const normalized = normalizeSheetsError(error);
+        console.error("Error saving routine", { code: normalized.code, status: normalized.status });
         return jsonError(c, normalized.message, normalized.status, normalized.code);
     }
 });
@@ -665,30 +556,16 @@ app.get("/sheets/routine/days", async (c) => {
         const auth = authRes.ctx;
         const accessToken = await refreshAccessToken(auth.refreshToken);
         const values = await readSheetValues(accessToken, auth.spreadsheetId, `'Semana 1'!A:B`);
-        const days: { id: number; exercisesCount: number }[] = [];
-        let currentDayId = 0;
-        let count = 0;
-        for (const row of values || []) {
-            const cell = row?.[0]?.toString().trim().toUpperCase() || "";
-            if (cell.startsWith("DIA ")) {
-                if (currentDayId > 0) {
-                    days.push({ id: currentDayId, exercisesCount: count });
-                }
-                currentDayId = parseInt(cell.replace("DIA ", ""));
-                count = 0;
-                continue;
-            }
-            if (currentDayId > 0 && row?.[0]) {
-                count += 1;
-            }
-        }
-        if (currentDayId > 0) {
-            days.push({ id: currentDayId, exercisesCount: count });
-        }
+        const days = Array.from({ length: MAX_DAYS }, (_, index) => index + 1).flatMap((id) => {
+            const range = findDayRange(values, id);
+            if (!range) return [];
+            const exercisesCount = values.slice(range.startRow, range.endRow).filter((row) => isExerciseName(row[0])).length;
+            return [{ id, exercisesCount }];
+        });
         return c.json({ days });
     } catch (error: any) {
-        console.error("Error loading routine days:", error);
         const normalized = normalizeSheetsError(error);
+        console.error("Error loading routine days", { code: normalized.code, status: normalized.status });
         return jsonError(c, normalized.message, normalized.status, normalized.code);
     }
 });
@@ -698,84 +575,47 @@ app.post("/sheets/mesociclo", async (c) => {
         const authRes = await getAuthContextResult(getAuthHeader(c));
         if (!authRes.ok) return jsonError(c, authRes.message, authRes.status, authRes.code);
         const auth = authRes.ctx;
-        const body = await c.req.json();
-        const weeks = Number(body?.weeks);
-        if (!Number.isFinite(weeks) || weeks < 1 || weeks > 15) {
-            return jsonError(c, "weeks debe ser un número entre 1 y 15", 400);
-        }
+        const body = await c.req.json().catch(() => null);
+        if (!body || typeof body !== "object" || Array.isArray(body)) return jsonError(c, "JSON inválido", 400);
+        const weeks = typeof body.weeks === "string" ? Number(body.weeks) : body.weeks;
+        if (!isWeekId(weeks) || weeks > 15) return jsonError(c, "weeks debe ser un entero entre 1 y 15", 400);
+
         const accessToken = await refreshAccessToken(auth.refreshToken);
         const sheets = google.sheets({ version: "v4", auth: getAuthenticatedClient(accessToken) });
+        const { data } = await sheets.spreadsheets.get({ spreadsheetId: auth.spreadsheetId, fields: "sheets.properties(sheetId,title)" });
+        const sheetProperties = data.sheets?.flatMap(({ properties }) => properties ? [properties] : []) ?? [];
+        const currentWeeks = listWeeks(sheetProperties.map(({ title }) => title ?? ""));
+        const template = currentWeeks[0];
+        if (!template) {
+            return jsonError(c, "No se encontró ninguna pestaña con el formato «Semana 1».", 404, "SHEETS_TEMPLATE_MISMATCH");
+        }
 
-        const spreadsheet = await sheets.spreadsheets.get({
-            spreadsheetId: auth.spreadsheetId,
-            fields: "sheets.properties",
-        });
-
-        const sheetsList = spreadsheet.data.sheets || [];
-        const weekSheets: { id: number; sheetId: number; title: string }[] = [];
-        for (const sheet of sheetsList) {
-            const title = sheet.properties?.title?.trim() || "";
-            const sheetId = sheet.properties?.sheetId;
-            const match = title.match(/^Semana\s+(\d+)$/i);
-            if (match && typeof sheetId === "number") {
-                weekSheets.push({
-                    id: parseInt(match[1]),
-                    sheetId,
-                    title,
-                });
+        const existingWeekIds = new Set(currentWeeks.map(({ id }) => id));
+        const weeksCreated = Array.from({ length: weeks }, (_, index) => index + 1).filter((id) => !existingWeekIds.has(id));
+        if (weeksCreated.length > 0) {
+            const source = await readWorkoutSheet(sheets, auth.spreadsheetId, template.name);
+            if (!source.exerciseNames.some(([name]) => isDayId(readDayId(name)))) {
+                return jsonError(c, "La semana base no tiene encabezados de día reconocibles.", 400, "SHEETS_TEMPLATE_MISMATCH");
             }
-        }
-        weekSheets.sort((a, b) => a.id - b.id);
-
-        if (weeks === 1) {
-            return c.json({
-                ok: true,
-                weeksCreated: [],
-                totalWeeks: 1,
-                message: "Solo se necesita Semana 1, no hay nada que duplicar",
-            });
-        }
-
-        const templateSheet = weekSheets.find((w) => w.id === 1) || weekSheets[0];
-        if (!templateSheet) {
-            const availableSheets = sheetsList.map((s) => s.properties?.title).filter(Boolean);
-            console.error("No week sheets found. Available sheets:", availableSheets);
-            return jsonError(
-                c,
-                "No se encontró ninguna hoja de semana en tu planilla. Asegurate de tener al menos 'Semana 1'.",
-                404
-            );
-        }
-
-        const existingWeekIds = new Set(weekSheets.map((w) => w.id));
-        const weeksCreated: number[] = [];
-        for (let weekNum = 1; weekNum <= weeks; weekNum++) {
-            if (existingWeekIds.has(weekNum)) continue;
-            const newSheetName = `Semana ${weekNum}`;
-            const duplicateResponse = await sheets.spreadsheets.batchUpdate({
-                spreadsheetId: auth.spreadsheetId,
-                requestBody: {
-                    requests: [
-                        {
-                            duplicateSheet: {
-                                sourceSheetId: templateSheet.sheetId,
-                                newSheetName,
-                            },
-                        },
-                    ],
-                },
-            });
-            const newSheetId = duplicateResponse.data.replies?.[0]?.duplicateSheet?.properties?.sheetId;
-            if (newSheetId !== undefined) {
-                await cleanWeekData(sheets, auth.spreadsheetId, newSheetName);
+            const usedSheetIds = new Set(sheetProperties.map(({ sheetId }) => sheetId));
+            let newSheetId = 1;
+            const requests: sheets_v4.Schema$Request[] = [];
+            for (const weekId of weeksCreated) {
+                while (usedSheetIds.has(newSheetId)) newSheetId++;
+                requests.push({ duplicateSheet: {
+                    sourceSheetId: source.id,
+                    newSheetId,
+                    newSheetName: `Semana ${weekId}`,
+                } }, ...buildWeekClears(source, newSheetId));
+                newSheetId++;
             }
-            weeksCreated.push(weekNum);
+            // The duplicate and the cleanup are applied together. An invalid request leaves the workbook untouched.
+            await sheets.spreadsheets.batchUpdate({ spreadsheetId: auth.spreadsheetId, requestBody: { requests } });
         }
-
         return c.json({ ok: true, weeksCreated, totalWeeks: weeks });
     } catch (error: any) {
-        console.error("Error creating mesociclo:", error);
         const normalized = normalizeSheetsError(error);
+        console.error("Error creating mesociclo", { code: normalized.code, status: normalized.status });
         return jsonError(c, normalized.message, normalized.status, normalized.code);
     }
 });
@@ -787,33 +627,27 @@ app.delete("/sheets/mesociclo", async (c) => {
         const auth = authRes.ctx;
         const accessToken = await refreshAccessToken(auth.refreshToken);
         const sheets = google.sheets({ version: "v4", auth: getAuthenticatedClient(accessToken) });
-        const spreadsheet = await sheets.spreadsheets.get({
-            spreadsheetId: auth.spreadsheetId,
-            fields: "sheets.properties",
-        });
-        const sheetsToDelete =
-            spreadsheet.data.sheets
-                ?.filter((s) => {
-                    const title = s.properties?.title?.trim() || "";
-                    const match = title.match(/^Semana\s+(\d+)$/i);
-                    return match && parseInt(match[1]) > 1;
-                })
-                .map((s) => ({ deleteSheet: { sheetId: s.properties!.sheetId! } })) || [];
-        if (sheetsToDelete.length > 0) {
-            await sheets.spreadsheets.batchUpdate({
-                spreadsheetId: auth.spreadsheetId,
-                requestBody: { requests: sheetsToDelete },
-            });
+        const { data } = await sheets.spreadsheets.get({ spreadsheetId: auth.spreadsheetId, fields: "sheets.properties(sheetId,title)" });
+        const sheetProperties = data.sheets?.flatMap(({ properties }) => properties ? [properties] : []) ?? [];
+        if (!sheetProperties.some(({ title }) => title === "Semana 1")) {
+            return jsonError(c, "No se encontró «Semana 1» en la planilla.", 404, "SHEETS_TEMPLATE_MISMATCH");
         }
-
-        // "Rehacer onboarding" debería arrancar realmente desde cero:
-        // limpiar la rutina de Semana 1 (ejercicios/series/notas + sets/ratings).
-        await clearSemana1Routine(sheets, auth.spreadsheetId, accessToken);
-
+        const firstWeek = await readWorkoutSheet(sheets, auth.spreadsheetId, "Semana 1");
+        if (!firstWeek.exerciseNames.some(([name]) => isDayId(readDayId(name)))) {
+            return jsonError(c, "«Semana 1» no tiene encabezados de día reconocibles.", 400, "SHEETS_TEMPLATE_MISMATCH");
+        }
+        const weekNames = new Set(listWeeks(sheetProperties.map(({ title }) => title ?? ""))
+            .filter(({ id }) => id > 1).map(({ name }) => name));
+        const requests: sheets_v4.Schema$Request[] = sheetProperties.flatMap(({ title, sheetId }) =>
+            sheetId != null && weekNames.has(title ?? "") ? [{ deleteSheet: { sheetId } }] : []);
+        requests.push(...buildWeekClears(firstWeek, firstWeek.id, true));
+        if (requests.length > 0) {
+            await sheets.spreadsheets.batchUpdate({ spreadsheetId: auth.spreadsheetId, requestBody: { requests } });
+        }
         return c.json({ ok: true });
     } catch (error: any) {
-        console.error("Error resetting mesociclo:", error);
         const normalized = normalizeSheetsError(error);
+        console.error("Error resetting mesociclo", { code: normalized.code, status: normalized.status });
         return jsonError(c, normalized.message, normalized.status, normalized.code);
     }
 });
@@ -857,7 +691,7 @@ app.post("/sheets/setup", async (c) => {
         }
         return c.json({ ok: true, spreadsheetId, alreadyExists: false });
     } catch (error: any) {
-        console.error("Error in sheets setup:", error);
+        console.error("Error in sheets setup");
         const msg = String(error?.message || "");
         const msgLower = msg.toLowerCase();
 
@@ -906,7 +740,7 @@ app.get("/sheets/setup", async (c) => {
             spreadsheetId: integration?.spreadsheet_id || null,
         });
     } catch (error) {
-        console.error("Error checking setup status:", error);
+        console.error("Error checking setup status");
         return c.json({ setupComplete: false, authenticated: false });
     }
 });
@@ -927,19 +761,21 @@ app.get("/fatiga", async (c) => {
         const { muscleRows, daySummary, calendarDays, raw } = computeFatigaFromSheet(data);
         return c.json({ muscleRows, daySummary, calendarDays, intensityByGroupId: raw });
     } catch (error: any) {
-        console.error("Error in /api/fatiga:", error);
         const normalized = normalizeSheetsError(error);
+        console.error("Error in /api/fatiga", { code: normalized.code, status: normalized.status });
         return jsonError(c, normalized.message, normalized.status, normalized.code);
     }
 });
 
 app.post("/bodymap", async (c) => {
     try {
-        const body = await c.req.json();
+        const body = await c.req.json().catch(() => null);
+        if (!body || typeof body !== "object" || Array.isArray(body)) return jsonError(c, "JSON inválido", 400);
         const response = await fetch("https://bodymap-api.vercel.app/api/bodymap", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify(body),
+            signal: AbortSignal.timeout(10000),
         });
         if (!response.ok) {
             throw new Error(`External API responded with ${response.status}`);
@@ -952,8 +788,8 @@ app.post("/bodymap", async (c) => {
             },
         });
     } catch (error: any) {
-        console.error("BodyMap Proxy Error:", error);
-        return jsonError(c, error.message, 500);
+        console.error("BodyMap Proxy Error");
+        return jsonError(c, "No se pudo generar el mapa muscular", 502);
     }
 });
 
@@ -969,7 +805,7 @@ app.get("/user/preferences/onboarding", async (c) => {
             .single();
 
         if (error && error.code !== "PGRST116") {
-            console.error("Error fetching preferences:", error);
+            console.error("Error fetching preferences");
             return jsonError(c, "Error al obtener preferencias", 500);
         }
 
@@ -986,7 +822,7 @@ app.get("/user/preferences/onboarding", async (c) => {
                     { onConflict: "user_id" }
                 );
             if (ensureError) {
-                console.error("Error ensuring preferences row:", ensureError);
+                console.error("Error ensuring preferences row");
             }
         }
 
@@ -1001,7 +837,7 @@ app.get("/user/preferences/onboarding", async (c) => {
             hasProgress: !!prefs?.onboarding_progress,
         });
     } catch (error) {
-        console.error("Error in onboarding preferences GET:", error);
+        console.error("Error in onboarding preferences GET");
         return jsonError(c, "Error interno", 500);
     }
 });
@@ -1011,7 +847,8 @@ app.post("/user/preferences/onboarding", async (c) => {
         const auth = await getUserFromRequest(getAuthHeader(c));
         if (!auth) return jsonError(c, "No autenticado", 401);
 
-        const body = await c.req.json();
+        const body = await c.req.json().catch(() => null);
+        if (!body || typeof body !== "object" || Array.isArray(body)) return jsonError(c, "JSON inválido", 400);
         const { action } = body || {};
         const now = new Date().toISOString();
         let upsertData: Record<string, any> | null = null;
@@ -1056,13 +893,13 @@ app.post("/user/preferences/onboarding", async (c) => {
             );
 
         if (upsertError) {
-            console.error("Error upserting onboarding preferences:", upsertError);
+            console.error("Error upserting onboarding preferences");
             return jsonError(c, "Error al guardar preferencias", 500);
         }
 
         return c.json({ ok: true, action });
     } catch (error) {
-        console.error("Error in onboarding preferences POST:", error);
+        console.error("Error in onboarding preferences POST");
         return jsonError(c, "Error interno", 500);
     }
 });
@@ -1083,13 +920,13 @@ app.delete("/user/preferences/onboarding", async (c) => {
             .eq("user_id", auth.user.id);
 
         if (updateError && updateError.code !== "PGRST116") {
-            console.error("Error resetting onboarding preferences:", updateError);
+            console.error("Error resetting onboarding preferences");
             return jsonError(c, "Error al resetear preferencias", 500);
         }
 
         return c.json({ ok: true });
     } catch (error) {
-        console.error("Error in onboarding preferences DELETE:", error);
+        console.error("Error in onboarding preferences DELETE");
         return jsonError(c, "Error interno", 500);
     }
 });

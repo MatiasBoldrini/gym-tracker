@@ -1,0 +1,154 @@
+-- Run after migration 005 against an isolated Supabase database.
+\set ON_ERROR_STOP on
+begin;
+insert into auth.users(id) values ('00000000-0000-4000-8000-000000000005'), ('00000000-0000-4000-8000-000000000006');
+insert into public.block_plans(user_id, routine, spreadsheet_id)
+select id, '{"blocks":[{"id":"b","weeks":[{"number":1,"days":[{"number":1,"exercises":[{"id":"sq","name":"Sentadilla"}]},{"number":2,"exercises":[]}]}]}]}'::jsonb,
+    'test-'||id::text from auth.users where id in ('00000000-0000-4000-8000-000000000005','00000000-0000-4000-8000-000000000006');
+
+set local role service_role;
+create temp table scan as select * from public.claim_block_sheet_scans(1,'00000000-0000-4000-8000-000000000005');
+grant select on scan to authenticated;
+do $$
+declare
+    s record;
+    training jsonb := '{"startedAt":"2026-11-23T15:45:00Z","sets":{"sq":[{"kg":"90","reps":"5","effort":""}]},"rating":2,"note":"desde la hoja"}';
+    routine jsonb;
+    updated jsonb;
+begin
+    select * into strict s from scan;
+    assert s.plan_revision=1 and s.last_sheet_plan_revision is null;
+    assert not exists(select from public.claim_block_sheet_scans(1,s.user_id));
+    begin
+        perform public.apply_block_sheet_workout(s.user_id,gen_random_uuid(),s.lease_token,'["b",1,1]',training,0,11);
+        raise exception 'Expected plan mismatch';
+    exception when serialization_failure then null; end;
+    begin
+        perform public.apply_block_sheet_workout(s.user_id,s.plan_id,gen_random_uuid(),'["b",1,1]',training,0,11);
+        raise exception 'Expected lease mismatch';
+    exception when serialization_failure then null; end;
+
+    select p.routine into strict routine from public.block_plans p where p.user_id=s.user_id;
+    assert public.apply_block_sheet_plan(s.user_id,s.plan_id,s.lease_token,routine,1)=1;
+    updated:=jsonb_set(routine,'{blocks,0,name}','"Nueva programación"');
+    assert public.apply_block_sheet_plan(s.user_id,s.plan_id,s.lease_token,updated,1)=2;
+    assert public.apply_block_sheet_plan(s.user_id,s.plan_id,s.lease_token,updated,1)=2;
+    assert public.apply_block_sheet_workout(s.user_id,s.plan_id,s.lease_token,'["b",1,1]',training,0,11)
+        ='{"revision":1,"sheet_row":11}'::jsonb;
+    assert public.apply_block_sheet_workout(s.user_id,s.plan_id,s.lease_token,'["b",1,1]',training,0,11)
+        ='{"revision":1,"sheet_row":11}'::jsonb;
+    begin
+        perform public.apply_block_sheet_workout(s.user_id,s.plan_id,s.lease_token,'["b",1,2]',training||'{"sets":{}}',0,11);
+        raise exception 'Expected stable row collision';
+    exception when serialization_failure then null; end;
+    begin
+        perform public.apply_block_sheet_workout(s.user_id,s.plan_id,s.lease_token,'["b",1,1]',training,1,14);
+        raise exception 'Expected moved row to be rejected';
+    exception when serialization_failure then null; end;
+    begin
+        perform public.apply_block_sheet_plan(s.user_id,s.plan_id,s.lease_token,
+            jsonb_set(updated,'{blocks,0,weeks,0,days,0,exercises}','[]'),2);
+        raise exception 'Expected removal of logged exercise to be rejected';
+    exception when serialization_failure then null; end;
+    begin
+        perform public.apply_block_sheet_plan(s.user_id,s.plan_id,s.lease_token,
+            updated #- '{blocks,0,weeks,0,days,0}',2);
+        raise exception 'Expected removal of trained day to be rejected';
+    exception when serialization_failure then null; end;
+
+    -- A direct edit by the coach since the last sheet sync must not be silently replaced.
+    update public.block_plans set routine=jsonb_set(updated,'{blocks,0,name}','"Entrenador"') where user_id=s.user_id;
+    begin
+        perform public.apply_block_sheet_plan(s.user_id,s.plan_id,s.lease_token,routine,3);
+        raise exception 'Expected divergence from last confirmed plan';
+    exception when serialization_failure then null; end;
+    assert not exists(select from public.claim_block_workout_exports(10,s.user_id));
+end;
+$$;
+
+reset role;
+set local role authenticated;
+set local request.jwt.claim.sub = '00000000-0000-4000-8000-000000000005';
+do $$
+declare s record;
+begin
+    select * into strict s from scan;
+    assert public.save_block_workout('["b",1,1]',(select workout||'{"note":"desde la app"}' from public.block_workouts),1,s.plan_id)=2;
+    begin
+        perform public.clear_block_sheet_conflict(s.user_id,s.plan_id,s.lease_token,'["b",1,1]');
+        raise exception 'Expected athlete to lack worker RPC privilege';
+    exception when insufficient_privilege then null; end;
+    begin
+        perform public.store_block_workout(s.user_id,'["b",1,1]','{}',2,s.plan_id,11);
+        raise exception 'Expected internal mutation to be private';
+    exception when insufficient_privilege then null; end;
+end;
+$$;
+
+reset role;
+set local role service_role;
+do $$
+declare s record;
+begin
+    select * into strict s from scan;
+    begin
+        perform public.apply_block_sheet_workout(s.user_id,s.plan_id,s.lease_token,'["b",1,1]',
+            (select workout || '{"note":"edición simultánea en la hoja"}' from public.block_workouts where user_id=s.user_id),1,11);
+        raise exception 'Expected app/sheet edit conflict';
+    exception when serialization_failure then null; end;
+    assert public.record_block_sheet_conflict(s.user_id,s.plan_id,s.lease_token,'["b",1,1]',11,'Revisá las dos notas.');
+    assert public.finish_block_sheet_scan(s.user_id,s.plan_id,s.lease_token,true);
+    assert not exists(select from public.claim_block_workout_exports(10,s.user_id));
+    assert (select workout->>'note'='desde la app' and revision=2 from public.block_workouts where user_id=s.user_id);
+end;
+$$;
+reset role;
+set local role authenticated;
+set local request.jwt.claim.sub = '00000000-0000-4000-8000-000000000005';
+do $$ begin assert (select count(*) from public.block_sheet_conflicts)=1; end; $$;
+set local request.jwt.claim.sub = '00000000-0000-4000-8000-000000000006';
+do $$ begin assert not exists(select from public.block_sheet_conflicts); end; $$;
+reset role;
+
+update public.block_sheet_scans set available_at=now() where user_id='00000000-0000-4000-8000-000000000005';
+set local role service_role;
+do $$
+declare s record; x record;
+begin
+    select * into strict s from public.claim_block_sheet_scans(1,'00000000-0000-4000-8000-000000000005');
+    assert s.plan_revision=3 and s.last_sheet_plan_revision=2;
+    assert public.apply_block_sheet_workout(s.user_id,s.plan_id,s.lease_token,'["b",1,1]',
+        (select workout||'{"note":"acordada"}' from public.block_workouts where user_id=s.user_id),2,11)='{"revision":3,"sheet_row":11}'::jsonb;
+    assert not exists(select from public.block_sheet_conflicts where user_id=s.user_id);
+    assert public.finish_block_sheet_scan(s.user_id,s.plan_id,s.lease_token,true);
+    select * into strict x from public.claim_block_workout_exports(1,s.user_id);
+    assert x.revision=3 and x.sheet_row=11;
+    assert public.finish_block_workout_export(x.user_id,x.session_key,x.revision,x.lease_token,true);
+    assert not exists(select from public.claim_block_workout_exports(1,s.user_id));
+end;
+$$;
+reset role;
+update public.block_sheet_scans set available_at=now() where user_id='00000000-0000-4000-8000-000000000005';
+set local role service_role;
+do $$
+declare s record; s2 record;
+begin
+    select * into strict s from public.claim_block_sheet_scans(1,'00000000-0000-4000-8000-000000000005');
+    assert public.apply_block_sheet_workout(s.user_id,s.plan_id,s.lease_token,'["b",1,1]',
+        (select workout from public.block_workouts where user_id=s.user_id),3,11)='{"revision":3,"sheet_row":11}'::jsonb;
+    assert public.finish_block_sheet_scan(s.user_id,s.plan_id,s.lease_token,false);
+    assert not exists(select from public.claim_block_sheet_scans(1,s.user_id));
+    assert not exists(select from public.claim_block_workout_exports(1,s.user_id)); -- no echo writes
+    update public.block_plans set spreadsheet_id='replacement' where user_id=s.user_id;
+    select * into strict s2 from public.claim_block_sheet_scans(1,s.user_id);
+    assert s2.spreadsheet_id='replacement' and s2.last_sheet_plan_revision is null;
+    assert public.record_block_sheet_conflict(s2.user_id,s2.plan_id,s2.lease_token,'',null,'Programación pendiente de revisión.');
+    assert public.finish_block_sheet_scan(s2.user_id,s2.plan_id,s2.lease_token,true);
+    assert not exists(select from public.claim_block_workout_exports(1,s2.user_id)); -- plan-wide conflict
+    begin
+        perform public.record_block_sheet_conflict(s.user_id,s.plan_id,s.lease_token,'["b",1,1]',11,'Stale sheet');
+        raise exception 'Expected stale target token to be rejected';
+    exception when serialization_failure then null; end;
+end;
+$$;
+rollback;

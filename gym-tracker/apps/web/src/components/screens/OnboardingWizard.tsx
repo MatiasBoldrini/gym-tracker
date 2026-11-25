@@ -250,9 +250,10 @@ export function OnboardingWizard({
 
                 setAvailableExercises(exercises);
                 setSeriesOptions(series);
-            } catch (error: any) {
+            } catch (error) {
+                if (cancelled) return;
                 console.error("Error loading data:", error);
-                setErrorMessage(error.message || "Error al cargar datos");
+                setErrorMessage(error instanceof Error && error.message ? error.message : "Error al cargar datos");
             } finally {
                 if (!cancelled) setIsLoadingData(false);
             }
@@ -328,6 +329,7 @@ export function OnboardingWizard({
                     loadOnboardingProgress(),
                     auth.hasSpreadsheet ? fetchRoutineDaysSummary().catch(() => []) : Promise.resolve([]),
                 ]);
+                if (cancelled) return;
 
                 const hasSavedExercises = Array.isArray(summary)
                     ? summary.some((d) => d.exercisesCount > 0)
@@ -339,10 +341,6 @@ export function OnboardingWizard({
                     : hasSavedExercises && Array.isArray(summary) && summary.length > 0
                         ? Math.min(5, summary.length)
                         : 0;
-
-                if (derivedTotalDays > 0) {
-                    setTotalDays(derivedTotalDays);
-                }
 
                 let nextDayIndex = typeof progress?.currentDayIndex === "number" && progress.currentDayIndex >= 0
                     ? progress.currentDayIndex
@@ -371,12 +369,9 @@ export function OnboardingWizard({
                     }
                 }
 
-                setCurrentDayIndex(() => {
-                    if (nextDayIndex < 0) return 0;
-                    return Math.min(nextDayIndex, Math.max((derivedTotalDays || totalDays) - 1, 0));
-                });
-
                 if (derivedTotalDays > 0) {
+                    setTotalDays(derivedTotalDays);
+                    setCurrentDayIndex(Math.min(nextDayIndex, derivedTotalDays - 1));
                     setStep(nextStep);
                 }
             } catch (error) {
@@ -507,8 +502,8 @@ export function OnboardingWizard({
                 setStep("weeks");
                 persistProgress({ step: "weeks" });
             }
-        } catch (error: any) {
-            setErrorMessage(error.message || "Error al guardar la rutina");
+        } catch (error) {
+            setErrorMessage(error instanceof Error && error.message ? error.message : "Error al guardar la rutina");
         } finally {
             setIsSaving(false);
         }
@@ -537,8 +532,8 @@ export function OnboardingWizard({
             setTimeout(() => {
                 onComplete();
             }, 1500);
-        } catch (error: any) {
-            setErrorMessage(error.message || "Error al crear el mesociclo");
+        } catch (error) {
+            setErrorMessage(error instanceof Error && error.message ? error.message : "Error al crear el mesociclo");
         } finally {
             setIsSaving(false);
         }
@@ -922,7 +917,7 @@ export function OnboardingWizard({
                                                 key={`${exercise.name}-${idx}`}
                                                 className="flex items-center gap-3 p-3 bg-white rounded-2xl border border-black/5"
                                             >
-                                                <div className="w-12 h-12 rounded-xl bg-gray-50 border border-black/5 overflow-hidden flex-shrink-0">
+                                                <div className="w-12 h-12 overflow-hidden flex-shrink-0">
                                                     {exercise.image ? (
                                                         <img
                                                             src={`/images/exercises/${exercise.image}`}
@@ -1022,17 +1017,15 @@ export function OnboardingWizard({
                         {/* Number input */}
                         <div className="flex items-center gap-4 mb-8">
                             <input
-                                type="number"
-                                min="1"
-                                max="15"
+                                type="text" inputMode="numeric" pattern="([1-9]|1[0-5])"
+                                aria-label="Duración en semanas" autoComplete="off"
                                 value={totalWeeks || ""}
+                                onPaste={e => {
+                                    if (/[\t\r\n]/.test(e.clipboardData.getData("text/plain"))) e.preventDefault();
+                                }}
                                 onChange={(e) => {
-                                    const val = parseInt(e.target.value);
-                                    if (val >= 1 && val <= 15) {
-                                        setTotalWeeks(val);
-                                    } else if (e.target.value === "") {
-                                        setTotalWeeks(0);
-                                    }
+                                    const value = e.target.value;
+                                    if (value === "" || /^([1-9]|1[0-5])$/.test(value)) setTotalWeeks(Number(value));
                                 }}
                                 placeholder="1-15"
                                 className="w-32 h-20 text-center text-4xl font-black bg-white border-2 border-gray-200 rounded-2xl focus:border-ios-blue focus:outline-none"

@@ -31,17 +31,8 @@ export function logBaselineMetrics() {
         .getEntriesByType("resource")
         .filter((r) => (r as PerformanceResourceTiming).initiatorType !== "img")
         .slice(0, 50)
-        .map((r) => ({ name: r.name, duration: Math.round(r.duration) }));
+        .map((r) => ({ name: new URL(r.name).pathname, duration: Math.round(r.duration) }));
     snapshot.resources = resources;
 
-    try {
-        const existing = JSON.parse(localStorage.getItem("perf_snapshots") || "[]");
-        existing.push(snapshot);
-        localStorage.setItem("perf_snapshots", JSON.stringify(existing));
-    } catch {
-        // ignore
-    }
-
-    // eslint-disable-next-line no-console
     console.info("[perf] snapshot", snapshot);
 }

@@ -1,7 +1,7 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { GripVertical, Trash2, Plus } from "lucide-react";
+import { useState, type ReactNode } from "react";
+import { GripVertical, Trash2, Plus, ChevronDown } from "lucide-react";
 import { motion } from "framer-motion";
 import {
     DndContext,
@@ -13,7 +13,6 @@ import {
     PointerSensor,
     type DragEndEvent,
     type DragStartEvent,
-    type DragCancelEvent,
 } from "@dnd-kit/core";
 import {
     arrayMove,
@@ -23,17 +22,18 @@ import {
     verticalListSortingStrategy,
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
+import "./exercise-list.css";
 import type { RoutineExercise } from "@/lib/sheets-client";
-import { nanoid } from "@/lib/nanoid";
 
 interface DayRoutineEditorProps {
-    exercises: (RoutineExercise & { image?: string })[];
-    onExercisesChange: (exercises: (RoutineExercise & { image?: string })[]) => void;
+    exercises: ExerciseWithImage[];
+    onExercisesChange: (exercises: ExerciseWithImage[]) => void;
     onAddExercise: () => void;
     maxExercises?: number;
+    detail?: { activeId: string; toggle: (id: string) => void; fields: ReactNode; renderMedia?: (name: string) => ReactNode };
 }
 
-type ExerciseWithImage = RoutineExercise & { image?: string };
+type ExerciseWithImage = RoutineExercise & { id?: string; image?: string; detailLabel?: string };
 
 // Contenido visual del ejercicio (reutilizable)
 function ExerciseItemContent({
@@ -41,17 +41,23 @@ function ExerciseItemContent({
     onRemove,
     dragHandleProps,
     isOverlay = false,
+    onSelect, expanded, handleRef, media,
 }: {
     exercise: ExerciseWithImage;
     onRemove?: () => void;
-    dragHandleProps?: React.HTMLAttributes<HTMLDivElement>;
+    dragHandleProps?: React.ButtonHTMLAttributes<HTMLButtonElement>;
+    handleRef?: (node: HTMLButtonElement | null) => void;
     isOverlay?: boolean;
+    onSelect?: () => void;
+    expanded?: boolean;
+    media?: ReactNode;
 }) {
     return (
         <>
-            {/* Drag Handle - solo este elemento tiene los listeners de DnD */}
-            <div
+
+            <button type="button" ref={handleRef} tabIndex={isOverlay ? -1 : undefined}
                 {...dragHandleProps}
+                aria-label={`Reordenar ${exercise.name}`}
                 className={`p-1.5 -m-1 transition-colors select-none touch-manipulation ${isOverlay
                     ? "text-gray-500"
                     : "cursor-grab active:cursor-grabbing text-gray-300 hover:text-gray-500"
@@ -59,44 +65,28 @@ function ExerciseItemContent({
                 style={{ touchAction: "none" }}
             >
                 <GripVertical size={20} />
-            </div>
+            </button>
 
-            {/* Exercise Image */}
-            <div className="w-12 h-12 rounded-xl bg-gray-50 border border-black/5 overflow-hidden flex-shrink-0">
-                {exercise.image ? (
-                    <img
-                        src={`/images/exercises/${exercise.image}`}
-                        alt={exercise.name}
-                        className="w-full h-full object-contain"
-                        draggable={false}
-                        loading="lazy"
-                        decoding="async"
-                    />
-                ) : (
-                    <div className="w-full h-full flex items-center justify-center text-gray-300 text-[10px] font-bold">
-                        IMG
-                    </div>
-                )}
-            </div>
-
-            {/* Exercise Info */}
-            <div className="flex-1 min-w-0">
-                <div className="font-bold text-black text-sm truncate">
-                    {exercise.name}
-                </div>
-                <div className="text-xs text-gray-400 font-medium">
-                    {exercise.prescribedSeries}
-                </div>
+            {media ?? (exercise.image && <img src={`/images/exercises/${exercise.image}`} width={36} height={36}
+                alt="" className="size-9 shrink-0 object-contain" draggable={false} loading="lazy" decoding="async" />)}
+            <div className="min-w-0 flex-1">
+                {onSelect ? <button type="button" className="plan-row-toggle" aria-expanded={expanded}
+                    onClick={onSelect}><span>{exercise.name}<small>{exercise.detailLabel || exercise.prescribedSeries}</small></span>
+                    <ChevronDown size={15} aria-hidden="true" /></button> : <>
+                    <strong className="block text-sm">{exercise.name}</strong>
+                    <small className="block text-gray-600">{exercise.prescribedSeries}</small>
+                </>}
             </div>
 
             {/* Delete Button */}
             {onRemove ? (
                 <motion.button
+                    type="button" aria-label={`Quitar ${exercise.name}`}
                     onClick={onRemove}
                     onMouseDown={(e) => e.stopPropagation()}
                     onTouchStart={(e) => e.stopPropagation()}
                     whileTap={{ scale: 0.9 }}
-                    className="p-2 text-gray-300 hover:text-red-500 hover:bg-red-50 rounded-xl transition-colors"
+                    className="grid size-11 place-items-center text-gray-500 hover:text-red-600 transition-colors"
                 >
                     <Trash2 size={18} />
                 </motion.button>
@@ -113,16 +103,17 @@ function ExerciseItemContent({
 function SortableExerciseItem({
     exercise,
     exerciseId,
-    onRemove,
+    onRemove, detail,
 }: {
     exercise: ExerciseWithImage;
     exerciseId: string;
     onRemove: () => void;
+    detail?: DayRoutineEditorProps["detail"];
 }) {
     const {
         attributes,
         listeners,
-        setNodeRef,
+        setNodeRef, setActivatorNodeRef,
         transform,
         transition,
         isDragging,
@@ -143,21 +134,15 @@ function SortableExerciseItem({
     };
 
     return (
-        <div
-            ref={setNodeRef}
-            style={style}
-            className={`
-                flex items-center gap-3 p-3 bg-white rounded-2xl border border-black/5
-                ${isDragging ? "z-10 shadow-lg" : ""}
-                select-none
-            `}
-        >
-            <ExerciseItemContent
-                exercise={exercise}
-                onRemove={onRemove}
-                dragHandleProps={dragHandleProps}
-            />
-        </div>
+        <li ref={setNodeRef} style={style} className="plan-sort-row">
+            <div className="flex items-center gap-2 py-1.5">
+                <ExerciseItemContent exercise={exercise} onRemove={onRemove} dragHandleProps={dragHandleProps} handleRef={setActivatorNodeRef}
+                    media={detail?.renderMedia?.(exercise.name)}
+                    expanded={detail?.activeId === exerciseId}
+                    onSelect={detail ? () => detail.toggle(exerciseId) : undefined} />
+            </div>
+            {detail?.activeId === exerciseId && detail.fields}
+        </li>
     );
 }
 
@@ -166,25 +151,18 @@ export function DayRoutineEditor({
     onExercisesChange,
     onAddExercise,
     maxExercises = 7,
+    detail,
 }: DayRoutineEditorProps) {
     const [activeId, setActiveId] = useState<string | null>(null);
 
-    // IDs estables por item (crítico para animaciones "en vivo" al reordenar)
-    const [exerciseIds, setExerciseIds] = useState<string[]>(() =>
-        exercises.map(() => `ex-${nanoid(10)}`)
-    );
-
-    // Reconciliar IDs si cambia la cantidad desde afuera (agregar/quitar)
-    useEffect(() => {
-        setExerciseIds((prev) => {
-            if (prev.length === exercises.length) return prev;
-            if (prev.length < exercises.length) {
-                const missing = exercises.length - prev.length;
-                return [...prev, ...Array.from({ length: missing }, () => `ex-${nanoid(10)}`)];
-            }
-            return prev.slice(0, exercises.length);
-        });
-    }, [exercises.length]);
+    const occurrences = new Map<string, number>();
+    const exerciseIds = exercises.map(({ id, name, prescribedSeries, image }) => {
+        if (id) return id;
+        const key = JSON.stringify([name, prescribedSeries, image]);
+        const occurrence = occurrences.get(key) ?? 0;
+        occurrences.set(key, occurrence + 1);
+        return `${key}:${occurrence}`;
+    });
 
     // Sensores:
     // Usamos PointerSensor unificado que maneja mouse y touch de manera más limpia
@@ -205,7 +183,7 @@ export function DayRoutineEditor({
         setActiveId(event.active.id as string);
     };
 
-    const handleDragCancel = (_event: DragCancelEvent) => {
+    const handleDragCancel = () => {
         setActiveId(null);
     };
 
@@ -218,17 +196,13 @@ export function DayRoutineEditor({
             const newIndex = exerciseIds.indexOf(over.id as string);
 
             if (oldIndex !== -1 && newIndex !== -1) {
-                const newExercises = arrayMove(exercises, oldIndex, newIndex);
-                setExerciseIds((prev) => arrayMove(prev, oldIndex, newIndex));
-                onExercisesChange(newExercises);
+                onExercisesChange(arrayMove(exercises, oldIndex, newIndex));
             }
         }
     };
 
     const handleRemoveExercise = (index: number) => {
-        const newExercises = exercises.filter((_, i) => i !== index);
-        setExerciseIds((prev) => prev.filter((_, i) => i !== index));
-        onExercisesChange(newExercises);
+        onExercisesChange(exercises.filter((_, i) => i !== index));
     };
 
     const activeExercise = activeId
@@ -269,16 +243,17 @@ export function DayRoutineEditor({
                             items={exerciseIds}
                             strategy={verticalListSortingStrategy}
                         >
-                            <div className="space-y-2">
+                            <ul className="plan-sort-list" role="list" aria-label="Ejercicios del día">
                                 {exercises.map((exercise, index) => (
                                     <SortableExerciseItem
                                         key={exerciseIds[index]}
                                         exerciseId={exerciseIds[index]}
                                         exercise={exercise}
+                                        detail={detail}
                                         onRemove={() => handleRemoveExercise(index)}
                                     />
                                 ))}
-                            </div>
+                            </ul>
                         </SortableContext>
 
                         <DragOverlay
@@ -293,7 +268,7 @@ export function DayRoutineEditor({
                             }}
                         >
                             {activeExercise ? (
-                                <div className="pointer-events-none flex items-center gap-3 p-3 bg-white rounded-2xl border border-black/5 shadow-2xl scale-105">
+                                <div aria-hidden="true" inert className="pointer-events-none flex items-center gap-2 px-2 py-1.5 bg-white border-y border-black/15 shadow-sm">
                                     <ExerciseItemContent
                                         exercise={activeExercise}
                                         isOverlay
@@ -309,7 +284,7 @@ export function DayRoutineEditor({
                             whileTap={{ scale: 0.98 }}
                             initial={{ opacity: 0 }}
                             animate={{ opacity: 1 }}
-                            className="w-full flex items-center justify-center gap-2 p-4 border-2 border-dashed border-gray-200 rounded-2xl text-gray-400 font-bold hover:border-ios-blue hover:text-ios-blue transition-colors"
+                            className="flex min-h-11 items-center gap-2 px-1 text-sm font-semibold text-[#005fbe]"
                         >
                             <Plus size={20} />
                             Agregar Ejercicio ({exercises.length}/{maxExercises})

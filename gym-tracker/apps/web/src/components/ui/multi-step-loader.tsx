@@ -103,14 +103,19 @@ export const MultiStepLoader = ({
   onComplete?: () => void;
 }) => {
   const [currentState, setCurrentState] = useState(0);
+  const [wasLoading, setWasLoading] = useState(loading);
+  if (wasLoading !== loading) {
+    setWasLoading(loading);
+    if (!loading) setCurrentState(0);
+  }
+
+  const lastState = loadingStates.length - 1;
+  const activeState = Math.max(0, Math.min(currentState, lastState));
 
   useEffect(() => {
-    if (!loading) {
-      setCurrentState(0);
-      return;
-    }
+    if (!loading || lastState < 0) return;
     const timeout = setTimeout(() => {
-      if (currentState === loadingStates.length - 1) {
+      if (activeState === lastState) {
         if (loop) {
           setCurrentState(0);
         } else {
@@ -118,12 +123,12 @@ export const MultiStepLoader = ({
           onComplete?.();
         }
       } else {
-        setCurrentState((prevState) => prevState + 1);
+        setCurrentState(activeState + 1);
       }
     }, duration);
 
     return () => clearTimeout(timeout);
-  }, [currentState, loading, loop, loadingStates.length, duration, onComplete]);
+  }, [activeState, loading, loop, lastState, duration, onComplete]);
 
   return (
     <AnimatePresence mode="wait">
@@ -141,7 +146,7 @@ export const MultiStepLoader = ({
           className="w-full h-full fixed inset-0 z-[100] flex items-center justify-center backdrop-blur-2xl bg-white"
         >
           <div className="h-96 relative z-10">
-            <LoaderCore value={currentState} loadingStates={loadingStates} />
+            <LoaderCore value={activeState} loadingStates={loadingStates} />
           </div>
 
           <div className="inset-x-0 bottom-0 bg-white/50 h-full absolute [mask-image:radial-gradient(900px_at_center,transparent_30%,white)]" />
