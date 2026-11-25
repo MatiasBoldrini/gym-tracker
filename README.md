@@ -6,7 +6,7 @@ Tu entrenador programa en Google Sheets y vos registrás el entrenamiento en el 
 
 En 24 segundos, seguí un cambio de press de banca de **3×8 a 4×8** desde la planilla hasta el celular. Después, una serie de **8 repeticiones con 62,5 kg** vuelve a la hoja y aparece en el gráfico de progreso junto a los 60 kg programados.
 
-https://github.com/user-attachments/assets/8d701028-6127-46a9-8ebf-4f2b89793cd3
+https://github.com/user-attachments/assets/9406b6f1-1900-4438-98ec-73f50bd5d0f9
 
 [Descargar el video vertical en MP4](https://github.com/MatiasBoldrini/gym-tracker/raw/refs/heads/main/docs/media/gym-tracker-demo.mp4)
 
